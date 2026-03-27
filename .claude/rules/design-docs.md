@@ -5,7 +5,7 @@ paths:
 
 # Design Document Rules
 
-- Every design document MUST contain these 8 sections: Overview, Player Fantasy, Detailed Rules, Formulas, Edge Cases, Dependencies, Tuning Knobs, Acceptance Criteria
+- Every design document MUST contain these 8 sections: Overview, Player Fantasy, Detailed Design (or Detailed Rules), Formulas, Edge Cases, Dependencies, Tuning Knobs, Acceptance Criteria
 - Formulas must include variable definitions, expected value ranges, and example calculations
 - Edge cases must explicitly state what happens, not just "handle gracefully"
 - Dependencies must be bidirectional — if system A depends on B, B's doc must mention A

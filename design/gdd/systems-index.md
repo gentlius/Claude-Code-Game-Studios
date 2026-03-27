@@ -27,18 +27,18 @@
 | 1 | 게임 시계 (Game Clock) | Core | MVP | Approved | [game-clock.md](game-clock.md) | — |
 | 2 | 종목 데이터베이스 (Stock Database) | Core | MVP | Approved | [stock-database.md](stock-database.md) | — |
 | 3 | 가격 엔진 (Price Engine) | Gameplay | MVP | Approved | [price-engine.md](price-engine.md) | 게임 시계, 종목 DB |
-| 4 | 뉴스/이벤트 시스템 (News & Events) | Gameplay | MVP | Not Started | — | 게임 시계, 종목 DB |
-| 5 | 주문 처리 엔진 (Order Engine) | Gameplay | MVP | Not Started | — | 종목 DB, 재화 시스템 |
-| 6 | 포트폴리오 관리 (Portfolio Manager) | Gameplay | MVP | Not Started | — | 종목 DB, 재화 시스템 |
+| 4 | 뉴스/이벤트 시스템 (News & Events) | Gameplay | MVP | Approved | [news-events.md](news-events.md) | 게임 시계, 종목 DB |
+| 5 | 주문 처리 엔진 (Order Engine) | Gameplay | MVP | Approved | [order-engine.md](order-engine.md) | 종목 DB, 재화 시스템, 가격 엔진, 게임 시계, 포트폴리오 |
+| 6 | 포트폴리오 관리 (Portfolio Manager) | Gameplay | MVP | Approved | [portfolio-manager.md](portfolio-manager.md) | 종목 DB, 재화 시스템 |
 | 7 | AI 경쟁자 시스템 (AI Competitors) | Gameplay | V-Slice | Not Started | — | 가격 엔진, 주문 엔진, 포트폴리오 |
 | 8 | 스킬 트리 시스템 (Skill Tree) | Progression | V-Slice | Not Started | — | 경험치 시스템 |
 | 9 | 경험치 시스템 (XP System) | Progression | V-Slice | Not Started | — | 주문 엔진, 포트폴리오 |
 | 10 | 시즌/대회 관리 (Season Manager) | Progression | V-Slice | Not Started | — | 가격 엔진, 포트폴리오, AI 경쟁자, 재화 |
 | 11 | 재화 시스템 (Currency System) | Economy | MVP | Approved | [currency-system.md](currency-system.md) | — |
-| 12 | 트레이딩 스크린 (Main HUD) | UI | MVP | Not Started | — | 가격 엔진, 주문 엔진, 포트폴리오 |
-| 13 | 차트 렌더러 (Chart Renderer) | UI | MVP | Not Started | — | 가격 엔진 |
-| 14 | 뉴스 피드 UI (News Feed UI) | UI | MVP | Not Started | — | 뉴스/이벤트 시스템 |
-| 15 | 포트폴리오 UI (Portfolio UI) | UI | MVP | Not Started | — | 포트폴리오 관리 |
+| 12 | 트레이딩 스크린 (Main HUD) | UI | MVP | Approved | [trading-screen.md](trading-screen.md) | 가격 엔진, 주문 엔진, 포트폴리오, 게임 시계 |
+| 13 | 차트 렌더러 (Chart Renderer) | UI | MVP | Approved | [chart-renderer.md](chart-renderer.md) | 가격 엔진, 게임 시계 |
+| 14 | 뉴스 피드 UI (News Feed UI) | UI | MVP | Approved | [news-feed-ui.md](news-feed-ui.md) | 뉴스/이벤트 시스템, 게임 시계 |
+| 15 | 포트폴리오 UI (Portfolio UI) | UI | MVP | Approved | [portfolio-ui.md](portfolio-ui.md) | 포트폴리오 관리, 게임 시계 |
 | 16 | 리더보드 UI (Leaderboard UI) | UI | V-Slice | Not Started | — | 시즌/대회 관리 |
 | 17 | 스킬 트리 UI (Skill Tree UI) | UI | V-Slice | Not Started | — | 스킬 트리 시스템 |
 | 18 | 세이브/로드 (Save/Load) | Persistence | Alpha | Not Started | — | 포트폴리오, 스킬 트리, 시즌, 경험치 |
@@ -165,10 +165,10 @@
 | Metric | Count |
 |--------|-------|
 | Total systems identified | 21 |
-| Design docs started | 4 |
-| Design docs reviewed | 4 |
-| Design docs approved | 4 |
-| MVP systems designed | 4/11 |
+| Design docs started | 11 |
+| Design docs reviewed | 11 |
+| Design docs approved | 11 |
+| MVP systems designed | 11/11 |
 | Vertical Slice systems designed | 0/6 |
 
 ---

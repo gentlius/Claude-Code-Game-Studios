@@ -16,7 +16,7 @@
 - Documents must include these 8 required sections:
   1. **Overview** -- one-paragraph summary
   2. **Player Fantasy** -- intended feeling and experience
-  3. **Detailed Rules** -- unambiguous mechanics
+  3. **Detailed Design** (or **Detailed Rules**) -- unambiguous mechanics
   4. **Formulas** -- all math defined with variables
   5. **Edge Cases** -- unusual situations handled
   6. **Dependencies** -- other systems listed

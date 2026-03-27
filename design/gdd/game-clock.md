@@ -75,6 +75,26 @@
 시간 정지. UI 조작/주문 입력 가능. 재개 시 MARKET_OPEN으로 복귀하며
 다음 틱부터 처리 재개. MARKET_OPEN 외의 상태에서는 일시정지 불가.
 
+### Signal Catalog
+
+```
+on_tick(tick_number: int, day: int, week: int)
+    # 매 틱 발행. 모든 구독 시스템이 틱 처리 수행
+
+on_market_state_changed(new_state: MarketState, prev_state: MarketState)
+    # 시장 상태 전환 시 발행. MarketState = PRE_MARKET | MARKET_OPEN | PAUSED
+    #   | MARKET_CLOSED | DAY_TRANSITION | WEEK_END | SEASON_END
+    # 구독자는 new_state로 자체 상태 매핑 수행
+
+on_market_open()        # MARKET_OPEN 진입 시
+on_market_close()       # MARKET_CLOSED 진입 시
+on_day_transition()     # DAY_TRANSITION 진입 시
+on_week_end()           # WEEK_END 진입 시
+on_season_end()         # SEASON_END 진입 시
+```
+
+배속 정보는 시그널이 아닌 `get_speed_multiplier(): float` 조회로 제공.
+
 ### Interactions with Other Systems
 
 | System | Direction | Interface |
@@ -84,6 +104,8 @@
 | **주문 처리 엔진** | 하위 → 조회 | `get_market_state()` 호출. MARKET_OPEN일 때만 즉시 체결, 그 외엔 대기열 |
 | **시즌/대회 관리** | 하위 → 구독 | `on_week_end`, `on_season_end` 시그널 구독. 시즌 진행 상태 추적 |
 | **트레이딩 스크린 (UI)** | 하위 → 조회 | `get_current_time()`, `get_market_state()`, `get_day_progress()` 호출. 시계/타임바 표시 |
+| **차트 렌더러** | 하위 → 구독 | `on_market_state_changed` 시그널로 차트 상태(LIVE/PAUSED/STATIC) 전환. 배속 정보로 렌더 주기 결정 |
+| **뉴스 피드 UI** | 하위 → 구독 | `on_market_state_changed` 시그널로 피드 상태(ACTIVE/FROZEN/PRE_MARKET_MODE) 전환. 피드 초기화 타이밍 결정 |
 
 ## Formulas
 
@@ -153,6 +175,8 @@ total_season_days = weeks_per_season * 5
 | 주문 처리 엔진 | 주문이 이 시스템에 의존 | 시장 상태 조회로 체결 가능 여부 판단. **Hard** |
 | 시즌/대회 관리 | 시즌이 이 시스템에 의존 | 주/시즌 종료 시그널 구독. **Hard** |
 | 트레이딩 스크린 (UI) | UI가 이 시스템에 의존 | 시간/진행률 조회로 타임바 표시. **Soft** |
+| 차트 렌더러 | 차트가 이 시스템에 의존 | `on_market_state_changed` 시그널로 차트 상태 전환. **Soft** |
+| 뉴스 피드 UI | 피드가 이 시스템에 의존 | `on_market_state_changed` 시그널로 피드 상태 전환. **Soft** |
 
 모든 의존 방향이 단방향(하위 → 게임 시계)이다. 게임 시계는 어떤 시스템에도
 의존하지 않는 Foundation 시스템이다.

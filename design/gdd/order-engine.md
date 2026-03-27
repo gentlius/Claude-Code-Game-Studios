@@ -147,8 +147,11 @@ Order {
    - pending_limit_orders.count >= max_pending_limit_orders: REJECTED ("미체결 주문 한도 초과")
 
 5. 포트폴리오 슬롯 검증 (BUY만)
-   - 새 종목 매수 && holding_count >= max_holdings: REJECTED ("보유 종목 한도 초과")
-   - 이미 보유 종목 추가 매수: 슬롯 검증 면제
+   - effective_holding_count = get_holding_count()
+       + count(pre_market_queue 및 paused_queue 내 BUY 주문 중
+         해당 stock_id가 현재 보유에도 없고 큐 내 선행 주문에도 없는 신규 종목)
+   - 새 종목 매수 && effective_holding_count >= max_holdings: REJECTED ("보유 종목 한도 초과")
+   - 이미 보유 종목 또는 큐 내 선행 BUY에 동일 종목 존재: 슬롯 검증 면제
 
 6. 잔액 검증 (BUY만)
    - MARKET: current_price × quantity > available_cash → REJECTED ("잔액 부족")
@@ -228,8 +231,10 @@ on_tick:
 
 PRE_MARKET 동안 제출된 주문은 `pre_market_queue`에 보관. `on_market_open` 시
 첫 틱(틱 1)에서 시장가 주문부터 순서대로 처리. PRE_MARKET 시장가 주문은 **틱 1의
-가격으로 체결**되며, 제출 시점 가격과 다를 수 있다 (M5 대응: 체결 시 잔액 재검증,
-부족 시 REJECTED).
+가격으로 체결**되며, 제출 시점 가격과 다를 수 있다. 체결 시 **잔액 및 슬롯 재검증**
+수행: 잔액 부족 시 REJECTED ("잔액 부족"), 신규 종목이고 `get_holding_count() >=
+max_holdings`이면 REJECTED ("보유 종목 한도 초과"). FIFO 순서로 처리하므로 앞 주문
+체결로 holding_count가 증가한 후 뒷 주문이 슬롯 검증에 실패할 수 있다.
 
 ##### 4-3b. PAUSED 큐
 
@@ -313,7 +318,7 @@ on_market_close:
 | **포트폴리오 관리** | 양방향 | `get_holding_count()` — 슬롯 검증. `get_holding(stock_id).quantity` — 보유 수량 조회 (매도 가용 수량은 Order Engine이 `quantity - locked_quantity`로 자체 계산). `add_holding()` / `remove_holding()` — 체결 후 **직접 메서드 호출** |
 | **스킬 트리** | 주문 엔진이 참조 | `get_trading_level()` — 주문 유형 해금 여부. `get_portfolio_level()` — max_holdings |
 | **게임 시계** | 주문 엔진이 의존 | `on_tick` — 지정가 체결 체크. `on_market_open/close` — 상태 전환 |
-| **트레이딩 스크린** | UI가 주문 엔진에 의존 | `submit_order(order)` — 주문 제출. `cancel_order(order_id)` — 취소. `get_pending_orders()` — 미체결 목록 |
+| **트레이딩 스크린** | UI가 주문 엔진에 의존 | `submit_order(order)` — 주문 제출. `cancel_order(order_id)` — 취소. `get_pending_orders()` — 미체결 목록. `get_total_reserved_cash()` — 미체결 지정가 매수 예약금 합계 (`Σ pending_buy_limit.reserved_cash`) |
 | **경험치 시스템** | 경험치가 참조 | `on_order_filled` — 거래 기반 경험치 산출 |
 | **오디오 시스템** | 오디오가 참조 | `on_order_filled` — 체결음 재생 |
 
@@ -389,8 +394,8 @@ fee = floor(trade_value × fee_rate)
 | 가격 급변으로 지정가 조건 순간 통과 | 해당 틱에 체결 확정. 다음 틱 가격 무관 | "틱이 진실" 원칙 |
 | max_pending_limit_orders 초과 | REJECTED + "미체결 주문 한도 초과" | 주문 남발 방지 |
 | 시즌 종료 시 미체결 주문 | 장 마감 처리(EXPIRED) 후 시즌 종료 순서 보장 | 정산 선행 |
-| PRE_MARKET 시장가 주문 → 틱 1에서 가격 변동으로 잔액 부족 | 체결 시 잔액 재검증. 부족 시 REJECTED ("잔액 부족 — 가격 변동"). 예약 금액은 시장가에 없으므로 잔액 차감 없음 | PRE_MARKET 가격은 참고용, 체결가는 틱 1 가격 |
-| PRE_MARKET에서 슬롯 한도까지 신규 종목 주문 제출 후 추가 신규 종목 주문 | PRE_MARKET 주문은 제출 시 슬롯 검증 수행. 이미 한도 도달 시 즉시 REJECTED. 틱 1 체결 시에는 제출 순서대로 처리하므로 슬롯 충돌 없음 | 선입선출 원칙 |
+| PRE_MARKET 시장가 주문 → 틱 1에서 잔액 부족 (가격 변동 또는 복수 주문) | 체결 시 잔액 재검증. 부족 시 REJECTED ("잔액 부족"). 시장가는 선차감(`reserved_cash`)이 없으므로, PRE_MARKET에서 복수 시장가 매수를 제출하면 제출 시점에는 모두 잔액 검증을 통과할 수 있다. 틱 1에서 선입선출 순서로 처리하며, 앞 주문 체결로 `sim_cash`가 감소한 후 뒷 주문이 재검증에 실패하면 REJECTED | PRE_MARKET 시장가는 선차감 없음. 체결 시점 재검증이 안전장치 |
+| PRE_MARKET에서 슬롯 한도까지 신규 종목 주문 제출 후 추가 신규 종목 주문 | PRE_MARKET 주문 제출 시 `effective_holding_count`로 슬롯 검증 — 큐 내 미체결 신규 종목도 카운트에 포함. 예: max_holdings=3, 현재 보유 1종목, 큐에 신규 2종목 → effective=3 → 추가 신규 종목 REJECTED. 이미 큐에 있는 종목의 추가 매수는 슬롯 면제 | 큐 반영 슬롯 검증. 체결 시점 서프라이즈 방지 |
 
 ## Dependencies
 
@@ -405,6 +410,7 @@ fee = floor(trade_value × fee_rate)
 | 트레이딩 스크린 | UI가 주문 엔진에 의존 | 주문 제출/취소/조회. **Soft** |
 | 경험치 시스템 | 경험치가 참조 | on_order_filled 이벤트. **Soft** |
 | 오디오 시스템 | 오디오가 참조 | on_order_filled 이벤트. **Soft** |
+| 시즌/대회 관리 | 시즌이 참조 | `expire_all_pending()` — 시즌 종료 강제 청산 시퀀스 Step ①. **Soft** (V-Slice) |
 
 ## Tuning Knobs
 

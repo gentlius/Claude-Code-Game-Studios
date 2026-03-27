@@ -101,8 +101,8 @@ MVP에서 10종목 전체를 포함한다. 10개 섹터의 다양성이 "읽는 
 | System | Direction | Interface |
 |--------|-----------|-----------|
 | **가격 엔진** | 가격 엔진이 참조 | `get_stock(id)` → 종목의 변동성, 감도 값을 읽어 가격 변동 계산에 사용 |
-| **뉴스/이벤트 시스템** | 뉴스가 참조 | `get_stocks_by_event_tag(tag)` → 특정 이벤트에 반응할 종목 목록 조회 |
-| **주문 처리 엔진** | 주문이 참조 | `get_stock(id)` → 종목 존재 여부 및 기본 정보 확인 |
+| **뉴스/이벤트 시스템** | 뉴스가 참조 | `get_stocks_by_event_tag(tag)` → 이벤트 태그로 반응 종목 조회. `get_stocks_by_sector(sector_id)` → SECTOR 이벤트 대상 종목 조회 |
+| **주문 처리 엔진** | 주문이 참조 | `stock_exists(id): bool` → 종목 존재 검증. `get_stock(id)` → 종목 기본 정보 |
 | **포트폴리오 관리** | 포트폴리오가 참조 | `get_stock(id)` → 종목 이름, 섹터 등 표시 정보 |
 | **스킬 트리** | 스킬이 참조 | `get_all_sectors()` → 섹터 ETF 해금 시 섹터 목록 조회 |
 
@@ -179,6 +179,8 @@ season_base_price = original_base_price * season_theme_modifier
 - [ ] 모든 종목 데이터가 외부 config 파일에서 로드됨 (하드코딩 금지)
 - [ ] MVP 빌드에서 10종목 전체가 로드됨
 - [ ] 존재하지 않는 종목 ID 조회 시 크래시 없이 null 반환
+- [ ] `stock_exists(id)` 호출 시 정확한 bool 반환 (1ms 이내)
+- [ ] `get_stocks_by_sector(sector_id)` 호출 시 해당 섹터 종목만 반환 (1ms 이내)
 
 ---
 

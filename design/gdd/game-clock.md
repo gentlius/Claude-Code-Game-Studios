@@ -85,7 +85,9 @@ on_market_state_changed(new_state: MarketState, prev_state: MarketState)
     # 시장 상태 전환 시 발행. MarketState = PRE_MARKET | MARKET_OPEN | PAUSED
     #   | MARKET_CLOSED | DAY_TRANSITION | WEEK_END | SEASON_END
     # 구독자는 new_state로 자체 상태 매핑 수행
+    # PRE_MARKET 진입도 이 시그널로 전달됨 (별도 on_pre_market 없음)
 
+on_season_start()       # 시즌 최초 시작 시 (시즌 초기화용). SEASON_END 후 새 시즌 진입 시점
 on_market_open()        # MARKET_OPEN 진입 시
 on_market_close()       # MARKET_CLOSED 진입 시
 on_day_transition()     # DAY_TRANSITION 진입 시
@@ -93,7 +95,15 @@ on_week_end()           # WEEK_END 진입 시
 on_season_end()         # SEASON_END 진입 시
 ```
 
+**`on_market_state_changed`로 커버되는 전환** (별도 편의 시그널 없음):
+- PAUSED 진입/퇴출: `on_market_state_changed(PAUSED, MARKET_OPEN)` / `on_market_state_changed(MARKET_OPEN, PAUSED)`
+- PRE_MARKET 진입: `on_market_state_changed(PRE_MARKET, DAY_TRANSITION)` 또는 `on_market_state_changed(PRE_MARKET, SEASON_START)`
+
 배속 정보는 시그널이 아닌 `get_speed_multiplier(): float` 조회로 제공.
+
+**이벤트 감속 소유권**: 뉴스/이벤트 시스템이 `game_clock.set_speed(1)` 메서드를
+호출하여 감속을 요청한다. 게임 시계는 `set_speed(multiplier)` API를 제공하며,
+`auto_slow_on_event = false`일 때 뉴스 시스템은 호출하지 않는다.
 
 ### Interactions with Other Systems
 
@@ -101,11 +111,12 @@ on_season_end()         # SEASON_END 진입 시
 |--------|-----------|-----------|
 | **가격 엔진** | 하위 → 구독 | `on_tick(tick_number, day, week)` 시그널 구독. 틱마다 가격 갱신. `get_market_state()` 호출로 장중 여부 확인 |
 | **뉴스/이벤트 시스템** | 하위 → 구독 | `on_tick` 구독. `on_market_open`, `on_market_close`, `on_day_transition` 시그널로 이벤트 타이밍 결정 |
-| **주문 처리 엔진** | 하위 → 조회 | `get_market_state()` 호출. MARKET_OPEN일 때만 즉시 체결, 그 외엔 대기열 |
+| **주문 처리 엔진** | 하위 → 구독+조회 | `on_market_open`, `on_market_close` 시그널 구독 (상태 전환). `on_tick` 구독 (지정가 체결 체크). `get_market_state()` 호출 (주문 접수 시 상태 확인) |
 | **시즌/대회 관리** | 하위 → 구독 | `on_week_end`, `on_season_end` 시그널 구독. 시즌 진행 상태 추적 |
 | **트레이딩 스크린 (UI)** | 하위 → 조회 | `get_current_time()`, `get_market_state()`, `get_day_progress()` 호출. 시계/타임바 표시 |
 | **차트 렌더러** | 하위 → 구독 | `on_market_state_changed` 시그널로 차트 상태(LIVE/PAUSED/STATIC) 전환. 배속 정보로 렌더 주기 결정 |
 | **뉴스 피드 UI** | 하위 → 구독 | `on_market_state_changed` 시그널로 피드 상태(ACTIVE/FROZEN/PRE_MARKET_MODE) 전환. 피드 초기화 타이밍 결정 |
+| **포트폴리오 UI** | 하위 → 구독 | `on_tick` 구독 (보유 종목 실시간 평가 갱신). `on_market_state_changed` 시그널로 SETTLEMENT 상태 전환 |
 
 ## Formulas
 
@@ -177,9 +188,11 @@ total_season_days = weeks_per_season * 5
 | 트레이딩 스크린 (UI) | UI가 이 시스템에 의존 | 시간/진행률 조회로 타임바 표시. **Soft** |
 | 차트 렌더러 | 차트가 이 시스템에 의존 | `on_market_state_changed` 시그널로 차트 상태 전환. **Soft** |
 | 뉴스 피드 UI | 피드가 이 시스템에 의존 | `on_market_state_changed` 시그널로 피드 상태 전환. **Soft** |
+| 포트폴리오 UI | UI가 이 시스템에 의존 | `on_tick` 구독 (실시간 평가 갱신). `on_market_state_changed` 시그널로 SETTLEMENT 전환. **Soft** |
 
 모든 의존 방향이 단방향(하위 → 게임 시계)이다. 게임 시계는 어떤 시스템에도
-의존하지 않는 Foundation 시스템이다.
+의존하지 않는 Foundation 시스템이다. 단, 뉴스/이벤트 시스템은 이벤트 감속 시
+`set_speed(1)` 메서드를 호출하므로 이 한 가지에 한해 역방향 호출이 존재한다.
 
 ---
 

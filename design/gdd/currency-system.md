@@ -84,9 +84,12 @@
 상세 공식은 포트폴리오 관리 GDD에서 정의한다.
 
 ```
-sim_total_assets = sim_cash + sum(holdings[i].quantity * holdings[i].current_price)
+sim_total_assets = sim_cash + reserved_cash + sum(holdings[i].quantity * holdings[i].current_price)
 return_rate = (sim_total_assets - sim_seed) / sim_seed * 100
 ```
+
+> `reserved_cash` = 미체결 지정가 매수 예약금 합계 (주문 엔진 소유).
+> `sim_cash`에서 이미 선차감된 금액이므로, 총 자산에 합산하여 정확한 값을 산출한다.
 
 ### 시즌 상금 테이블
 

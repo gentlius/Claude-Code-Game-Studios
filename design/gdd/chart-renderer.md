@@ -253,7 +253,7 @@ PriceHistoryBuffer {
 | **가격 엔진** | 차트가 의존 | `get_current_price(stock_id)` — 매 틱 현재가. `get_tick_buffer(stock_id)` — 틱별 `{price, volume}` 시계열. `get_ohlcv_history(stock_id)` — 일봉 OHLCV |
 | **트레이딩 스크린** | 트레이딩 스크린이 차트를 호스팅 | 차트 영역 배치. 종목 선택 이벤트 전달 |
 | **스킬 트리** | 차트가 참조 | `get_analysis_level()` — 오버레이 해금 여부 (Lv2=MA, Lv3=RSI/MACD) |
-| **게임 시계** | 차트가 의존 | `on_market_state_changed` 시그널로 차트 상태 전환. 배속 정보로 렌더 주기 결정. 상태 매핑: Game Clock `MARKET_OPEN` → Chart `LIVE`, `PAUSED` → `PAUSED`, `MARKET_CLOSED`/`DAY_TRANSITION` → `STATIC`, `PRE_MARKET` → `STATIC` (전일 차트) |
+| **게임 시계** | 차트가 의존 | `on_market_state_changed` 시그널로 차트 상태 전환. 배속 정보로 렌더 주기 결정. 상태 매핑: Game Clock `MARKET_OPEN` → Chart `LIVE`, `PAUSED` → `PAUSED`, `MARKET_CLOSED`/`DAY_TRANSITION` → `STATIC`, `PRE_MARKET` → `STATIC` (전일 차트), `WEEK_END` → `STATIC` (주말), `SEASON_END` → `STATIC` (시즌 종료) |
 
 ## Formulas
 

@@ -539,12 +539,13 @@ Close/Volume) 요약만 보존한다.
 
 | 게임 시계 상태 | 가격 엔진 상태 | 전환 트리거 |
 |--------------|-------------|------------|
-| 시즌 시작 | UNINITIALIZED → READY | `on_season_init` 시그널 |
-| PRE_MARKET | READY (대기) | — |
+| 시즌 시작 | UNINITIALIZED → READY | `on_season_start` 시그널 |
+| PRE_MARKET | READY (대기) | `on_market_state_changed(PRE_MARKET, ...)` |
 | MARKET_OPEN | RUNNING | `on_market_open` 시그널 |
-| MARKET_OPEN (일시정지) | PAUSED | `on_pause` / `on_resume` 시그널 |
-| MARKET_CLOSE (틱 389 처리 후) | END_OF_DAY | 자동 전환 |
-| DAY_TRANSITION → PRE_MARKET | END_OF_DAY → READY | `on_day_start` 시그널 |
+| MARKET_OPEN (일시정지) | PAUSED | `on_market_state_changed(PAUSED, MARKET_OPEN)` |
+| 일시정지 해제 | PAUSED → RUNNING | `on_market_state_changed(MARKET_OPEN, PAUSED)` |
+| MARKET_CLOSE (틱 390) | END_OF_DAY | `on_market_close` 시그널 |
+| DAY_TRANSITION → PRE_MARKET | END_OF_DAY → READY | `on_market_state_changed(PRE_MARKET, DAY_TRANSITION)` |
 | 시즌 종료 | SEASON_END → UNINITIALIZED | `on_season_end` 시그널 |
 
 #### 시즌 초기화 (UNINITIALIZED → READY)

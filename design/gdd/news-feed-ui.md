@@ -162,7 +162,7 @@ SECTOR 뉴스의 경우 영향받는 종목 목록을 본문 확장 시 표시.
 | State | Description | Transition |
 |-------|-------------|------------|
 | **EMPTY** | 뉴스 0건. LOADING 진입 시 또는 시즌/거래일 시작 직후 | → ACTIVE (첫 뉴스 수신 시) / → PRE_MARKET_MODE (Game Clock `PRE_MARKET` 시그널 + 프리마켓 뉴스 존재 시) |
-| **ACTIVE** | 뉴스 수신 중. 실시간 갱신 | → FROZEN (Game Clock `MARKET_CLOSED`/`WEEK_END`/`SEASON_END` 시그널 수신 시) |
+| **ACTIVE** | 뉴스 수신 중. 실시간 갱신 | → FROZEN (Game Clock `MARKET_CLOSED`/`DAY_TRANSITION`/`WEEK_END`/`SEASON_END` 시그널 수신 시) |
 | **PRE_MARKET_MODE** | 프리마켓 뉴스 묶음 표시 | → ACTIVE (Game Clock `MARKET_OPEN` 시그널 수신 시. 묶음 해체 → 개별 카드 변환) |
 | **FROZEN** | 장 마감. 피드 고정. 스크롤만 가능 | → EMPTY (Game Clock `PRE_MARKET` 시그널 수신 시) / → EMPTY (Game Clock `SEASON_END` 후 새 시즌 시작 시) |
 

@@ -68,7 +68,9 @@ SimPortfolio extends BasePortfolio {
     get_return_rate(): float    # 캐시된 최신 수익률 반환 (파라미터 불필요)
     get_total_assets(): int     # 캐시된 최신 총 자산 반환
     get_portfolio_summary(max_holdings): PortfolioSummary
-                                # 캐시된 값으로 PortfolioSummary 조립
+                                # 캐시된 값으로 PortfolioSummary 조립.
+                                # sim_cash, reserved_cash는 update_valuation에서
+                                # 캐시된 값 사용 (추가 외부 조회 불필요)
     reset()                     # 시즌 종료 시 전체 초기화
 }
 
@@ -164,16 +166,27 @@ TransactionRecord {
 
 #### 규칙 6. 틱별 평가 갱신
 
-매 틱 `on_tick` 시 (가격 엔진 갱신 후):
+매 틱 `on_tick` 시 (가격 엔진 갱신 후) `update_valuation(price_provider, sim_cash, reserved_cash)` 호출:
 
 ```
-for each holding in holdings:
-    current_price = price_engine.get_current_price(holding.stock_id)
-    holding.current_value = current_price × holding.quantity
-    holding.unrealized_pnl = holding.current_value - holding.total_invested
-    holding.unrealized_pnl_pct = holding.unrealized_pnl / holding.total_invested × 100
+update_valuation(price_provider, sim_cash, reserved_cash):
+    // Step 1: 개별 보유 종목 평가 갱신
+    total_stock_value = 0
+    for each holding in holdings:
+        current_price = price_provider.get_current_price(holding.stock_id)
+        holding.current_value = current_price × holding.quantity
+        holding.unrealized_pnl = holding.current_value - holding.total_invested
+        holding.unrealized_pnl_pct = holding.unrealized_pnl / holding.total_invested × 100
+        total_stock_value += holding.current_value
+
+    // Step 2: 캐시 갱신 (get_total_assets, get_return_rate의 반환값)
+    _cached_total_assets = sim_cash + reserved_cash + total_stock_value
+    _cached_return_rate = (_cached_total_assets - initial_seed) / initial_seed × 100
+    _cached_sim_cash = sim_cash
+    _cached_reserved_cash = reserved_cash
 ```
 
+`get_total_assets()`, `get_return_rate()`는 캐시된 값을 즉시 반환한다 (파라미터 불필요).
 평가 갱신은 포트폴리오 UI가 읽어갈 데이터를 준비하는 것이지, 포트폴리오 자체의
 상태를 변경하지 않는다. 보유 수량과 평균 매수가는 매매 체결 시에만 변경.
 
@@ -285,11 +298,16 @@ return_rate = (sim_total_assets - initial_seed) / initial_seed × 100
 ### F6. 포트폴리오 비중
 
 ```
-weight_i = (holding_i.quantity × current_price_i) / sim_total_assets × 100
-cash_weight = sim_cash / sim_total_assets × 100
+if sim_total_assets == 0:
+    weight_i = 0.0
+    cash_weight = 0.0
+else:
+    weight_i = (holding_i.quantity × current_price_i) / sim_total_assets × 100
+    cash_weight = sim_cash / sim_total_assets × 100
 ```
 
-전 보유 종목의 weight + cash_weight = 100%.
+전 보유 종목의 weight + cash_weight = 100%. `sim_total_assets = 0`은 정상 플레이에서
+발생하지 않으나 (initial_seed ≥ 1,000,000), 방어 코드로 0 반환.
 
 ### 변수 마스터 테이블
 
@@ -307,7 +325,7 @@ cash_weight = sim_cash / sim_total_assets × 100
 | 전량 매도 후 동일 종목 재매수 | 새로운 HoldingEntry 생성. 이전 평균 매수가는 무관 | 청산 후 재진입은 새 포지션 |
 | 동일 종목 반복 매수 (5회 연속) | 매번 avg_buy_price 재계산. 모든 거래 TransactionRecord에 기록 | 물타기/불타기 전략 지원 |
 | 전량 매도 시 holdings 정리 | holdings에서 해당 종목 제거. holding_count 감소. 새 종목 매수 가능 | 슬롯 즉시 해제 |
-| 시즌 종료 시 보유 종목 존재 | **오케스트레이터: 시즌/대회 관리 시스템** (Game Clock `on_season_end` 수신 후 실행). 강제 청산 시퀀스: ①시즌 관리가 주문 엔진에 `expire_all_pending()` 호출 → 미체결 전량 EXPIRED + 예약/잠금 복원 → ②시즌 관리가 포트폴리오에 `force_liquidate(price_provider)` 호출 → 마지막 틱 종가로 전 보유 종목 강제 매도, realized_pnl 기록, sim_cash에 반영 → ③포트폴리오 `get_total_assets()` → sim_total_assets 최종 스냅샷 (순위용) → ④시즌 관리가 재화 시스템 `settle_season()` 호출 → 시드 리셋 + 상금 지급 → ⑤시즌 관리가 포트폴리오 `reset()` 호출. **트리거 시점**: MARKET_CLOSED 직후, 플레이어에게 리포트를 표시하기 전에 ①~③ 실행하여 최종 자산 확정. 리포트 확인 후 ④~⑤ 실행 | 순위 확정 필요. 가격 엔진은 마지막 틱 가격을 리셋 전까지 유지. 시즌/대회 관리가 V-Slice에서 구현 시 상세 설계 |
+| 시즌 종료 시 보유 종목 존재 | **오케스트레이터: 시즌/대회 관리 시스템** (Game Clock `on_season_end` 수신 후 실행). 강제 청산 시퀀스: ①시즌 관리가 주문 엔진에 `expire_all_pending()` 호출 → 미체결 전량 EXPIRED + 예약/잠금 복원 → ②시즌 관리가 포트폴리오에 `force_liquidate(price_provider)` 호출 → 아래 상세 참조 → ③포트폴리오 `get_total_assets()` → sim_total_assets 최종 스냅샷 (순위용) → ④시즌 관리가 재화 시스템 `settle_season()` 호출 → 시드 리셋 + 상금 지급 → ⑤시즌 관리가 포트폴리오 `reset()` 호출. **트리거 시점**: MARKET_CLOSED 직후, 플레이어에게 리포트를 표시하기 전에 ①~③ 실행하여 최종 자산 확정. 리포트 확인 후 ④~⑤ 실행. **`force_liquidate(price_provider)` 상세**: 주문 엔진을 거치지 않고 직접 처리. `for each holding: sell_price = price_provider.get_current_price(stock_id)` → `realized_pnl = (sell_price - avg_buy_price) × quantity` → TransactionRecord(type=SELL) 기록 → `currency.sim_add(sell_price × quantity)` 직접 호출 → `holdings.remove(stock_id)`. `on_order_filled` 시그널 미발행 (주문 엔진 비경유). | 순위 확정 필요. 가격 엔진은 마지막 틱 가격을 리셋 전까지 유지. 시즌/대회 관리가 V-Slice에서 구현 시 상세 설계 |
 | 보유 종목 0개 상태에서 총 자산 조회 | sim_total_assets = sim_cash. 보유 주식 평가액 = 0 | 정상 작동 |
 | 가격이 매우 높은 종목 (320,000원) 1주 매수 | 정상 처리. 금액 제한은 주문 엔진이 sim_cash 기준으로 검증 | 포트폴리오는 체결 후만 관여 |
 | floor() 반올림으로 1원 오차 | 허용. 모든 금액은 floor() 후 정수. 누적 오차 최대 보유 종목 수만큼 | 정수 원칙 일관 유지 |

@@ -242,7 +242,7 @@ PriceHistoryBuffer {
 |-------|-------------|------------|
 | **UNLOADED** | 종목 미선택. 빈 차트 | → LOADING (종목 선택 시) |
 | **LOADING** | 히스토리 로드 중 | → LIVE (데이터 준비 완료) |
-| **LIVE** | 실시간 갱신 중. 새 틱마다 캔들 업데이트 | → PAUSED (일시정지 시) / STATIC (장 마감 시) |
+| **LIVE** | 실시간 갱신 중. 새 틱마다 캔들 업데이트 | → PAUSED (일시정지 시) / STATIC (`on_market_state_changed`로 MARKET_CLOSED, WEEK_END, SEASON_END 진입 시) |
 | **PAUSED** | 일시정지. 차트 고정. 스크롤/줌 가능 | → LIVE (재개 시) |
 | **STATIC** | 장 마감. 차트 고정. 과거 탐색만 가능 | → LIVE (다음 장 시작 시) |
 

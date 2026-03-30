@@ -177,7 +177,7 @@
 |-------|-------------|------------|
 | **SUMMARY** | 트레이딩 스크린 하단 탭. 요약 뷰 | → DETAIL (상세 보기 클릭) |
 | **DETAIL** | 전체 화면 확장. 상세 뷰 | → SUMMARY (요약으로 클릭 / Esc / [매도] 클릭 시 SUMMARY로 전환 + 주문 패널 매도 모드 활성화) |
-| **SETTLEMENT** | 장 마감. 일일 수익률 확정. 변동 없음. 진입: `on_market_state_changed(MARKET_OPEN → MARKET_CLOSED)` | → SUMMARY (다음 거래일 시작: `on_market_state_changed(MARKET_CLOSED → PRE_MARKET)`) |
+| **SETTLEMENT** | 장 마감. 일일 수익률 확정. 변동 없음. 진입: `on_market_state_changed(MARKET_CLOSED, MARKET_OPEN)` | → SUMMARY (다음 거래일 시작: `on_market_state_changed(PRE_MARKET, DAY_TRANSITION)`) |
 
 ### Interactions with Other Systems
 
@@ -188,7 +188,7 @@
 | **가격 엔진** | 포트폴리오 UI가 참조 | `get_current_price(stock_id)` — 실시간 현재가 |
 | **종목 DB** | 포트폴리오 UI가 참조 | `get_stock(stock_id)` — 종목명, 섹터 표시 |
 | **트레이딩 스크린** | 트레이딩 스크린이 호스팅 | 하단 패널 탭 배치. 종목 클릭 → 차트 전환 연결 |
-| **트레이딩 스크린 (주문 패널)** | 포트폴리오 UI → 트레이딩 스크린 | `[매도]` 클릭 시 `on_sell_requested(stock_id: String, quantity: int)` 시그널 발신 → 트레이딩 스크린이 수신하여 주문 패널을 매도 모드로 전환 + 종목/수량 프리필. 상세 뷰에서 클릭 시 SUMMARY로 전환 후 발신 |
+| **트레이딩 스크린 (주문 패널)** | 포트폴리오 UI → 트레이딩 스크린 | `[매도]` 클릭 시 `on_sell_requested(stock_id: String, quantity: int)` 시그널 발신 → 트레이딩 스크린이 수신하여 주문 패널을 매도 모드로 전환 + 종목/수량 프리필. `quantity`는 현재 전체 보유 수량 (`holding.quantity`). 플레이어는 주문 패널에서 수량 조정 가능. 상세 뷰에서 클릭 시 SUMMARY로 전환 후 발신 |
 | **시즌/대회 관리** | 포트폴리오 UI가 참조 | 시즌 순위 표시 |
 
 ## Formulas
@@ -211,9 +211,11 @@ display_return_pct = round(unrealized_pnl / total_invested × 100, 1)
 ```
 weight_pct = round(holding_value / sim_total_assets × 100, 1)
 cash_weight_pct = round(sim_cash / sim_total_assets × 100, 1)
+reserved_weight_pct = round(reserved_cash / sim_total_assets × 100, 1)
 ```
 
-전 비중의 합 = 100% (반올림 오차 ±0.1% 허용).
+`sim_total_assets = sim_cash + reserved_cash + Σ(holding_value)`.
+전 비중의 합 (주식 + 현금 + 예약) = 100% (반올림 오차 ±0.1% 허용).
 
 ### F3. 금액 포맷팅
 
@@ -226,7 +228,7 @@ format_pnl(amount, pct):
     if amount > 0:
         return "+₩" + format_comma(amount) + " (+" + pct + "%)"
     elif amount < 0:
-        return "-₩" + format_comma(abs(amount)) + " (-" + pct + "%)"
+        return "-₩" + format_comma(abs(amount)) + " (-" + abs(pct) + "%)"
     else:
         return "₩0 (0.0%)"
 ```

@@ -595,7 +595,7 @@ Lv4 루머는 슬롯 발생 시각과 Scope/Impact가 확정된 시점에서
 
 | System | Direction | Interface |
 |--------|-----------|-----------|
-| **게임 시계** | 뉴스/이벤트가 의존 | `on_tick` — 슬롯 체크. `on_market_open/close/day_transition` — 상태 전환 트리거 |
+| **게임 시계** | 뉴스/이벤트가 의존 | `on_tick` — 슬롯 체크. `on_market_state_changed(new_state, prev_state)` — PRE_MARKET 감지(프리마켓 공개), MARKET_OPEN/CLOSED 전환, DAY_TRANSITION(야간 이벤트 생성), SEASON_END(이벤트 통계 기록 + 시스템 리셋) 트리거. `on_season_start` — 시즌 초기화(이벤트 풀 로드, 테마 배정) |
 | **종목 DB** | 뉴스/이벤트가 의존 | `get_stocks_by_event_tag(tag)` — INDIVIDUAL 이벤트 대상 종목 매칭. `get_stocks_by_sector(sector_id)` — SECTOR 이벤트 대상 종목 조회. `get_stock(id)` — 종목명/섹터 변수 주입 |
 | **가격 엔진** | 가격 엔진이 이벤트를 소비 | `push_event(Event)` — 생성된 Event 오브젝트 전달. 가격 엔진의 이벤트 큐에 추가 |
 | **뉴스 피드 UI** | UI가 뉴스 텍스트를 소비 | `on_news_display(NewsQueueEntry)` — 딜레이 경과 후 뉴스 텍스트 전달. 프리마켓 뉴스 묶음 전달 |
@@ -682,6 +682,8 @@ rumor_probability: LARGE/MEGA=1.0, MEDIUM=0.3, SMALL=0.0
 | GRADUAL_SHIFT 야간 이벤트 진행 중 다음 장 마감 | 잔여 틱 보존. 거래일 경계에서 소실 없음 | 가격 엔진 규칙과 일관 |
 | direction=VARIABLE 이벤트 | 50:50 무작위 결정. 뉴스 텍스트도 방향에 맞게 조정 | 예측 불가 이벤트 허용 |
 | 강제 발생 vs 하드캡 충돌 | 하드캡(5) 판정이 우선. 슬롯에서 이미 5개 발생 시 강제 발생 없음. 반대로 4슬롯 모두 미발생 시 장 중반에 SMALL MACRO 1개 강제 — 이 강제 이벤트도 하드캡 카운트에 포함 | 하드캡은 절대 상한, 강제는 빈 날 방지용 안전망 |
+| Lv4 루머 타이밍 — 이벤트 발생 틱 < rumor_advance_ticks (20) | 루머 display_tick = 0 (PRE_MARKET). 다음 거래일이 아닌 **현재 거래일 PRE_MARKET** 뉴스 묶음에 루머 포함 — 이미 MARKET_OPEN이면 즉시 표시. 루머가 이벤트보다 20틱 전에 표시될 수 없으므로 가능한 만큼만 선행 | 틱 0 이전은 존재하지 않음. 장 초반 이벤트의 루머는 축소된 선행 시간으로 표시 |
+| 페이크 루머 생성 기본 사양 | 하루 2회, 장 시작 30~360틱 사이에서 균등분포 배치. 페이크 루머는 실제 이벤트 풀에서 랜덤 template 선택 후 방향/대상만 표시 (실제 이벤트 미발생). `is_fake: true` 플래그로 내부 추적 (UI 비구분). 시즌 종료 시 "루머 적중률" 통계에서 페이크 제외 가능 | 루머 신뢰도 조절. 무조건 루머 추종 전략 방지 |
 
 ## Dependencies
 

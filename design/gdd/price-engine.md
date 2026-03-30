@@ -141,7 +141,7 @@ function adjust_row(row[], self_scale, breakout_scale):
 
     # 4. 나머지 열 (non-self, non-breakout) 비율 보정
     non_self_non_breakout = remaining - breakout_adjusted
-    others_indices = {j for j != state_index and j not in [5,6]}
+    others_indices = {j for j in range(7) if j != state_index and j not in [5,6]}
     others_original_sum = sum(row[j] for j in others_indices)
     for j in others_indices:
         row[j] = row[j] / others_original_sum × non_self_non_breakout

@@ -69,7 +69,7 @@
 | **MARKET_CLOSED** | 장 마감 시각 도달 | 일일 정산 리포트 확인 후 | 신규 주문 불가. 일일 수익률 정산. 순위 갱신 |
 | **DAY_TRANSITION** | 리포트 확인 | 다음 거래일의 PRE_MARKET | 비거래 시간 스킵. 야간 뉴스 이벤트 생성 (다음 날 공개) |
 | **WEEK_END** | 금요일 MARKET_CLOSED | 주간 리포트 확인 후 | 주간 리포트 표시. 다음 주 시장 테마 힌트 |
-| **SEASON_END** | 마지막 주의 WEEK_END | 시즌 결과 확인 후 | 최종 순위 확정. 보상 지급. 스킬 트리 경험치 정산 |
+| **SEASON_END** | 마지막 주의 WEEK_END | 시즌 결과 확인 후 → PRE_MARKET (새 시즌 첫 거래일) | 최종 순위 확정. 보상 지급. 스킬 트리 경험치 정산. 시즌 결과 확인 시 `on_season_start` 발행 후 새 시즌의 PRE_MARKET 진입 |
 
 **PAUSED (서브상태)**: MARKET_OPEN 중에만 진입 가능한 오버레이 상태.
 시간 정지. UI 조작/주문 입력 가능. 재개 시 MARKET_OPEN으로 복귀하며
@@ -100,6 +100,17 @@ on_season_end()         # SEASON_END 진입 시
 - PRE_MARKET 진입: `on_market_state_changed(PRE_MARKET, DAY_TRANSITION)` 또는 `on_market_state_changed(PRE_MARKET, SEASON_START)`
 
 배속 정보는 시그널이 아닌 `get_speed_multiplier(): float` 조회로 제공.
+
+### Public API
+
+```
+get_market_state(): MarketState      # 현재 시장 상태
+get_current_time(): GameTime         # 현재 게임 시각 (틱/일/주)
+get_current_tick(): int              # 현재 틱 번호 (0~390). 가격 엔진 히스토리 인덱싱용
+get_day_progress(): float            # 거래일 진행률 (0.0~1.0)
+get_speed_multiplier(): float        # 현재 배속 (1/2/4)
+set_speed(multiplier: float)         # 배속 변경 요청
+```
 
 **이벤트 감속 소유권**: 뉴스/이벤트 시스템이 `game_clock.set_speed(1)` 메서드를
 호출하여 감속을 요청한다. 게임 시계는 `set_speed(multiplier)` API를 제공하며,
@@ -222,6 +233,9 @@ total_season_days = weeks_per_season * 5
 - [ ] 틱 시그널이 모든 구독 시스템(가격 엔진, 뉴스)에 정확히 전달된다
 - [ ] 배속 전환 시 틱 누락이 발생하지 않는다
 - [ ] 성능: 틱 처리가 16ms (60fps) 이내에 완료된다
+- [ ] `on_season_start` 시그널이 새 시즌 진입 시 정확히 1회 발행된다
+- [ ] `get_current_tick()`이 MARKET_OPEN 상태에서 0~390 범위의 정확한 값을 반환한다
+- [ ] SEASON_END 확인 후 새 시즌의 PRE_MARKET으로 정상 전환된다
 - [ ] 모든 시간 관련 값은 config 파일에서 로드된다 (하드코딩 금지)
 
 ---

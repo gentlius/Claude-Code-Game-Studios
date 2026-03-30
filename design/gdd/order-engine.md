@@ -52,6 +52,18 @@ MarketOrder {
 - 부분 체결 없음 — 전량 체결 또는 전량 거부
 - 체결 후 취소 불가
 - 일시정지(PAUSED) 중 제출 시: 재개 후 첫 틱에 체결
+- **PRE_MARKET 예약**: PRE_MARKET 시장가 매수는 체결까지 가격 변동이 있으므로,
+  실제 증권사와 동일하게 상한 기준으로 예약금을 선차감한다:
+  ```
+  pre_market_reserved = ceil(current_price × (1 + pre_market_buffer_pct)) × quantity
+  sim_deduct(pre_market_reserved)
+  // 체결 시: refund = pre_market_reserved - (filled_price × quantity)
+  // sim_add(refund)
+  // 취소 시: sim_add(pre_market_reserved)
+  ```
+  `pre_market_buffer_pct` 기본값 0.10 (10%). `current_price`는 전일 종가.
+  이렇게 하면 야간 이벤트로 가격이 상승해도 예약금 범위 내에서 체결되고,
+  실제 체결가와의 차액은 환불된다. MARKET_OPEN/PAUSED 시장가는 기존대로 선차감 없음
 
 ##### 1-2. 지정가 주문 (Limit Order) — Lv2 해금
 
@@ -118,7 +130,7 @@ Order {
     submitted_market_state: string  # 제출 시점 시장 상태 (MARKET_OPEN / PRE_MARKET / PAUSED)
     filled_price: int | null    # 체결가
     filled_tick: int | null
-    reserved_cash: int          # 매수 예약 금액 (MARKET은 0)
+    reserved_cash: int          # 매수 예약 금액. LIMIT: limit_price×qty. PRE_MARKET MARKET: ceil(price×1.10)×qty. MARKET_OPEN MARKET: 0
     locked_quantity: int        # 매도 예약 수량 (MARKET은 0)
 }
 ```
@@ -154,9 +166,10 @@ Order {
    - 이미 보유 종목 또는 큐 내 선행 BUY에 동일 종목 존재: 슬롯 검증 면제
 
 6. 잔액 검증 (BUY만)
-   - MARKET: current_price × quantity > available_cash → REJECTED ("잔액 부족")
+   - MARKET (MARKET_OPEN/PAUSED): current_price × quantity > available_cash → REJECTED ("잔액 부족")
+   - MARKET (PRE_MARKET): ceil(current_price × (1 + pre_market_buffer_pct)) × quantity > available_cash → REJECTED ("잔액 부족")
    - LIMIT: limit_price × quantity > available_cash → REJECTED ("잔액 부족")
-   - available_cash = get_sim_cash() (이미 다른 지정가에 예약된 금액은 차감된 상태)
+   - available_cash = get_sim_cash() (이미 다른 지정가/PRE_MARKET 예약에 차감된 금액은 제외된 상태)
 
 7. 보유 수량 검증 (SELL만)
    - quantity > available_quantity → REJECTED ("보유 수량 부족")
@@ -230,11 +243,38 @@ on_tick:
 ##### 4-3a. PRE_MARKET 큐
 
 PRE_MARKET 동안 제출된 주문은 `pre_market_queue`에 보관. `on_market_open` 시
-첫 틱(틱 1)에서 시장가 주문부터 순서대로 처리. PRE_MARKET 시장가 주문은 **틱 1의
-가격으로 체결**되며, 제출 시점 가격과 다를 수 있다. 체결 시 **잔액 및 슬롯 재검증**
-수행: 잔액 부족 시 REJECTED ("잔액 부족"), 신규 종목이고 `get_holding_count() >=
-max_holdings`이면 REJECTED ("보유 종목 한도 초과"). FIFO 순서로 처리하므로 앞 주문
-체결로 holding_count가 증가한 후 뒷 주문이 슬롯 검증에 실패할 수 있다.
+첫 틱(틱 1)에서 시장가 주문부터 순서대로 처리.
+
+**PRE_MARKET 시장가 체결 절차**:
+```
+for order in pre_market_queue (FIFO):
+    filled_price = price_engine.get_current_price(order.stock_id)  # 틱 1 가격
+
+    if order.order_type == MARKET and order.side == BUY:
+        actual_cost = filled_price × order.quantity
+        if actual_cost > order.reserved_cash:
+            // 버퍼 초과 (10%+ 급등) — 거절
+            currency.sim_add(order.reserved_cash)   # 예약금 전액 복원
+            order.status = REJECTED
+            order.reject_reason = "개장 가격 급변으로 체결 불가"
+            continue
+        refund = order.reserved_cash - actual_cost
+        currency.sim_add(refund)                    # 차액 환불
+        portfolio.add_holding(order.stock_id, order.quantity, filled_price)
+        order.status = FILLED
+
+    elif order.order_type == MARKET and order.side == SELL:
+        // 매도는 기존 로직 동일 (예약 없음, 잠금만)
+        ...기존 매도 체결 로직...
+
+    elif order.order_type == LIMIT:
+        // 지정가는 pending_limit_orders로 이관, 이후 틱별 체결 체크
+        pending_limit_orders.add(order)
+```
+
+슬롯 재검증: 신규 종목이고 `get_holding_count() >= max_holdings`이면 REJECTED
+("보유 종목 한도 초과") + 예약금 복원. FIFO 순서로 처리하므로 앞 주문 체결로
+holding_count가 증가한 후 뒷 주문이 슬롯 검증에 실패할 수 있다.
 
 ##### 4-3b. PAUSED 큐
 
@@ -318,7 +358,7 @@ on_market_close:
 | **포트폴리오 관리** | 양방향 | `get_holding_count()` — 슬롯 검증. `get_holding(stock_id).quantity` — 보유 수량 조회 (매도 가용 수량은 Order Engine이 `quantity - locked_quantity`로 자체 계산). `add_holding()` / `remove_holding()` — 체결 후 **직접 메서드 호출** |
 | **스킬 트리** | 주문 엔진이 참조 | `get_trading_level()` — 주문 유형 해금 여부. `get_portfolio_level()` — max_holdings |
 | **게임 시계** | 주문 엔진이 의존 | `on_tick` — 지정가 체결 체크. `on_market_open/close` — 상태 전환 |
-| **트레이딩 스크린** | UI가 주문 엔진에 의존 | `submit_order(order)` — 주문 제출. `cancel_order(order_id)` — 취소. `get_pending_orders()` — 미체결 목록. `get_total_reserved_cash()` — 미체결 지정가 매수 예약금 합계 (`Σ pending_buy_limit.reserved_cash`) |
+| **트레이딩 스크린** | UI가 주문 엔진에 의존 | `submit_order(order)` — 주문 제출. `cancel_order(order_id)` — 취소. `get_pending_orders()` — 미체결 목록. `get_total_reserved_cash()` — 전체 미체결 매수 예약금 합계 (`Σ pending_buy.reserved_cash` — 지정가 + PRE_MARKET 시장가 포함) |
 | **경험치 시스템** | 경험치가 참조 | `on_order_filled` — 거래 기반 경험치 산출 |
 | **오디오 시스템** | 오디오가 참조 | `on_order_filled` — 체결음 재생 |
 
@@ -348,13 +388,33 @@ refund = reserved_cash - (filled_price × quantity)
 **예시**: 스타칩 지정가 63,000원 × 10주 = 630,000원 예약
 → 62,500원에 체결 시 refund = 630,000 - 625,000 = 5,000원 환불
 
+### F2b. PRE_MARKET 시장가 매수 예약 및 환불
+
+```
+buffered_price = ceil(current_price × (1 + pre_market_buffer_pct))
+reserved_cash = buffered_price × quantity
+refund = reserved_cash - (filled_price × quantity)
+```
+
+| Variable | Type | Range | Source | Description |
+|----------|------|-------|--------|-------------|
+| `current_price` | int | 1+ | 가격 엔진 (전일 종가) | PRE_MARKET 시점 현재가 |
+| `pre_market_buffer_pct` | float | 0.05~0.30 | config | 가격 변동 버퍼율 (기본 10%) |
+| `buffered_price` | int | 1+ | calculated | 예약 기준가 |
+| `filled_price` | int | 1+ | 가격 엔진 (틱 1) | 실제 체결가 |
+
+**예시**: 스타칩 전일종가 65,000원, buffer 10%, 15주
+- `buffered_price = ceil(65,000 × 1.10) = 71,500원`
+- `reserved_cash = 71,500 × 15 = 1,072,500원`
+- 틱 1 체결가 66,300원 → `refund = 1,072,500 - 994,500 = 78,000원`
+
 ### F3. 최대 매수 가능 수량
 
 ```
 max_buyable = floor(available_cash / reference_price)
 ```
 
-- `reference_price`: 시장가면 `current_price`, 지정가면 `limit_price`
+- `reference_price`: MARKET_OPEN 시장가면 `current_price`, PRE_MARKET 시장가면 `ceil(current_price × (1 + pre_market_buffer_pct))`, 지정가면 `limit_price`
 - UI에서 "최대" 버튼 클릭 시 이 값으로 수량 자동 입력
 
 **예시**: available_cash=500,000, current_price=65,000
@@ -375,6 +435,7 @@ fee = floor(trade_value × fee_rate)
 | `max_pending_limit_orders` | 10 | 3~20 | config | 동시 미체결 지정가 한도 |
 | `limit_order_expiry` | DAILY | DAILY | config | 지정가 만료 정책. MVP=당일 |
 | `limit_price_warn_range` | 0.30 | 0.10~0.50 | config | 지정가 경고 범위 (현재가 대비 ±%) |
+| `pre_market_buffer_pct` | 0.10 | 0.05~0.30 | config | PRE_MARKET 시장가 매수 예약 버퍼율 |
 
 ## Edge Cases
 
@@ -394,7 +455,9 @@ fee = floor(trade_value × fee_rate)
 | 가격 급변으로 지정가 조건 순간 통과 | 해당 틱에 체결 확정. 다음 틱 가격 무관 | "틱이 진실" 원칙 |
 | max_pending_limit_orders 초과 | REJECTED + "미체결 주문 한도 초과" | 주문 남발 방지 |
 | 시즌 종료 시 미체결 주문 | 장 마감 처리(EXPIRED) 후 시즌 종료 순서 보장 | 정산 선행 |
-| PRE_MARKET 시장가 주문 → 틱 1에서 잔액 부족 (가격 변동 또는 복수 주문) | 체결 시 잔액 재검증. 부족 시 REJECTED ("잔액 부족"). 시장가는 선차감(`reserved_cash`)이 없으므로, PRE_MARKET에서 복수 시장가 매수를 제출하면 제출 시점에는 모두 잔액 검증을 통과할 수 있다. 틱 1에서 선입선출 순서로 처리하며, 앞 주문 체결로 `sim_cash`가 감소한 후 뒷 주문이 재검증에 실패하면 REJECTED | PRE_MARKET 시장가는 선차감 없음. 체결 시점 재검증이 안전장치 |
+| PRE_MARKET 시장가 매수 → 야간 이벤트로 가격 상승 | 예약금 = `ceil(전일종가 × 1.10) × quantity`로 선차감됨. 틱 1 체결가가 예약금 범위 내이면 정상 체결 + 차액 환불. 예: 전일종가 65,000 → 예약금 71,500×15=1,072,500원 선차감 → 틱 1 가격 66,300원 → 체결 994,500원 → 78,000원 환불. 실제 증권사의 상한가 예약 방식과 동일 | 가격 변동에도 체결 보장 (버퍼 내) |
+| PRE_MARKET 시장가 매수 → 버퍼 초과 급등 (10%+) | 예약금 범위 초과 → REJECTED ("개장 가격 급변으로 체결 불가") + 예약금 전액 복원. 극히 드문 케이스 (야간 이벤트는 SMALL/MEDIUM 한정, 최대 7%) | 버퍼 초과 시 안전 거절. 복수 주문도 예약금이 각각 선차감되므로 자원 충돌 없음 |
+| PRE_MARKET 복수 시장가 매수 → 잔액 부족 | 각 주문마다 예약금이 제출 시점에 선차감되므로, 잔액 부족 시 **제출 시점에** REJECTED. 틱 1이 아닌 주문 제출 시 즉시 차단됨 | 예약 방식으로 기존 "틱 1 서프라이즈 거절" 문제 해결 |
 | PRE_MARKET에서 슬롯 한도까지 신규 종목 주문 제출 후 추가 신규 종목 주문 | PRE_MARKET 주문 제출 시 `effective_holding_count`로 슬롯 검증 — 큐 내 미체결 신규 종목도 카운트에 포함. 예: max_holdings=3, 현재 보유 1종목, 큐에 신규 2종목 → effective=3 → 추가 신규 종목 REJECTED. 이미 큐에 있는 종목의 추가 매수는 슬롯 면제 | 큐 반영 슬롯 검증. 체결 시점 서프라이즈 방지 |
 
 ## Dependencies
@@ -420,6 +483,7 @@ fee = floor(trade_value × fee_rate)
 | `max_pending_limit_orders` | 10 | 3~20 | 복잡한 전략 가능 | 주문 관리 단순화 |
 | `limit_order_expiry` | DAILY | DAILY | — | — |
 | `limit_price_warn_range` | 30% | 10~50% | 비현실적 지정가 허용 | 근접 지정가만 허용 |
+| `pre_market_buffer_pct` | 0.10 (10%) | 0.05~0.30 | PRE_MARKET 시장가 예약 여유 증가 → 거절 빈도 감소, 자금 묶임 증가 | 예약 여유 감소 → 거절 빈도 증가, 자금 효율 증가 |
 
 ## Acceptance Criteria
 

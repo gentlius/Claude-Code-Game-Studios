@@ -50,7 +50,8 @@
    - 상금은 모의투자 시드가 아닌 예수금에 합산.
 
 5. **총 자산 (대회 내)** — 포트폴리오 관리 시스템이 계산:
-   - `sim_total_assets = sim_cash + sum(stock_quantity * current_price)`
+   - `sim_total_assets = sim_cash + reserved_cash + sum(stock_quantity * current_price)`
+   - `reserved_cash` = 미체결 지정가 매수 예약금 합계 (주문 엔진 소유). `sim_cash`에서 이미 선차감된 금액이므로 총 자산에 합산.
    - 시즌 순위는 이 값 기준.
    - 재화 시스템은 `sim_cash`만 관리하고, 총 자산 계산은 포트폴리오에 위임.
 

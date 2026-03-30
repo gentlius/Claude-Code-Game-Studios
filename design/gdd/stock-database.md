@@ -49,7 +49,7 @@ MVP에서 10종목 전체를 포함한다. 10개 섹터의 다양성이 "읽는 
 | `sector_sensitivity` | float | 섹터 뉴스 반응 강도 (0.0-2.0) | 1.0 |
 | `macro_sensitivity` | float | 거시경제 뉴스 반응 강도 (0.0-2.0) | 0.8 |
 | `event_tags` | string[] | 반응하는 이벤트 태그 목록 | ["semiconductor", "export", "tech"] |
-| `per` | float | 주가수익비율 | 12.5 |
+| `per` | float \| null | 주가수익비율. 적자 기업은 null (UI에 "N/A" 표시) | 12.5 (메디진: null) |
 | `market_cap` | int | 시가총액 (억 원). UI 표시 전용 참고 정보. 게임 메카닉에 영향 없음 | 350000 |
 | `dividend_yield` | float | 배당 수익률 (%). MVP에서는 UI 표시 전용 참고 정보. 향후 배당 이벤트 시스템 도입 시 활용 | 1.8 |
 
@@ -104,7 +104,7 @@ MVP에서 10종목 전체를 포함한다. 10개 섹터의 다양성이 "읽는 
 | **뉴스/이벤트 시스템** | 뉴스가 참조 | `get_stocks_by_event_tag(tag)` → 이벤트 태그로 반응 종목 조회. `get_stocks_by_sector(sector_id)` → SECTOR 이벤트 대상 종목 조회 |
 | **주문 처리 엔진** | 주문이 참조 | `stock_exists(id): bool` → 종목 존재 검증. `get_stock(id)` → 종목 기본 정보 |
 | **포트폴리오 관리** | 포트폴리오가 참조 | `get_stock(id)` → 종목 이름, 섹터 등 표시 정보 |
-| **스킬 트리** | 스킬이 참조 | `get_all_sectors()` → 섹터 ETF 해금 시 섹터 목록 조회 |
+| **스킬 트리** | 스킬이 참조 | `get_all_sectors(): SectorInfo[]` → 섹터 ETF 해금 시 섹터 목록 조회. `SectorInfo = {id: SectorEnum, name: string, stock_count: int}` |
 
 ## Formulas
 

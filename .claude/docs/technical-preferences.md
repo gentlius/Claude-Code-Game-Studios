@@ -5,32 +5,32 @@
 
 ## Engine & Language
 
-- **Engine**: [TO BE CONFIGURED — run /setup-engine]
-- **Language**: [TO BE CONFIGURED]
-- **Rendering**: [TO BE CONFIGURED]
-- **Physics**: [TO BE CONFIGURED]
+- **Engine**: Godot 4.6
+- **Language**: GDScript (primary), C++ via GDExtension (performance-critical)
+- **Rendering**: Vulkan (Forward+) — 웹 export 시 Compatibility (OpenGL 3)
+- **Physics**: Jolt (4.6 기본)
 
 ## Naming Conventions
 
-- **Classes**: [TO BE CONFIGURED]
-- **Variables**: [TO BE CONFIGURED]
-- **Signals/Events**: [TO BE CONFIGURED]
-- **Files**: [TO BE CONFIGURED]
-- **Scenes/Prefabs**: [TO BE CONFIGURED]
-- **Constants**: [TO BE CONFIGURED]
+- **Classes**: PascalCase (e.g., `GameClock`, `PriceEngine`)
+- **Variables/Functions**: snake_case (e.g., `move_speed`, `get_current_price()`)
+- **Signals**: snake_case past tense (e.g., `tick_processed`, `market_state_changed`)
+- **Files**: snake_case matching class (e.g., `game_clock.gd`)
+- **Scenes/Prefabs**: PascalCase matching root node (e.g., `GameClock.tscn`)
+- **Constants**: UPPER_SNAKE_CASE (e.g., `MAX_HOLDINGS`, `TICKS_PER_DAY`)
 
 ## Performance Budgets
 
-- **Target Framerate**: [TO BE CONFIGURED]
-- **Frame Budget**: [TO BE CONFIGURED]
-- **Draw Calls**: [TO BE CONFIGURED]
-- **Memory Ceiling**: [TO BE CONFIGURED]
+- **Target Framerate**: 60fps
+- **Frame Budget**: 16.6ms
+- **Draw Calls**: [TO BE CONFIGURED] (UI 중심이므로 상대적 여유)
+- **Memory Ceiling**: 512MB (웹 빌드 고려)
 
 ## Testing
 
-- **Framework**: [TO BE CONFIGURED]
-- **Minimum Coverage**: [TO BE CONFIGURED]
-- **Required Tests**: Balance formulas, gameplay systems, networking (if applicable)
+- **Framework**: GUT (Godot Unit Test)
+- **Minimum Coverage**: Balance formulas 100%, gameplay systems 80%
+- **Required Tests**: Balance formulas, gameplay systems
 
 ## Forbidden Patterns
 
@@ -45,4 +45,4 @@
 ## Architecture Decisions Log
 
 <!-- Quick reference linking to full ADRs in docs/architecture/ -->
-- [No ADRs yet — use /architecture-decision to create one]
+- [ADR-001](../../docs/architecture/001-system-communication-pattern.md) — 시그널 + 직접 호출 하이브리드 통신 패턴

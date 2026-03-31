@@ -9,7 +9,7 @@ config/name_localized={
 "ko": "시드머니"
 }
 config/description="Real-time stock investment simulation game"
-run/main_scene="res://src/TestMain.tscn"
+run/main_scene="res://src/ui/GameMain.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 
 [autoload]

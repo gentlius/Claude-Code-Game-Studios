@@ -36,7 +36,7 @@ func _connect_signals() -> void:
 	GameClock.on_market_close.connect(_on_market_close)
 	GameClock.on_day_transition.connect(_on_day_transition)
 	GameClock.on_season_end.connect(_on_season_end)
-	PriceEngine.on_price_updated.connect(_on_price_updated)
+	PriceEngine.on_price_updated.connect(_on_price_updated_tick)
 	CurrencySystem.sim_cash_changed.connect(_on_sim_cash_changed)
 	PortfolioManager.holding_added.connect(_on_holding_added)
 	PortfolioManager.holding_removed.connect(_on_holding_removed)
@@ -45,17 +45,18 @@ func _connect_signals() -> void:
 
 func _start_season() -> void:
 	print("\n--- Starting Season ---")
+	CurrencySystem.init_season_seed()
 	GameClock.start_season()
 	print("[OK] Season started, market state: %s" % GameClock.MarketState.keys()[GameClock.get_market_state()])
 	print("[OK] Sim cash: %d" % CurrencySystem.get_sim_cash())
-	print("[OK] PriceEngine state: %s" % PriceEngine.EngineState.keys()[PriceEngine._state])
+	print("[OK] PriceEngine ready")
 
 	# Transition to market open
 	GameClock.confirm_market_open()
 	print("[OK] Market opened")
 
 
-func _on_tick(tick: int) -> void:
+func _on_tick(tick: int, _day: int, _week: int) -> void:
 	_ticks_processed += 1
 
 	# Place a buy order on tick 5
@@ -63,14 +64,8 @@ func _on_tick(tick: int) -> void:
 		var price: int = PriceEngine.get_current_price(_test_stock_id)
 		print("\n--- Placing BUY order at tick %d ---" % tick)
 		print("  %s current price: %d" % [_test_stock_id, price])
-		var result: Dictionary = OrderEngine.place_order(
-			_test_stock_id, OrderEngine.OrderSide.BUY, 10,
-			OrderEngine.OrderType.MARKET
-		)
-		print("  Order result: %s (id: %s)" % [
-			"SUCCESS" if result["success"] else "FAILED: " + result.get("reason", ""),
-			str(result.get("order_id", -1))
-		])
+		var result: Dictionary = OrderEngine.submit_market_order("BUY", _test_stock_id, 10)
+		print("  Order result: %s (id: %d)" % [result.get("status", "?"), result.get("order_id", -1)])
 		_buy_placed = true
 
 	# Place a sell order on tick 50
@@ -80,13 +75,8 @@ func _on_tick(tick: int) -> void:
 			var price: int = PriceEngine.get_current_price(_test_stock_id)
 			print("\n--- Placing SELL order at tick %d ---" % tick)
 			print("  %s current price: %d (avg_buy: %d)" % [_test_stock_id, price, holding["avg_buy_price"]])
-			var result: Dictionary = OrderEngine.place_order(
-				_test_stock_id, OrderEngine.OrderSide.SELL, 5,
-				OrderEngine.OrderType.MARKET
-			)
-			print("  Order result: %s" % [
-				"SUCCESS" if result["success"] else "FAILED: " + result.get("reason", "")
-			])
+			var result: Dictionary = OrderEngine.submit_market_order("SELL", _test_stock_id, 5)
+			print("  Order result: %s (id: %d)" % [result.get("status", "?"), result.get("order_id", -1)])
 			_sell_placed = true
 
 	# Print status every 100 ticks
@@ -99,7 +89,7 @@ func _on_tick(tick: int) -> void:
 		get_tree().quit()
 
 
-func _on_price_updated(_stock_id: String, _new_price: int, _delta_pct: float) -> void:
+func _on_price_updated_tick(_tick: int) -> void:
 	pass  # High frequency — don't log
 
 

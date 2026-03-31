@@ -14,4 +14,5 @@ enum VolatilityProfile { LOW, MEDIUM, HIGH, EXTREME }
 @export var macro_sensitivity: float = 1.0
 @export var sector_sensitivity: float = 1.0
 @export var per: float = 0.0  ## 0.0 indicates deficit company (null equivalent)
+@export var event_tags: Array[String] = []  ## Tags for INDIVIDUAL event matching
 @export var description: String = ""

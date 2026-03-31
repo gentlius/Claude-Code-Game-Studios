@@ -37,8 +37,8 @@ dist/
 .godot/
 *.translation
 export_presets.cfg
-# Uncomment if using Godot:
-# *.import
+*.import
+*.uid
 
 # === Engine: Unity ===
 [Ll]ibrary/

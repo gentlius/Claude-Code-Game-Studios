@@ -1,0 +1,786 @@
+## Autoload — Generates market events on a daily slot schedule and delivers news with delay.
+## Core layer. Depends on: GameClock, StockDatabase, PriceEngine.
+## See: design/gdd/news-events.md
+extends Node
+
+# ── Signals ──
+
+## Emitted when a news item becomes visible to the player (after delay).
+signal on_news_display(entry: Dictionary)
+
+## Emitted when a pre-market news bundle is ready.
+signal on_pre_market_news(entries: Array[Dictionary])
+
+## Emitted when season theme hint is revealed.
+signal on_theme_hint(hint_text: String)
+
+## Emitted for debug: when an event is generated (before delay).
+signal on_event_generated(event: Dictionary)
+
+# ── Enums ──
+
+enum SystemState { UNINITIALIZED, READY, ACTIVE, DAY_END, SEASON_END }
+
+# ── Constants: Slot Configuration (GDD Rule 2-1) ──
+
+const SLOT_CONFIG: Array[Dictionary] = [
+	{"name": "opening", "tick_min": 1, "tick_max": 100, "probability": 0.70},
+	{"name": "midday_1", "tick_min": 101, "tick_max": 190, "probability": 0.55},
+	{"name": "midday_2", "tick_min": 191, "tick_max": 280, "probability": 0.55},
+	{"name": "closing", "tick_min": 281, "tick_max": 390, "probability": 0.60},
+]
+
+const DAILY_HARD_CAP: int = 5
+
+## Scope weights (GDD Rule 2-2)
+const BASE_SCOPE_WEIGHTS: Dictionary = {
+	"INDIVIDUAL": 0.55,
+	"SECTOR": 0.35,
+	"MACRO": 0.10,
+}
+
+## Impact tier weights (GDD Rule 2-3)
+const IMPACT_TIER_WEIGHTS: Dictionary = {
+	"SMALL": 0.35,
+	"MEDIUM": 0.40,
+	"LARGE": 0.20,
+	"MEGA": 0.05,
+}
+
+## Volatility weight for INDIVIDUAL stock selection (GDD Rule 3-2)
+const VOL_WEIGHT: Dictionary = {
+	StockData.VolatilityProfile.LOW: 0.7,
+	StockData.VolatilityProfile.MEDIUM: 1.0,
+	StockData.VolatilityProfile.HIGH: 1.2,
+	StockData.VolatilityProfile.EXTREME: 1.5,
+}
+
+## News delay by skill level (GDD Rule 4-2). MVP: always Lv1.
+const DELAY_BY_LEVEL: Dictionary = {1: 30, 2: 15, 3: 0, 4: -20}
+
+## Overnight event probabilities (GDD Rule 6-1)
+const OVERNIGHT_PROBS: Array[float] = [0.40, 0.45, 0.15]  # 0, 1, 2 events
+const OVERNIGHT_INDIVIDUAL_PROB: float = 0.05
+
+# ── State ──
+
+var _state: SystemState = SystemState.UNINITIALIZED
+var _event_pool: Array[Dictionary] = []       ## Loaded event templates
+var _season_theme: Dictionary = {}            ## Active season theme
+var _all_themes: Array[Dictionary] = []       ## All available themes
+
+var _daily_schedule: Array[Dictionary] = []   ## Pre-generated slots for today
+var _daily_event_count: int = 0               ## Events fired today
+var _daily_mega_fired: bool = false            ## MEGA already fired today
+
+var _news_delay_queue: Array[Dictionary] = [] ## Pending news items awaiting display
+var _overnight_buffer: Array[Dictionary] = [] ## Events for next morning
+
+## Cooldown tracking: template_id (or template_id+stock_id) -> last_used_tick
+var _cooldown_tracker: Dictionary = {}
+## Recent INDIVIDUAL targets: stock_id -> last_event_tick
+var _recent_individual_targets: Dictionary = {}
+## Last slot scope for clustering prevention
+var _last_slot_scope: String = ""
+
+## Season statistics
+var _season_stats: Dictionary = {
+	"total_events": 0,
+	"by_scope": {"MACRO": 0, "SECTOR": 0, "INDIVIDUAL": 0},
+	"by_impact": {"SMALL": 0, "MEDIUM": 0, "LARGE": 0, "MEGA": 0},
+}
+
+# ── Lifecycle ──
+
+func _ready() -> void:
+	GameClock.on_season_start.connect(_on_season_start)
+	GameClock.on_tick.connect(_on_tick)
+	GameClock.on_market_open.connect(_on_market_open)
+	GameClock.on_market_close.connect(_on_market_close)
+	GameClock.on_day_transition.connect(_on_day_transition)
+	GameClock.on_market_state_changed.connect(_on_market_state_changed)
+	GameClock.on_season_end.connect(_on_season_end)
+
+
+func _on_season_start() -> void:
+	_load_event_pool()
+	_load_themes()
+	_select_season_theme()
+	_reset_season_stats()
+	_cooldown_tracker.clear()
+	_recent_individual_targets.clear()
+	_news_delay_queue.clear()
+	_overnight_buffer.clear()
+	_daily_mega_fired = false
+	_daily_event_count = 0
+	_last_slot_scope = ""
+	_state = SystemState.READY
+
+
+func _on_season_end() -> void:
+	_state = SystemState.SEASON_END
+	_state = SystemState.UNINITIALIZED
+
+
+func _on_market_open() -> void:
+	if _state == SystemState.UNINITIALIZED:
+		return
+	_generate_daily_schedule()
+	_daily_event_count = 0
+	_daily_mega_fired = false
+	_last_slot_scope = ""
+	_state = SystemState.ACTIVE
+
+	# Check theme hint reveal
+	var current_day: int = GameClock.get_current_day()
+	if _season_theme.size() > 0 and current_day == _season_theme.get("hint_revealed_at_day", -1):
+		on_theme_hint.emit(_season_theme.get("hint_text", ""))
+
+
+func _on_market_close() -> void:
+	if _state != SystemState.ACTIVE:
+		return
+	_state = SystemState.DAY_END
+	_process_market_close_queue()
+	_generate_overnight_events()
+
+
+func _on_day_transition(_day: int) -> void:
+	if _state == SystemState.UNINITIALIZED:
+		return
+	_generate_overnight_disclosures()
+
+
+func _on_market_state_changed(
+	new_state: GameClock.MarketState, prev_state: GameClock.MarketState
+) -> void:
+	# PRE_MARKET after DAY_TRANSITION: deliver overnight buffer
+	if new_state == GameClock.MarketState.PRE_MARKET and prev_state == GameClock.MarketState.DAY_TRANSITION:
+		_deliver_pre_market_news()
+		_state = SystemState.READY
+
+
+func _on_tick(tick: int, _day: int, _week: int) -> void:
+	if _state != SystemState.ACTIVE:
+		return
+
+	# Check scheduled slots
+	_check_scheduled_slots(tick)
+
+	# Process news delay queue
+	_process_news_delay_queue(tick)
+
+# ── Public API ──
+
+## Returns the active season theme (or empty dict if none).
+func get_season_theme() -> Dictionary:
+	return _season_theme
+
+
+## Returns the current system state.
+func get_state() -> SystemState:
+	return _state
+
+
+## Returns season statistics.
+func get_season_stats() -> Dictionary:
+	return _season_stats.duplicate(true)
+
+
+## Returns the current news skill level. MVP: always 1.
+## Future: reads from SkillTree autoload.
+func get_news_skill_level() -> int:
+	return 1
+
+# ── Data Loading ──
+
+func _load_event_pool() -> void:
+	_event_pool.clear()
+	var file := FileAccess.open("res://assets/data/event_pool.json", FileAccess.READ)
+	if file == null:
+		push_warning("NewsEventSystem: event_pool.json not found")
+		return
+	var json := JSON.new()
+	var err: Error = json.parse(file.get_as_text())
+	file.close()
+	if err != OK:
+		push_warning("NewsEventSystem: event_pool.json parse error: %s" % json.get_error_message())
+		return
+	var data: Dictionary = json.data
+	_event_pool = Array(data.get("templates", []), TYPE_DICTIONARY, &"", null)
+
+
+func _load_themes() -> void:
+	_all_themes.clear()
+	var file := FileAccess.open("res://assets/data/season_themes.json", FileAccess.READ)
+	if file == null:
+		push_warning("NewsEventSystem: season_themes.json not found")
+		return
+	var json := JSON.new()
+	var err: Error = json.parse(file.get_as_text())
+	file.close()
+	if err != OK:
+		push_warning("NewsEventSystem: season_themes.json parse error")
+		return
+	var data: Dictionary = json.data
+	_all_themes = Array(data.get("themes", []), TYPE_DICTIONARY, &"", null)
+
+
+func _select_season_theme() -> void:
+	if _all_themes.is_empty():
+		_season_theme = {}
+		return
+	_season_theme = _all_themes[randi() % _all_themes.size()]
+
+# ── Daily Schedule Generation (GDD Rule 2-1, States section) ──
+
+func _generate_daily_schedule() -> void:
+	_daily_schedule.clear()
+	for slot: Dictionary in SLOT_CONFIG:
+		if randf() > slot["probability"]:
+			continue
+		var tick: int = randi_range(slot["tick_min"], slot["tick_max"])
+		var scope: String = _pick_scope()
+		var impact: String = _pick_impact()
+		_daily_schedule.append({
+			"tick": tick,
+			"scope": scope,
+			"impact": impact,
+			"fired": false,
+		})
+	# Sort by tick
+	_daily_schedule.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["tick"] < b["tick"])
+
+
+func _check_scheduled_slots(tick: int) -> void:
+	if _daily_event_count >= DAILY_HARD_CAP:
+		return
+
+	for slot: Dictionary in _daily_schedule:
+		if slot["fired"]:
+			continue
+		if tick >= slot["tick"]:
+			slot["fired"] = true
+			_fire_event_from_slot(slot["scope"], slot["impact"], tick)
+			_daily_event_count += 1
+			if _daily_event_count >= DAILY_HARD_CAP:
+				break
+
+	# Minimum guarantee: if at tick 190 (mid midday) and 0 events, force one
+	if tick == 190 and _daily_event_count == 0:
+		_fire_event_from_slot("MACRO", "SMALL", tick)
+		_daily_event_count += 1
+
+# ── Event Firing ──
+
+func _fire_event_from_slot(scope: String, impact: String, tick: int) -> void:
+	# MEGA cap: only 1 per day
+	if impact == "MEGA" and _daily_mega_fired:
+		impact = "LARGE"
+	if impact == "MEGA":
+		_daily_mega_fired = true
+
+	# Clustering prevention: same scope as last → 50% weight penalty, re-pick once
+	if scope == _last_slot_scope and randf() < 0.5:
+		scope = _pick_scope()
+
+	var template: Dictionary = _select_template(scope, impact)
+	if template.is_empty():
+		# Fallback: try SMALL
+		template = _select_template(scope, "SMALL")
+		if template.is_empty():
+			return  # No template available
+
+	_last_slot_scope = scope
+
+	# Resolve direction
+	var direction: int = _resolve_direction(template)
+
+	# Resolve target stocks
+	var target_stock_ids: Array[String] = []
+	var selected_stock: StockData = null
+
+	match scope:
+		"MACRO":
+			target_stock_ids = StockDatabase.get_all_stock_ids()
+		"SECTOR":
+			var sector: String = str(template.get("target_sector", ""))
+			if sector != "" and sector != "null":
+				target_stock_ids = StockDatabase.get_stock_ids_by_sector(sector)
+		"INDIVIDUAL":
+			selected_stock = _select_individual_stock(template, tick)
+			if selected_stock == null:
+				# Escalate to SECTOR
+				scope = "SECTOR"
+				template = _select_template("SECTOR", impact)
+				if template.is_empty():
+					return
+				var sector2: String = str(template.get("target_sector", ""))
+				if sector2 != "" and sector2 != "null":
+					target_stock_ids = StockDatabase.get_stock_ids_by_sector(sector2)
+			else:
+				target_stock_ids = [selected_stock.stock_id]
+				# Track recent individual targets
+				_recent_individual_targets[selected_stock.stock_id] = tick
+
+	if target_stock_ids.is_empty():
+		return
+
+	# Compute actual impact
+	var impact_min: float = template.get("impact_min", 0.01)
+	var impact_max: float = template.get("impact_max", 0.03)
+	var base_impact: float = randf_range(impact_min, impact_max)
+
+	# Build MarketEvent and push to PriceEngine
+	var event_type_str: String = template.get("event_type", "INSTANT_SHOCK")
+	var decay_ticks: int = int(template.get("decay_ticks", 0))
+	var decay_curve_str: String = template.get("decay_curve", "LINEAR")
+
+	var decay_curve: MarketEvent.DecayCurve = MarketEvent.DecayCurve.LINEAR
+	if decay_curve_str == "EXPONENTIAL":
+		decay_curve = MarketEvent.DecayCurve.EXPONENTIAL
+
+	var market_event: MarketEvent
+	if event_type_str == "INSTANT_SHOCK" or decay_ticks == 0:
+		market_event = MarketEvent.instant_shock(
+			base_impact, direction,
+			_scope_str_to_enum(scope), target_stock_ids
+		)
+	else:
+		market_event = MarketEvent.gradual_shift(
+			base_impact, direction,
+			_scope_str_to_enum(scope), target_stock_ids,
+			decay_ticks, decay_curve
+		)
+
+	PriceEngine.push_event(market_event)
+
+	# Track cooldown
+	var cooldown_key: String = template["template_id"]
+	if scope == "INDIVIDUAL" and selected_stock != null:
+		cooldown_key = template["template_id"] + "+" + selected_stock.stock_id
+	_cooldown_tracker[cooldown_key] = tick + GameClock.get_current_day() * 390
+
+	# Build headline/body text
+	var headline: String = _resolve_text(template, direction, "headline", selected_stock)
+	var body: String = _resolve_text(template, direction, "body", selected_stock)
+	var impact_hint: String = template.get("impact_hint", "")
+
+	# Build news entry
+	var skill_level: int = get_news_skill_level()
+	var delay_ticks: int = DELAY_BY_LEVEL.get(skill_level, 30)
+	var display_tick: int = tick + delay_ticks
+
+	var news_entry: Dictionary = {
+		"template_id": template["template_id"],
+		"scope": scope,
+		"impact_tier": template.get("impact_tier", impact),
+		"direction": direction,
+		"headline": headline,
+		"body": body,
+		"impact_hint": impact_hint,
+		"target_stock_ids": target_stock_ids,
+		"created_tick": tick,
+		"display_tick": display_tick,
+		"day": GameClock.get_current_day(),
+	}
+
+	_news_delay_queue.append(news_entry)
+
+	# Update stats
+	_season_stats["total_events"] += 1
+	_season_stats["by_scope"][scope] = _season_stats["by_scope"].get(scope, 0) + 1
+	var tier_key: String = template.get("impact_tier", impact)
+	_season_stats["by_impact"][tier_key] = _season_stats["by_impact"].get(tier_key, 0) + 1
+
+	on_event_generated.emit(news_entry)
+
+# ── Template Selection (GDD Rule 2-5) ──
+
+func _select_template(scope: String, impact: String) -> Dictionary:
+	var current_tick: int = GameClock.get_current_tick()
+	var abs_tick: int = current_tick + GameClock.get_current_day() * 390
+	var theme_tags: Array = _season_theme.get("active_season_tags", [])
+
+	var candidates: Array[Dictionary] = []
+	var weights: Array[float] = []
+
+	for t: Dictionary in _event_pool:
+		# Scope filter
+		if t["scope"] != scope:
+			continue
+		# Impact filter
+		if t.get("impact_tier", "") != impact:
+			continue
+		# Cooldown check
+		var cd_key: String = t["template_id"]
+		if _cooldown_tracker.has(cd_key):
+			var last_tick: int = _cooldown_tracker[cd_key]
+			if abs_tick - last_tick < int(t.get("cooldown_ticks", 0)):
+				continue
+		# Season tag filter
+		var s_tags: Array = t.get("season_tags", [])
+		if not s_tags.is_empty():
+			var match_found: bool = false
+			for st: String in s_tags:
+				if theme_tags.has(st):
+					match_found = true
+					break
+			if not match_found:
+				continue
+
+		# Compute weight
+		var w: float = float(t.get("weight_base", 1.0))
+		# Apply sector bias from theme
+		var t_sector: String = str(t.get("target_sector", ""))
+		if t_sector != "" and _season_theme.size() > 0:
+			var bias: Dictionary = _season_theme.get("sector_bias", {})
+			w *= float(bias.get(t_sector, 1.0))
+
+		candidates.append(t)
+		weights.append(w)
+
+	if candidates.is_empty():
+		return {}
+
+	return _weighted_random_pick(candidates, weights)
+
+# ── Scope & Impact Selection ──
+
+func _pick_scope() -> String:
+	var adjusted: Dictionary = {}
+	for scope: String in BASE_SCOPE_WEIGHTS:
+		var scale_key: String = scope.to_lower() + "_weight_scale"
+		var scale: float = float(_season_theme.get(scale_key, 1.0))
+		adjusted[scope] = float(BASE_SCOPE_WEIGHTS[scope]) * scale
+
+	# Normalize
+	var total: float = 0.0
+	for v: float in adjusted.values():
+		total += v
+
+	var r: float = randf() * total
+	var cumulative: float = 0.0
+	for scope: String in adjusted:
+		cumulative += adjusted[scope]
+		if r <= cumulative:
+			return scope
+	return "INDIVIDUAL"
+
+
+func _pick_impact() -> String:
+	var r: float = randf()
+	var cumulative: float = 0.0
+	for impact: String in IMPACT_TIER_WEIGHTS:
+		cumulative += float(IMPACT_TIER_WEIGHTS[impact])
+		if r <= cumulative:
+			return impact
+	return "SMALL"
+
+# ── INDIVIDUAL Stock Selection (GDD Rule 3-2) ──
+
+func _select_individual_stock(template: Dictionary, tick: int) -> StockData:
+	var tags: Array = template.get("event_tags", [])
+	var abs_tick: int = tick + GameClock.get_current_day() * 390
+
+	# Find candidate stocks with matching tags
+	var candidates: Array[StockData] = []
+	var weights: Array[float] = []
+
+	for tag in tags:
+		for stock: StockData in StockDatabase.get_stocks_by_event_tag(tag):
+			# Skip if already in candidates
+			var already: bool = false
+			for c: StockData in candidates:
+				if c.stock_id == stock.stock_id:
+					already = true
+					break
+			if already:
+				continue
+
+			# Skip if recently targeted (90 tick protection)
+			if _recent_individual_targets.has(stock.stock_id):
+				var last_t: int = _recent_individual_targets[stock.stock_id]
+				if abs_tick - last_t < 90:
+					continue
+
+			var w: float = stock.sector_sensitivity * float(VOL_WEIGHT.get(stock.volatility_profile, 1.0))
+			candidates.append(stock)
+			weights.append(w)
+
+	if candidates.is_empty():
+		return null
+
+	return _weighted_random_pick(candidates, weights)
+
+# ── Text Resolution (GDD Rule 3-1) ──
+
+func _resolve_text(
+	template: Dictionary, direction: int, field: String, stock: StockData
+) -> String:
+	var text: String = ""
+
+	# Check direction-specific fields first
+	var dir_val = template.get("direction", 1)
+	if dir_val is String and dir_val == "VARIABLE":
+		if direction > 0:
+			text = str(template.get(field + "_positive", ""))
+		else:
+			text = str(template.get(field + "_negative", ""))
+
+	if text == "" or text == "null" or text == "<null>":
+		text = str(template.get(field + "_template", ""))
+
+	if text == "" or text == "null" or text == "<null>":
+		return ""
+
+	# System variables
+	if stock != null:
+		text = text.replace("{company}", stock.name_ko)
+		text = text.replace("{ticker}", stock.stock_id)
+		text = text.replace("{sector_name}", stock.sector)
+
+	text = text.replace("{date}", "%d월 %d일" % [3, GameClock.get_current_day() + 1])
+
+	# Template-specific variables
+	var variables: Dictionary = template.get("variables", {})
+	for var_name: String in variables:
+		var candidates: Array = variables[var_name]
+		if not candidates.is_empty():
+			var picked: String = candidates[randi() % candidates.size()]
+			text = text.replace("{" + var_name + "}", picked)
+
+	return text
+
+# ── News Delay Queue Processing (GDD Rule 4) ──
+
+func _process_news_delay_queue(tick: int) -> void:
+	var to_display: Array[Dictionary] = []
+	var remaining: Array[Dictionary] = []
+
+	for entry: Dictionary in _news_delay_queue:
+		if tick >= entry["display_tick"]:
+			to_display.append(entry)
+		else:
+			remaining.append(entry)
+
+	_news_delay_queue = remaining
+
+	for entry: Dictionary in to_display:
+		on_news_display.emit(entry)
+
+
+func _process_market_close_queue() -> void:
+	## GDD Rule 4-3: INDIVIDUAL/SECTOR → discard, MACRO → summary
+	var macro_pending: Array[Dictionary] = []
+
+	for entry: Dictionary in _news_delay_queue:
+		if entry["scope"] == "MACRO":
+			macro_pending.append(entry)
+
+	_news_delay_queue.clear()
+
+	# Emit macro summaries immediately
+	for entry: Dictionary in macro_pending:
+		on_news_display.emit(entry)
+
+# ── Overnight Events (GDD Rule 6) ──
+
+func _generate_overnight_events() -> void:
+	_overnight_buffer.clear()
+
+	# Determine overnight event count (0, 1, or 2)
+	var r: float = randf()
+	var count: int = 0
+	if r < OVERNIGHT_PROBS[0]:
+		count = 0
+	elif r < OVERNIGHT_PROBS[0] + OVERNIGHT_PROBS[1]:
+		count = 1
+	else:
+		count = 2
+
+	for _i: int in range(count):
+		# Overnight: MACRO or SECTOR only, SMALL/MEDIUM only, GRADUAL_SHIFT only
+		var scope: String = "MACRO" if randf() < 0.4 else "SECTOR"
+		var impact: String = "SMALL" if randf() < 0.6 else "MEDIUM"
+
+		var template: Dictionary = _select_overnight_template(scope, impact)
+		if template.is_empty():
+			continue
+
+		var direction: int = _resolve_direction(template)
+		var target_ids: Array[String] = []
+
+		if scope == "MACRO":
+			target_ids = StockDatabase.get_all_stock_ids()
+		else:
+			var sector: String = str(template.get("target_sector", ""))
+			if sector != "" and sector != "null":
+				target_ids = StockDatabase.get_stock_ids_by_sector(sector)
+
+		if target_ids.is_empty():
+			continue
+
+		var base_impact: float = randf_range(
+			float(template.get("impact_min", 0.01)),
+			float(template.get("impact_max", 0.03))
+		)
+		var decay_ticks: int = int(template.get("decay_ticks", 60))
+		if decay_ticks < 30:
+			decay_ticks = 60
+
+		var decay_curve: MarketEvent.DecayCurve = MarketEvent.DecayCurve.LINEAR
+		if template.get("decay_curve", "LINEAR") == "EXPONENTIAL":
+			decay_curve = MarketEvent.DecayCurve.EXPONENTIAL
+
+		var market_event: MarketEvent = MarketEvent.gradual_shift(
+			base_impact, direction,
+			_scope_str_to_enum(scope), target_ids,
+			decay_ticks, decay_curve
+		)
+
+		var stock: StockData = null
+		var headline: String = _resolve_text(template, direction, "headline", stock)
+		var body: String = _resolve_text(template, direction, "body", stock)
+
+		_overnight_buffer.append({
+			"market_event": market_event,
+			"headline": headline,
+			"body": body,
+			"impact_hint": template.get("impact_hint", ""),
+			"scope": scope,
+			"impact_tier": template.get("impact_tier", impact),
+			"direction": direction,
+			"target_stock_ids": target_ids,
+		})
+
+
+func _generate_overnight_disclosures() -> void:
+	## GDD Rule 6-2: Per-stock 5% chance of INDIVIDUAL overnight disclosure
+	for stock_id: String in StockDatabase.get_all_stock_ids():
+		if randf() >= OVERNIGHT_INDIVIDUAL_PROB:
+			continue
+
+		var stock: StockData = StockDatabase.get_stock(stock_id)
+		if stock == null:
+			continue
+
+		var direction: int = 1 if randf() < 0.5 else -1
+		var base_impact: float = randf_range(0.01, 0.05)
+
+		var market_event: MarketEvent = MarketEvent.gradual_shift(
+			base_impact, direction,
+			MarketEvent.EventScope.INDIVIDUAL, [stock_id],
+			60, MarketEvent.DecayCurve.LINEAR
+		)
+
+		var headline: String
+		if direction > 0:
+			headline = "%s, 호실적 잠정공시 발표" % stock.name_ko
+		else:
+			headline = "%s, 실적 부진 잠정공시" % stock.name_ko
+
+		_overnight_buffer.append({
+			"market_event": market_event,
+			"headline": headline,
+			"body": "%s의 잠정 실적이 발표됐다." % stock.name_ko,
+			"impact_hint": "개별 공시",
+			"scope": "INDIVIDUAL",
+			"impact_tier": "SMALL",
+			"direction": direction,
+			"target_stock_ids": [stock_id],
+		})
+
+
+func _deliver_pre_market_news() -> void:
+	if _overnight_buffer.is_empty():
+		return
+
+	var news_bundle: Array[Dictionary] = []
+
+	for entry: Dictionary in _overnight_buffer:
+		# Push event to PriceEngine
+		var evt: MarketEvent = entry["market_event"]
+		PriceEngine.push_event(evt)
+
+		var news_entry: Dictionary = {
+			"headline": entry["headline"],
+			"body": entry["body"],
+			"impact_hint": entry["impact_hint"],
+			"scope": entry["scope"],
+			"impact_tier": entry["impact_tier"],
+			"direction": entry["direction"],
+			"target_stock_ids": entry["target_stock_ids"],
+			"is_pre_market": true,
+		}
+		news_bundle.append(news_entry)
+
+		_season_stats["total_events"] += 1
+		_season_stats["by_scope"][entry["scope"]] = _season_stats["by_scope"].get(entry["scope"], 0) + 1
+		_season_stats["by_impact"][entry["impact_tier"]] = _season_stats["by_impact"].get(entry["impact_tier"], 0) + 1
+
+	on_pre_market_news.emit(news_bundle)
+	_overnight_buffer.clear()
+
+
+func _select_overnight_template(scope: String, impact: String) -> Dictionary:
+	## Only GRADUAL_SHIFT templates for overnight
+	var candidates: Array[Dictionary] = []
+	var weights: Array[float] = []
+
+	for t: Dictionary in _event_pool:
+		if t["scope"] != scope:
+			continue
+		if t.get("impact_tier", "") != impact:
+			continue
+		if t.get("event_type", "") != "GRADUAL_SHIFT":
+			continue
+		candidates.append(t)
+		weights.append(float(t.get("weight_base", 1.0)))
+
+	if candidates.is_empty():
+		return {}
+	return _weighted_random_pick(candidates, weights)
+
+# ── Utilities ──
+
+func _resolve_direction(template: Dictionary) -> int:
+	var dir_val = template.get("direction", 1)
+	if dir_val is String and dir_val == "VARIABLE":
+		return 1 if randf() < 0.5 else -1
+	return int(dir_val)
+
+
+func _scope_str_to_enum(scope: String) -> MarketEvent.EventScope:
+	match scope:
+		"MACRO":
+			return MarketEvent.EventScope.MACRO
+		"SECTOR":
+			return MarketEvent.EventScope.SECTOR
+		"INDIVIDUAL":
+			return MarketEvent.EventScope.INDIVIDUAL
+	return MarketEvent.EventScope.MACRO
+
+
+func _weighted_random_pick(items: Array, weights: Array[float]) -> Variant:
+	var total: float = 0.0
+	for w: float in weights:
+		total += w
+	if total <= 0.0:
+		return items[randi() % items.size()]
+
+	var r: float = randf() * total
+	var cumulative: float = 0.0
+	for i: int in range(items.size()):
+		cumulative += weights[i]
+		if r <= cumulative:
+			return items[i]
+	return items[items.size() - 1]
+
+
+func _reset_season_stats() -> void:
+	_season_stats = {
+		"total_events": 0,
+		"by_scope": {"MACRO": 0, "SECTOR": 0, "INDIVIDUAL": 0},
+		"by_impact": {"SMALL": 0, "MEDIUM": 0, "LARGE": 0, "MEGA": 0},
+	}

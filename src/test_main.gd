@@ -40,6 +40,10 @@ func _connect_signals() -> void:
 	CurrencySystem.sim_cash_changed.connect(_on_sim_cash_changed)
 	PortfolioManager.holding_added.connect(_on_holding_added)
 	PortfolioManager.holding_removed.connect(_on_holding_removed)
+	NewsEventSystem.on_news_display.connect(_on_news_display)
+	NewsEventSystem.on_event_generated.connect(_on_event_generated)
+	NewsEventSystem.on_pre_market_news.connect(_on_pre_market_news)
+	NewsEventSystem.on_theme_hint.connect(_on_theme_hint)
 	print("[OK] Signals connected")
 
 
@@ -122,6 +126,25 @@ func _on_holding_removed(stock_id: String, quantity: int, price: int, realized_p
 	print("  [HOLDING-] %s x%d @ %d (PnL: %+d)" % [stock_id, quantity, price, realized_pnl])
 
 
+func _on_event_generated(entry: Dictionary) -> void:
+	var dir_str: String = "+" if entry["direction"] > 0 else "-"
+	print("  [EVENT] %s %s %s (tick %d)" % [entry["scope"], entry["impact_tier"], dir_str, entry["created_tick"]])
+
+
+func _on_news_display(entry: Dictionary) -> void:
+	print("  [NEWS] %s" % entry["headline"])
+
+
+func _on_pre_market_news(entries: Array[Dictionary]) -> void:
+	print("  [PRE-MARKET NEWS] %d items" % entries.size())
+	for e: Dictionary in entries:
+		print("    - %s" % e["headline"])
+
+
+func _on_theme_hint(hint_text: String) -> void:
+	print("  [THEME HINT] %s" % hint_text)
+
+
 func _print_status(tick: int) -> void:
 	var summary: Dictionary = PortfolioManager.get_portfolio_summary()
 	print("\n--- Status at tick %d ---" % tick)
@@ -155,6 +178,15 @@ func _print_final_report() -> void:
 			tx["transaction_id"], tx["type"], tx["stock_id"],
 			tx["quantity"], tx["price"], tx["realized_pnl"]
 		])
+
+	var news_stats: Dictionary = NewsEventSystem.get_season_stats()
+	print("News events: %d (MACRO:%d SECTOR:%d IND:%d)" % [
+		news_stats["total_events"],
+		news_stats["by_scope"]["MACRO"],
+		news_stats["by_scope"]["SECTOR"],
+		news_stats["by_scope"]["INDIVIDUAL"],
+	])
+	print("Theme: %s" % NewsEventSystem.get_season_theme().get("theme_name", "none"))
 
 	print("\nAll stock prices:")
 	for sid: String in StockDatabase.get_all_stock_ids():

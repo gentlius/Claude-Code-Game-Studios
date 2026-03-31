@@ -18,6 +18,7 @@ GameClock="*res://src/core/game_clock.gd"
 StockDatabase="*res://src/core/stock_database.gd"
 CurrencySystem="*res://src/core/currency_system.gd"
 PriceEngine="*res://src/gameplay/price_engine.gd"
+NewsEventSystem="*res://src/gameplay/news_event_system.gd"
 PortfolioManager="*res://src/gameplay/portfolio_manager.gd"
 OrderEngine="*res://src/gameplay/order_engine.gd"
 

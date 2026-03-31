@@ -55,6 +55,33 @@ func get_all_sectors() -> Array[Dictionary]:
 	return result
 
 
+## Returns all stocks in a given sector.
+func get_stocks_by_sector(sector: String) -> Array[StockData]:
+	var result: Array[StockData] = []
+	for stock: StockData in _stocks.values():
+		if stock.sector == sector:
+			result.append(stock)
+	return result
+
+
+## Returns stock IDs in a given sector.
+func get_stock_ids_by_sector(sector: String) -> Array[String]:
+	var result: Array[String] = []
+	for stock: StockData in _stocks.values():
+		if stock.sector == sector:
+			result.append(stock.stock_id)
+	return result
+
+
+## Returns stocks whose event_tags intersect with the given tag.
+func get_stocks_by_event_tag(tag: String) -> Array[StockData]:
+	var result: Array[StockData] = []
+	for stock: StockData in _stocks.values():
+		if stock.event_tags.has(tag):
+			result.append(stock)
+	return result
+
+
 ## Hardcoded MVP stocks. Future: load from JSON/Resource files.
 func _load_default_stocks() -> void:
 	_stocks.clear()
@@ -64,60 +91,70 @@ func _load_default_stocks() -> void:
 		 "sector": "식품", "base_price": 65000,
 		 "vol": StockData.VolatilityProfile.MEDIUM,
 		 "macro": 0.8, "sector_sens": 1.0, "per": 12.5,
+		 "tags": ["food_safety", "earnings", "contract"],
 		 "desc": "국내 1위 종합식품기업. 안정적 매출 성장."},
 
 		{"id": "SC", "name_ko": "스타칩", "name_en": "StarChip",
 		 "sector": "반도체", "base_price": 120000,
 		 "vol": StockData.VolatilityProfile.HIGH,
 		 "macro": 1.2, "sector_sens": 1.5, "per": 18.3,
+		 "tags": ["semiconductor", "export", "ai_chip", "earnings"],
 		 "desc": "AI 반도체 설계 전문기업. 수출 비중 80%."},
 
 		{"id": "KB", "name_ko": "코리아뱅크", "name_en": "KoreaBank",
 		 "sector": "금융", "base_price": 52000,
 		 "vol": StockData.VolatilityProfile.LOW,
 		 "macro": 1.5, "sector_sens": 0.5, "per": 6.8,
+		 "tags": ["interest_rate", "banking", "dividend", "earnings"],
 		 "desc": "국내 최대 시중은행. 금리 변동에 민감."},
 
 		{"id": "NE", "name_ko": "넥스트엔터", "name_en": "NextEnter",
 		 "sector": "엔터", "base_price": 42000,
 		 "vol": StockData.VolatilityProfile.HIGH,
 		 "macro": 0.6, "sector_sens": 0.8, "per": 25.1,
+		 "tags": ["entertainment", "comeback", "streaming", "contract"],
 		 "desc": "글로벌 K-POP 엔터사. 아티스트 컴백 시즌에 급등."},
 
 		{"id": "MG", "name_ko": "메디진", "name_en": "MediGene",
 		 "sector": "바이오", "base_price": 180000,
 		 "vol": StockData.VolatilityProfile.EXTREME,
 		 "macro": 1.0, "sector_sens": 1.8, "per": 0.0,
+		 "tags": ["clinical_trial", "fda", "drug_development", "patent"],
 		 "desc": "신약 개발 바이오벤처. 임상 결과에 극단적 반응."},
 
 		{"id": "GC", "name_ko": "그린케미", "name_en": "GreenChem",
 		 "sector": "화학", "base_price": 38000,
 		 "vol": StockData.VolatilityProfile.MEDIUM,
 		 "macro": 1.0, "sector_sens": 1.2, "per": 9.7,
+		 "tags": ["environment", "regulation", "raw_material", "earnings"],
 		 "desc": "친환경 화학소재 전문. 환경규제 수혜주."},
 
 		{"id": "DH", "name_ko": "대한중공업", "name_en": "DaehanHeavy",
 		 "sector": "조선", "base_price": 95000,
 		 "vol": StockData.VolatilityProfile.LOW,
 		 "macro": 1.3, "sector_sens": 1.0, "per": 8.2,
+		 "tags": ["shipbuilding", "contract", "defense", "export"],
 		 "desc": "국내 2위 조선사. 수주 잔고 3년치 확보."},
 
 		{"id": "PT", "name_ko": "피플텔레콤", "name_en": "PeopleTelecom",
 		 "sector": "통신", "base_price": 78000,
 		 "vol": StockData.VolatilityProfile.MEDIUM,
 		 "macro": 1.0, "sector_sens": 1.0, "per": 11.0,
+		 "tags": ["telecom", "5g", "infrastructure", "dividend"],
 		 "desc": "통신 3사 중 하나. 5G 인프라 투자 진행 중."},
 
 		{"id": "SK", "name_ko": "스카이로직", "name_en": "SkyLogic",
 		 "sector": "반도체", "base_price": 210000,
 		 "vol": StockData.VolatilityProfile.HIGH,
 		 "macro": 0.9, "sector_sens": 1.3, "per": 22.0,
+		 "tags": ["semiconductor", "foundry", "export", "earnings"],
 		 "desc": "파운드리(반도체 위탁생산) 전문. 글로벌 고객사 다수."},
 
 		{"id": "BF", "name_ko": "블루팜", "name_en": "BluePharma",
 		 "sector": "바이오", "base_price": 320000,
 		 "vol": StockData.VolatilityProfile.EXTREME,
 		 "macro": 0.7, "sector_sens": 2.0, "per": 0.0,
+		 "tags": ["clinical_trial", "fda", "patent", "drug_development"],
 		 "desc": "항암제 파이프라인 보유. FDA 승인 대기 중."},
 	]
 
@@ -132,6 +169,7 @@ func _load_default_stocks() -> void:
 		stock.macro_sensitivity = d["macro"]
 		stock.sector_sensitivity = d["sector_sens"]
 		stock.per = d["per"]
+		stock.event_tags = Array(d["tags"], TYPE_STRING, &"", null)
 		stock.description = d["desc"]
 		_stocks[stock.stock_id] = stock
 

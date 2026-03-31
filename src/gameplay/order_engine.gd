@@ -1,0 +1,495 @@
+## Autoload — Accepts, validates, and executes buy/sell orders.
+## Core layer. Depends on: PriceEngine, CurrencySystem, PortfolioManager, GameClock, StockDatabase.
+## See: design/gdd/order-engine.md
+extends Node
+
+# ── Signals ──
+
+signal on_order_filled(order: Dictionary)
+signal on_order_rejected(order: Dictionary)
+signal on_order_cancelled(order: Dictionary)
+signal on_order_expired(order: Dictionary)
+
+# ── Constants ──
+
+const MAX_PENDING_LIMIT_ORDERS: int = 10
+const PRE_MARKET_BUFFER_PCT: float = 0.10
+
+# ── State ──
+
+var _next_order_id: int = 1
+var _market_order_queue: Array[Dictionary] = []       ## Orders waiting for next tick
+var _pending_limit_orders: Array[Dictionary] = []     ## Active limit orders
+var _pre_market_queue: Array[Dictionary] = []         ## PRE_MARKET orders
+var _order_history: Array[Dictionary] = []
+var _sell_locks: Dictionary = {}  ## stock_id -> locked_quantity (int)
+
+# ── Lifecycle ──
+
+func _ready() -> void:
+	GameClock.on_tick.connect(_on_tick)
+	GameClock.on_market_state_changed.connect(_on_market_state_changed)
+	GameClock.on_season_start.connect(_on_season_start)
+
+
+func _on_season_start() -> void:
+	_market_order_queue.clear()
+	_pending_limit_orders.clear()
+	_pre_market_queue.clear()
+	_order_history.clear()
+	_sell_locks.clear()
+	_next_order_id = 1
+
+# ── Public API ──
+
+## Submit a market order. Returns the order dict (check status for result).
+func submit_market_order(side: String, stock_id: String, quantity: int) -> Dictionary:
+	var order: Dictionary = _create_order("MARKET", side, stock_id, quantity, 0)
+
+	var reject: String = _validate_order(order)
+	if reject != "":
+		order["status"] = "REJECTED"
+		order["reject_reason"] = reject
+		_order_history.append(order)
+		on_order_rejected.emit(order)
+		return order
+
+	var market_state: GameClock.MarketState = GameClock.get_market_state()
+
+	if market_state == GameClock.MarketState.PRE_MARKET:
+		# PRE_MARKET reservation
+		if side == "BUY":
+			var current_price: int = PriceEngine.get_current_price(stock_id)
+			var reserved: int = int(ceil(float(current_price) * (1.0 + PRE_MARKET_BUFFER_PCT))) * quantity
+			if not CurrencySystem.sim_deduct(reserved):
+				order["status"] = "REJECTED"
+				order["reject_reason"] = "잔액 부족"
+				_order_history.append(order)
+				on_order_rejected.emit(order)
+				return order
+			order["reserved_cash"] = reserved
+		elif side == "SELL":
+			_lock_sell_quantity(stock_id, quantity)
+			order["locked_quantity"] = quantity
+		order["status"] = "PENDING"
+		_pre_market_queue.append(order)
+
+	elif market_state == GameClock.MarketState.MARKET_OPEN or market_state == GameClock.MarketState.PAUSED:
+		if side == "BUY":
+			var current_price: int = PriceEngine.get_current_price(stock_id)
+			var cost: int = current_price * quantity
+			if not CurrencySystem.sim_deduct(cost):
+				order["status"] = "REJECTED"
+				order["reject_reason"] = "잔액 부족"
+				_order_history.append(order)
+				on_order_rejected.emit(order)
+				return order
+			order["reserved_cash"] = cost
+		elif side == "SELL":
+			_lock_sell_quantity(stock_id, quantity)
+			order["locked_quantity"] = quantity
+
+		if market_state == GameClock.MarketState.PAUSED:
+			order["status"] = "PENDING"
+			_market_order_queue.append(order)
+		else:
+			# Immediate fill at current price
+			_fill_market_order(order)
+	else:
+		order["status"] = "REJECTED"
+		order["reject_reason"] = "장이 열려 있지 않습니다"
+		_order_history.append(order)
+		on_order_rejected.emit(order)
+
+	return order
+
+
+## Submit a limit order. Returns the order dict.
+func submit_limit_order(
+	side: String, stock_id: String, quantity: int, limit_price: int
+) -> Dictionary:
+	var order: Dictionary = _create_order("LIMIT", side, stock_id, quantity, limit_price)
+
+	var reject: String = _validate_order(order)
+	if reject != "":
+		order["status"] = "REJECTED"
+		order["reject_reason"] = reject
+		_order_history.append(order)
+		on_order_rejected.emit(order)
+		return order
+
+	# Reserve resources
+	if side == "BUY":
+		var reserved: int = limit_price * quantity
+		if not CurrencySystem.sim_deduct(reserved):
+			order["status"] = "REJECTED"
+			order["reject_reason"] = "잔액 부족"
+			_order_history.append(order)
+			on_order_rejected.emit(order)
+			return order
+		order["reserved_cash"] = reserved
+	elif side == "SELL":
+		_lock_sell_quantity(stock_id, quantity)
+		order["locked_quantity"] = quantity
+
+	order["status"] = "PENDING"
+	_pending_limit_orders.append(order)
+	return order
+
+
+## Cancel a pending order by order_id.
+func cancel_order(order_id: int) -> bool:
+	# Check limit orders
+	for i: int in range(_pending_limit_orders.size() - 1, -1, -1):
+		var order: Dictionary = _pending_limit_orders[i]
+		if order["order_id"] == order_id:
+			_refund_order(order)
+			order["status"] = "CANCELLED"
+			_pending_limit_orders.remove_at(i)
+			_order_history.append(order)
+			on_order_cancelled.emit(order)
+			return true
+
+	# Check pre-market queue
+	for i: int in range(_pre_market_queue.size() - 1, -1, -1):
+		var order: Dictionary = _pre_market_queue[i]
+		if order["order_id"] == order_id:
+			_refund_order(order)
+			order["status"] = "CANCELLED"
+			_pre_market_queue.remove_at(i)
+			_order_history.append(order)
+			on_order_cancelled.emit(order)
+			return true
+
+	# Check market queue (paused orders)
+	for i: int in range(_market_order_queue.size() - 1, -1, -1):
+		var order: Dictionary = _market_order_queue[i]
+		if order["order_id"] == order_id:
+			_refund_order(order)
+			order["status"] = "CANCELLED"
+			_market_order_queue.remove_at(i)
+			_order_history.append(order)
+			on_order_cancelled.emit(order)
+			return true
+
+	return false
+
+
+## Returns all pending orders.
+func get_pending_orders() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	result.append_array(_pending_limit_orders)
+	result.append_array(_pre_market_queue)
+	result.append_array(_market_order_queue)
+	return result
+
+
+## Returns total reserved cash across all pending buy orders.
+func get_total_reserved_cash() -> int:
+	var total: int = 0
+	for order: Dictionary in _pending_limit_orders:
+		total += order.get("reserved_cash", 0)
+	for order: Dictionary in _pre_market_queue:
+		total += order.get("reserved_cash", 0)
+	for order: Dictionary in _market_order_queue:
+		total += order.get("reserved_cash", 0)
+	return total
+
+
+## Returns locked sell quantity for a stock.
+func get_locked_quantity(stock_id: String) -> int:
+	return _sell_locks.get(stock_id, 0)
+
+
+## Returns order history.
+func get_order_history(limit: int = 50) -> Array[Dictionary]:
+	if limit >= _order_history.size():
+		return _order_history.duplicate()
+	return _order_history.slice(_order_history.size() - limit)
+
+# ── Tick Processing (GDD Rule 4, tick order: 3rd after PriceEngine) ──
+
+func _on_tick(tick_number: int, _day: int, _week: int) -> void:
+	# Process queued market orders (from PAUSED state)
+	var market_queue: Array[Dictionary] = _market_order_queue.duplicate()
+	_market_order_queue.clear()
+	for order: Dictionary in market_queue:
+		_fill_market_order(order)
+
+	# Check limit orders
+	var still_pending: Array[Dictionary] = []
+	for order: Dictionary in _pending_limit_orders:
+		var current_price: int = PriceEngine.get_current_price(order["stock_id"])
+		var should_fill: bool = false
+
+		if order["side"] == "BUY" and current_price <= order["limit_price"]:
+			should_fill = true
+		elif order["side"] == "SELL" and current_price >= order["limit_price"]:
+			should_fill = true
+
+		if should_fill:
+			_fill_limit_order(order, current_price)
+		else:
+			still_pending.append(order)
+	_pending_limit_orders = still_pending
+
+	# Update portfolio valuation after order processing
+	var reserved: int = get_total_reserved_cash()
+	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), reserved)
+
+
+func _on_market_state_changed(
+	new_state: GameClock.MarketState, _prev: GameClock.MarketState
+) -> void:
+	match new_state:
+		GameClock.MarketState.MARKET_OPEN:
+			_process_pre_market_queue()
+		GameClock.MarketState.MARKET_CLOSED:
+			_expire_pending_orders()
+
+# ── PRE_MARKET Queue Processing (GDD Rule 4-3a) ──
+
+func _process_pre_market_queue() -> void:
+	var queue: Array[Dictionary] = _pre_market_queue.duplicate()
+	_pre_market_queue.clear()
+
+	for order: Dictionary in queue:
+		var filled_price: int = PriceEngine.get_current_price(order["stock_id"])
+
+		if order["side"] == "BUY":
+			var actual_cost: int = filled_price * order["quantity"]
+			var reserved: int = order["reserved_cash"]
+
+			if actual_cost > reserved:
+				# Price exceeded buffer — reject
+				CurrencySystem.sim_add(reserved)
+				order["status"] = "REJECTED"
+				order["reject_reason"] = "장 시작 가격이 예약금을 초과했습니다"
+				_order_history.append(order)
+				on_order_rejected.emit(order)
+			else:
+				# Fill and refund difference
+				var refund: int = reserved - actual_cost
+				if refund > 0:
+					CurrencySystem.sim_add(refund)
+				PortfolioManager.add_holding(order["stock_id"], order["quantity"], filled_price)
+				order["status"] = "FILLED"
+				order["filled_price"] = filled_price
+				order["filled_tick"] = GameClock.get_current_tick()
+				_order_history.append(order)
+				on_order_filled.emit(order)
+
+		elif order["side"] == "SELL":
+			_unlock_sell_quantity(order["stock_id"], order["quantity"])
+			var proceeds: int = filled_price * order["quantity"]
+			CurrencySystem.sim_add(proceeds)
+			PortfolioManager.remove_holding(order["stock_id"], order["quantity"], filled_price)
+			order["status"] = "FILLED"
+			order["filled_price"] = filled_price
+			order["filled_tick"] = GameClock.get_current_tick()
+			_order_history.append(order)
+			on_order_filled.emit(order)
+
+# ── Fill Helpers ──
+
+func _fill_market_order(order: Dictionary) -> void:
+	var filled_price: int = PriceEngine.get_current_price(order["stock_id"])
+
+	if order["side"] == "BUY":
+		var actual_cost: int = filled_price * order["quantity"]
+		var reserved: int = order.get("reserved_cash", 0)
+		var refund: int = reserved - actual_cost
+		if refund > 0:
+			CurrencySystem.sim_add(refund)
+		elif refund < 0:
+			# Price went up since deduction — need more cash
+			if not CurrencySystem.sim_deduct(-refund):
+				CurrencySystem.sim_add(reserved)
+				order["status"] = "REJECTED"
+				order["reject_reason"] = "잔액 부족 (가격 변동)"
+				_order_history.append(order)
+				on_order_rejected.emit(order)
+				return
+		PortfolioManager.add_holding(order["stock_id"], order["quantity"], filled_price)
+
+	elif order["side"] == "SELL":
+		_unlock_sell_quantity(order["stock_id"], order["quantity"])
+		var proceeds: int = filled_price * order["quantity"]
+		CurrencySystem.sim_add(proceeds)
+		PortfolioManager.remove_holding(order["stock_id"], order["quantity"], filled_price)
+
+	order["status"] = "FILLED"
+	order["filled_price"] = filled_price
+	order["filled_tick"] = GameClock.get_current_tick()
+	_order_history.append(order)
+	on_order_filled.emit(order)
+
+
+func _fill_limit_order(order: Dictionary, current_price: int) -> void:
+	if order["side"] == "BUY":
+		var actual_cost: int = current_price * order["quantity"]
+		var reserved: int = order["reserved_cash"]
+		var refund: int = reserved - actual_cost
+		if refund > 0:
+			CurrencySystem.sim_add(refund)
+		PortfolioManager.add_holding(order["stock_id"], order["quantity"], current_price)
+
+	elif order["side"] == "SELL":
+		_unlock_sell_quantity(order["stock_id"], order["quantity"])
+		var proceeds: int = current_price * order["quantity"]
+		CurrencySystem.sim_add(proceeds)
+		PortfolioManager.remove_holding(order["stock_id"], order["quantity"], current_price)
+
+	order["status"] = "FILLED"
+	order["filled_price"] = current_price
+	order["filled_tick"] = GameClock.get_current_tick()
+	_order_history.append(order)
+	on_order_filled.emit(order)
+
+# ── Expiry ──
+
+func _expire_pending_orders() -> void:
+	for order: Dictionary in _pending_limit_orders:
+		_refund_order(order)
+		order["status"] = "EXPIRED"
+		_order_history.append(order)
+		on_order_expired.emit(order)
+	_pending_limit_orders.clear()
+
+# ── Validation (GDD Rule 3, 8 steps) ──
+
+func _validate_order(order: Dictionary) -> String:
+	# 1. Market state
+	var ms: GameClock.MarketState = GameClock.get_market_state()
+	if order["order_type"] == "MARKET":
+		if ms != GameClock.MarketState.MARKET_OPEN and ms != GameClock.MarketState.PAUSED and ms != GameClock.MarketState.PRE_MARKET:
+			return "장이 열려 있지 않습니다"
+	else:  # LIMIT
+		if ms != GameClock.MarketState.MARKET_OPEN and ms != GameClock.MarketState.PAUSED and ms != GameClock.MarketState.PRE_MARKET:
+			return "장이 열려 있지 않습니다"
+
+	# 2. Stock exists
+	if StockDatabase.get_stock(order["stock_id"]) == null:
+		return "존재하지 않는 종목입니다"
+
+	# 3. Quantity
+	if order["quantity"] <= 0:
+		return "수량은 1 이상이어야 합니다"
+
+	# 4. Skill unlock (skip in MVP — limit orders always available)
+
+	# 4.5. Pending limit order count
+	if order["order_type"] == "LIMIT":
+		if _pending_limit_orders.size() >= MAX_PENDING_LIMIT_ORDERS:
+			return "미체결 주문 한도 초과"
+
+	# 5. Portfolio slot (BUY only)
+	if order["side"] == "BUY":
+		var holding: Variant = PortfolioManager.get_holding(order["stock_id"])
+		if holding == null:
+			# New stock — check slot
+			var effective_count: int = _get_effective_holding_count(order["stock_id"])
+			if effective_count >= PortfolioManager.DEFAULT_MAX_HOLDINGS:
+				return "보유 종목 한도 초과"
+
+	# 6. Balance (BUY) — actual deduction happens in submit
+	if order["side"] == "BUY":
+		var required: int
+		if order["order_type"] == "LIMIT":
+			required = order["limit_price"] * order["quantity"]
+		elif ms == GameClock.MarketState.PRE_MARKET:
+			var price: int = PriceEngine.get_current_price(order["stock_id"])
+			required = int(ceil(float(price) * (1.0 + PRE_MARKET_BUFFER_PCT))) * order["quantity"]
+		else:
+			var price: int = PriceEngine.get_current_price(order["stock_id"])
+			required = price * order["quantity"]
+		if CurrencySystem.get_sim_cash() < required:
+			return "잔액 부족"
+
+	# 7. Holdings (SELL)
+	if order["side"] == "SELL":
+		var holding: Variant = PortfolioManager.get_holding(order["stock_id"])
+		if holding == null:
+			return "보유 수량 부족"
+		var available: int = holding["quantity"] - get_locked_quantity(order["stock_id"])
+		if order["quantity"] > available:
+			return "보유 수량 부족"
+
+	# 8. Limit price validity
+	if order["order_type"] == "LIMIT":
+		if order["limit_price"] <= 0:
+			return "지정가는 0보다 커야 합니다"
+
+	return ""
+
+# ── Helpers ──
+
+func _create_order(
+	order_type: String, side: String, stock_id: String,
+	quantity: int, limit_price: int
+) -> Dictionary:
+	var order: Dictionary = {
+		"order_id": _next_order_id,
+		"order_type": order_type,
+		"side": side,
+		"stock_id": stock_id,
+		"quantity": quantity,
+		"limit_price": limit_price if order_type == "LIMIT" else 0,
+		"status": "PENDING",
+		"reject_reason": "",
+		"submitted_tick": GameClock.get_current_tick(),
+		"submitted_day": GameClock.get_current_day(),
+		"filled_price": 0,
+		"filled_tick": 0,
+		"reserved_cash": 0,
+		"locked_quantity": 0,
+	}
+	_next_order_id += 1
+	return order
+
+
+func _refund_order(order: Dictionary) -> void:
+	if order["side"] == "BUY" and order["reserved_cash"] > 0:
+		CurrencySystem.sim_add(order["reserved_cash"])
+		order["reserved_cash"] = 0
+	elif order["side"] == "SELL" and order["locked_quantity"] > 0:
+		_unlock_sell_quantity(order["stock_id"], order["locked_quantity"])
+		order["locked_quantity"] = 0
+
+
+func _lock_sell_quantity(stock_id: String, quantity: int) -> void:
+	_sell_locks[stock_id] = _sell_locks.get(stock_id, 0) + quantity
+
+
+func _unlock_sell_quantity(stock_id: String, quantity: int) -> void:
+	var current: int = _sell_locks.get(stock_id, 0)
+	var new_val: int = maxi(0, current - quantity)
+	if new_val == 0:
+		_sell_locks.erase(stock_id)
+	else:
+		_sell_locks[stock_id] = new_val
+
+
+func _get_effective_holding_count(new_stock_id: String) -> int:
+	var count: int = PortfolioManager.get_holding_count()
+
+	# Count queued BUY orders for new stocks
+	var known_stocks: Dictionary = {}
+	for h: Dictionary in PortfolioManager.get_all_holdings():
+		known_stocks[h["stock_id"]] = true
+
+	for order: Dictionary in _pre_market_queue:
+		if order["side"] == "BUY" and not known_stocks.has(order["stock_id"]):
+			known_stocks[order["stock_id"]] = true
+			count += 1
+
+	for order: Dictionary in _market_order_queue:
+		if order["side"] == "BUY" and not known_stocks.has(order["stock_id"]):
+			known_stocks[order["stock_id"]] = true
+			count += 1
+
+	# Count the new stock if not already known
+	if not known_stocks.has(new_stock_id):
+		count += 1
+
+	return count

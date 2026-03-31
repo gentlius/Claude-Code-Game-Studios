@@ -1,0 +1,32 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; but it can also be manually edited.
+
+[application]
+
+config/name="Seed Money"
+config/name_localized={
+"ko": "시드머니"
+}
+config/description="Real-time stock investment simulation game"
+run/main_scene="res://src/TestMain.tscn"
+config/features=PackedStringArray("4.6", "Forward Plus")
+
+[autoload]
+
+GameClock="*res://src/core/game_clock.gd"
+StockDatabase="*res://src/core/stock_database.gd"
+CurrencySystem="*res://src/core/currency_system.gd"
+PriceEngine="*res://src/gameplay/price_engine.gd"
+PortfolioManager="*res://src/gameplay/portfolio_manager.gd"
+OrderEngine="*res://src/gameplay/order_engine.gd"
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/stretch/mode="canvas_items"
+
+[rendering]
+
+renderer/rendering_method="forward_plus"

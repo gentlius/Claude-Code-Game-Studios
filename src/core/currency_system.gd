@@ -1,0 +1,82 @@
+## Autoload — Manages deposit (permanent) and sim seed (per-season) accounts.
+## Foundation layer. See: design/gdd/currency-system.md
+extends Node
+
+# ── Signals ──
+
+signal sim_cash_changed(new_amount: int, delta: int)
+signal deposit_changed(new_amount: int, delta: int)
+signal season_initialized(seed_amount: int)
+signal season_settled()
+
+# ── Constants ──
+
+const INITIAL_DEPOSIT: int = 1_000_000
+const DEFAULT_SEASON_SEED: int = 1_000_000
+
+# ── State ──
+
+var _deposit: int = INITIAL_DEPOSIT
+var _sim_cash: int = 0
+var _season_active: bool = false
+
+# ── Public API: Queries ──
+
+## Returns the current sim cash balance (모의투자 잔액).
+func get_sim_cash() -> int:
+	return _sim_cash
+
+
+## Returns the permanent deposit balance (예수금).
+func get_deposit() -> int:
+	return _deposit
+
+
+## Returns true if a season is currently active.
+func is_season_active() -> bool:
+	return _season_active
+
+# ── Public API: Sim Cash Operations ──
+
+## Deduct from sim cash. Returns true if successful, false if insufficient.
+func sim_deduct(amount: int) -> bool:
+	if amount <= 0:
+		return false
+	if _sim_cash < amount:
+		return false
+	_sim_cash -= amount
+	sim_cash_changed.emit(_sim_cash, -amount)
+	return true
+
+
+## Add to sim cash (sell proceeds, order cancellation refund, etc).
+func sim_add(amount: int) -> void:
+	if amount <= 0:
+		return
+	_sim_cash += amount
+	sim_cash_changed.emit(_sim_cash, amount)
+
+# ── Public API: Season Lifecycle ──
+
+## Initialize sim seed for a new season.
+func init_season_seed(amount: int = DEFAULT_SEASON_SEED) -> void:
+	_sim_cash = amount
+	_season_active = true
+	season_initialized.emit(amount)
+	sim_cash_changed.emit(_sim_cash, amount)
+
+
+## Settle the season — reset sim cash.
+func settle_season() -> void:
+	_sim_cash = 0
+	_season_active = false
+	season_settled.emit()
+	sim_cash_changed.emit(0, 0)
+
+
+## Award prize money to the permanent deposit.
+func award_prize(amount: int) -> void:
+	if amount <= 0:
+		return
+	_deposit += amount
+	deposit_changed.emit(_deposit, amount)

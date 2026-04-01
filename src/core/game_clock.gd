@@ -36,7 +36,8 @@ signal on_season_end()
 const TICKS_PER_DAY: int = 390
 const DAYS_PER_WEEK: int = 5
 const WEEKS_PER_SEASON: int = 4
-const BASE_TICK_INTERVAL: float = 0.77  ## seconds per tick at 1x speed
+const BASE_TICK_INTERVAL: float = 0.77  ## real seconds per tick at 1x speed
+const SECONDS_PER_TICK: int = 15  ## game-world seconds each tick represents (4 ticks = 1 minute)
 
 # ── State ──
 

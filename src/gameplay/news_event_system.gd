@@ -100,6 +100,9 @@ func _ready() -> void:
 	GameClock.on_day_transition.connect(_on_day_transition)
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
 	GameClock.on_season_end.connect(_on_season_end)
+	PriceEngine.on_vi_triggered.connect(_on_vi_triggered)
+	PriceEngine.on_vi_released.connect(_on_vi_released)
+	PriceEngine.on_circuit_breaker.connect(_on_circuit_breaker)
 
 
 func _on_season_start() -> void:
@@ -784,3 +787,61 @@ func _reset_season_stats() -> void:
 		"by_scope": {"MACRO": 0, "SECTOR": 0, "INDIVIDUAL": 0},
 		"by_impact": {"SMALL": 0, "MEDIUM": 0, "LARGE": 0, "MEGA": 0},
 	}
+
+# ── VI / Circuit Breaker News (GDD Rules 2-4, 2-5) ──
+
+func _on_vi_triggered(stock_id: String, is_upper: bool, halt_ticks: int) -> void:
+	var stock: StockData = StockDatabase.get_stock(stock_id)
+	var name: String = stock.name_ko if stock else stock_id
+	var direction_text: String = "상승" if is_upper else "하락"
+	var headline: String = "[VI발동] %s %s — %d틱 거래정지" % [name, direction_text, halt_ticks]
+	var entry: Dictionary = {
+		"headline": headline,
+		"body": "%s 종목이 전일 대비 ±10%% 변동으로 변동성완화장치가 발동되었습니다." % name,
+		"impact_hint": "⚠️",
+		"scope": "INDIVIDUAL",
+		"impact_tier": "LARGE",
+		"direction": 1 if is_upper else -1,
+		"target_stock_ids": [stock_id],
+		"is_system_event": true,
+	}
+	on_news_display.emit(entry)
+
+
+func _on_vi_released(stock_id: String) -> void:
+	var stock: StockData = StockDatabase.get_stock(stock_id)
+	var name: String = stock.name_ko if stock else stock_id
+	var headline: String = "[VI해제] %s 거래 재개" % name
+	var entry: Dictionary = {
+		"headline": headline,
+		"body": "%s 종목의 변동성완화장치가 해제되어 거래가 재개됩니다." % name,
+		"impact_hint": "ℹ️",
+		"scope": "INDIVIDUAL",
+		"impact_tier": "MEDIUM",
+		"direction": 0,
+		"target_stock_ids": [stock_id],
+		"is_system_event": true,
+	}
+	on_news_display.emit(entry)
+
+
+func _on_circuit_breaker(stage: int, halt_ticks: int) -> void:
+	var headline: String
+	var body: String
+	if stage == 1:
+		headline = "[서킷브레이커 1단계] 시장 지수 -8%% — %d틱 전종목 거래정지" % halt_ticks
+		body = "시장 지수가 전일 대비 8%% 이상 하락하여 서킷브레이커 1단계가 발동되었습니다. %d틱 동안 전 종목 거래가 정지됩니다." % halt_ticks
+	else:
+		headline = "[서킷브레이커 2단계] 시장 지수 -15% — 당일 장 조기 마감"
+		body = "시장 지수가 전일 대비 15% 이상 하락하여 서킷브레이커 2단계가 발동되었습니다. 당일 거래가 즉시 종료됩니다."
+	var entry: Dictionary = {
+		"headline": headline,
+		"body": body,
+		"impact_hint": "🚨",
+		"scope": "MACRO",
+		"impact_tier": "MEGA",
+		"direction": -1,
+		"target_stock_ids": StockDatabase.get_all_stock_ids(),
+		"is_system_event": true,
+	}
+	on_news_display.emit(entry)

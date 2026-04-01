@@ -11,6 +11,18 @@ signal on_price_updated(tick: int)
 ## Emitted when a price hits the hard clamp boundary.
 signal on_price_clamped(stock_id: String, clamped_price: int, was_raw: float)
 
+## Emitted when a price hits the daily limit (상한가/하한가).
+signal on_price_limit_hit(stock_id: String, is_upper: bool, limit_price: int)
+
+## Emitted when VI (Volatility Interruption) triggers for a stock (GDD Rule 2-4).
+signal on_vi_triggered(stock_id: String, is_upper: bool, halt_ticks: int)
+
+## Emitted when VI ends and trading resumes for a stock.
+signal on_vi_released(stock_id: String)
+
+## Emitted when circuit breaker activates (GDD Rule 2-5).
+signal on_circuit_breaker(stage: int, halt_ticks: int)
+
 # ── Enums ──
 
 enum MarkovState {
@@ -71,8 +83,17 @@ const BASE_VOLUME_RANGE: Array = [
 	[800, 3000],  # EXTREME
 ]
 
-const STATE_VOLUME_MULT: Array[float] = [1.5, 1.2, 0.8, 1.2, 1.5, -1.0, -1.0]
-# -1.0 for BREAKOUT means sample uniform(3.0, 5.0)
+const STATE_VOLUME_MULT: Array[float] = [1.3, 1.1, 0.7, 1.1, 1.3, 2.0, 2.0]
+
+# ── Constants: Volume-Energy Correlation (GDD Rule 4-2) ──
+
+const ENERGY_THRESHOLD: float = 0.01
+const ENERGY_MAX_BOOST: float = 4.0
+
+# ── Constants: Limit Proximity Dampening (GDD Rule 4-4) ──
+
+const LIMIT_DAMPEN_START: float = 0.7
+const LIMIT_DAMPEN_MIN: float = 0.15
 
 # ── Constants: Season Bias (GDD Rule 1-5, updated per prototype) ──
 
@@ -87,11 +108,63 @@ const SEASON_BIAS_DOWN: Array[float] = [-0.01, 0.00, +0.01]
 @export var max_single_impact: float = 0.25
 @export var breakout_force_threshold: float = 0.05
 
+## Korean stock market daily price limit (±30% from previous day close)
+const DAILY_LIMIT_PCT: float = 0.30
+
+# ── VI / Circuit Breaker Constants (GDD Rules 2-4, 2-5) ──
+
+const VI_THRESHOLD: float = 0.10
+const VI_HALT_TICKS: int = 8
+const VI_MAX_PER_DAY: int = 2
+
+const CB_STAGE1_PCT: float = -0.08
+const CB_STAGE2_PCT: float = -0.15
+const CB_STAGE1_TICKS: int = 20
+
+# ── Tick Size Table (KRX-based, GDD Rule 5-3) ──
+
+## Returns the tick size (호가 단위) for a given price level.
+## Chart renderer and order engine also use this for grid alignment and order validation.
+static func get_tick_size(price: int) -> int:
+	if price < 1000:
+		return 1
+	if price < 5000:
+		return 5
+	if price < 10000:
+		return 10
+	if price < 50000:
+		return 50
+	if price < 100000:
+		return 100
+	if price < 500000:
+		return 500
+	return 1000
+
+
+## Rounds a raw price to the nearest tick size.
+static func round_to_tick(raw_price: float) -> int:
+	var ts: int = get_tick_size(roundi(raw_price))
+	return roundi(raw_price / float(ts)) * ts
+
 # ── Per-Stock Runtime State ──
 
 var _stock_states: Dictionary = {}  ## stock_id -> _StockState
 var _engine_state: EngineState = EngineState.UNINITIALIZED
 var _transition_matrices: Dictionary = {}  ## stock_id -> Array[Array[float]]
+
+# ── Market Index (시총가중지수) ──
+
+const INDEX_BASE: float = 1000.0  ## 시즌 시작 시 지수 기준값
+var _base_market_cap: float = 0.0  ## 시즌 시작 시 총 시가총액
+var _current_index: float = INDEX_BASE  ## 현재 지수값
+var _prev_day_index: float = INDEX_BASE  ## 전일 지수 종가
+var _index_history: Array[float] = []  ## 틱별 지수 기록
+
+# ── VI / Circuit Breaker Runtime State ──
+
+var _vi_states: Dictionary = {}  ## stock_id -> {halt_remaining: int, count_today: int}
+var _cb_stage: int = 0  ## 0=none, 1=stage1 active, 2=stage2 (early close)
+var _cb_halt_remaining: int = 0  ## Stage 1 remaining halt ticks
 
 # ── Lifecycle ──
 
@@ -146,6 +219,15 @@ func get_ohlcv_history(stock_id: String) -> Array[Dictionary]:
 	return state.get("ohlcv_daily", [] as Array[Dictionary])
 
 
+## Returns the daily price limits {upper: int, lower: int, prev_close: int}.
+func get_daily_limits(stock_id: String) -> Dictionary:
+	var state: Dictionary = _stock_states.get(stock_id, {})
+	var prev_close: int = state.get("prev_day_close", 0)
+	var upper: int = round_to_tick(float(prev_close) * (1.0 + DAILY_LIMIT_PCT))
+	var lower: int = round_to_tick(float(prev_close) * (1.0 - DAILY_LIMIT_PCT))
+	return {"upper": upper, "lower": lower, "prev_close": prev_close}
+
+
 ## Returns the current Markov state for a stock.
 func get_markov_state(stock_id: String) -> MarkovState:
 	var state: Dictionary = _stock_states.get(stock_id, {})
@@ -187,6 +269,7 @@ func _initialize_season() -> void:
 			"stock_id": stock_id,
 			"current_price": stock.base_price,
 			"base_price": stock.base_price,
+			"prev_day_close": stock.base_price,  ## 전일 종가 (상/하한가 기준)
 			"volatility_profile": stock.volatility_profile,
 			"macro_sensitivity": stock.macro_sensitivity,
 			"sector_sensitivity": stock.sector_sensitivity,
@@ -204,6 +287,21 @@ func _initialize_season() -> void:
 			stock.volatility_profile, bias
 		)
 
+	# Initialize VI states for each stock (GDD Rule 2-4)
+	_vi_states.clear()
+	for stock_id: String in _stock_states:
+		_vi_states[stock_id] = {"halt_remaining": 0, "count_today": 0}
+
+	# Reset circuit breaker (GDD Rule 2-5)
+	_cb_stage = 0
+	_cb_halt_remaining = 0
+
+	# Initialize market index
+	_base_market_cap = _compute_total_market_cap()
+	_current_index = INDEX_BASE
+	_prev_day_index = INDEX_BASE
+	_index_history.clear()
+
 	_engine_state = EngineState.READY
 
 # ── Tick Processing (GDD Rule 5) ──
@@ -212,9 +310,33 @@ func _on_tick(tick_number: int, _day: int, _week: int) -> void:
 	if _engine_state != EngineState.RUNNING:
 		return
 
-	for stock_id: String in _stock_states:
-		_process_stock_tick(stock_id, tick_number)
+	# Circuit breaker halt check (GDD Rule 2-5)
+	if _cb_halt_remaining > 0:
+		_cb_halt_remaining -= 1
+		if _cb_halt_remaining == 0:
+			# Stage 1 released — resume trading
+			pass
+		# Still emit price_updated so UI refreshes (prices unchanged)
+		on_price_updated.emit(tick_number)
+		return
 
+	for stock_id: String in _stock_states:
+		# VI halt check (GDD Rule 2-4)
+		var vi: Dictionary = _vi_states.get(stock_id, {})
+		if vi.get("halt_remaining", 0) > 0:
+			vi["halt_remaining"] -= 1
+			if vi["halt_remaining"] == 0:
+				on_vi_released.emit(stock_id)
+			# Record frozen price/volume to keep buffers aligned
+			var s: Dictionary = _stock_states[stock_id]
+			s["tick_prices"].append(s["current_price"])
+			s["tick_volumes"].append(0.0)
+			continue
+		_process_stock_tick(stock_id, tick_number)
+		_check_vi(stock_id)
+
+	_update_index()
+	_check_circuit_breaker()
 	on_price_updated.emit(tick_number)
 
 
@@ -246,15 +368,29 @@ func _process_stock_tick(stock_id: String, tick_in_day: int) -> void:
 
 	# Step 6: Price update
 	var raw_price: float = float(s["current_price"]) * (1.0 + total_delta)
+
+	# Hard clamp: lifetime bounds (base_price * 0.15 ~ 3.0)
 	var base: int = s["base_price"]
 	var min_price: float = maxf(float(base) * 0.15, 1000.0)
 	var max_price: float = float(base) * 3.0
-
 	var clamped: float = clampf(raw_price, min_price, max_price)
 	if clamped != raw_price:
 		on_price_clamped.emit(stock_id, roundi(clamped), raw_price)
 
-	var final_price: int = roundi(clamped / 100.0) * 100
+	# Daily limit: ±30% from previous day close (상한가/하한가)
+	var prev_close: float = float(s["prev_day_close"])
+	var upper_limit: float = prev_close * (1.0 + DAILY_LIMIT_PCT)
+	var lower_limit: float = prev_close * (1.0 - DAILY_LIMIT_PCT)
+	if clamped >= upper_limit:
+		if clamped > upper_limit:
+			on_price_limit_hit.emit(stock_id, true, round_to_tick(upper_limit))
+		clamped = upper_limit
+	elif clamped <= lower_limit:
+		if clamped < lower_limit:
+			on_price_limit_hit.emit(stock_id, false, round_to_tick(lower_limit))
+		clamped = lower_limit
+
+	var final_price: int = PriceEngine.round_to_tick(clamped)
 	s["current_price"] = final_price
 
 	# Step 7: Markov state transition (GDD Rule 1-2, 1-3)
@@ -281,8 +417,8 @@ func _process_stock_tick(stock_id: String, tick_in_day: int) -> void:
 		else:
 			s["state_duration"] += 1
 
-	# Step 8: Volume (GDD Rule 4)
-	var volume: float = _compute_volume(s, event_delta, tick_in_day)
+	# Step 8: Volume (GDD Rule 4) — energy-correlated
+	var volume: float = _compute_volume(s, pattern_delta, event_delta, tick_in_day)
 
 	# Step 9: Record
 	s["tick_prices"].append(final_price)
@@ -407,29 +543,100 @@ func _gradual_tick_impact(ge: Dictionary) -> float:
 
 
 ## Volume generation (GDD Rule 4)
-func _compute_volume(s: Dictionary, event_delta: float, tick_in_day: int) -> float:
+## Volume calculation using shared tick energy (GDD Rule 4-2 ~ 4-6).
+## tick_energy = |pattern_delta| + |event_delta| measures total force before cancellation.
+func _compute_volume(
+	s: Dictionary, pattern_delta: float, event_delta: float, tick_in_day: int
+) -> float:
 	var vol: int = s["volatility_profile"]
 	var vol_range: Array = BASE_VOLUME_RANGE[vol]
 	var base_vol: float = randf_range(float(vol_range[0]), float(vol_range[1]))
 
-	var state: int = s["markov_state"]
-	var mult: float = STATE_VOLUME_MULT[state]
-	if mult < 0.0:  # BREAKOUT
-		mult = randf_range(3.0, 5.0)
-	var state_vol: float = base_vol * mult
+	# 4-2: Tick energy — correlation between price movement forces and volume
+	var tick_energy: float = absf(pattern_delta) + absf(event_delta)
+	var energy_mult: float = 1.0 + clampf(
+		tick_energy / ENERGY_THRESHOLD, 0.0, ENERGY_MAX_BOOST
+	)
 
-	var event_spike: float = 0.0
-	if absf(event_delta) > 0.0:
-		var spike_mult: float = clampf(absf(event_delta) * 30.0, 1.0, 10.0)
-		event_spike = base_vol * spike_mult
+	# 4-3: State multiplier
+	var state_mult: float = STATE_VOLUME_MULT[s["markov_state"]]
 
+	# 4-4: Limit proximity dampening (호가 고갈)
+	var limit_dampen: float = 1.0
+	var prev_close: float = float(s["prev_day_close"])
+	if prev_close > 0.0:
+		var proximity: float = absf(
+			float(s["current_price"]) - prev_close
+		) / (prev_close * DAILY_LIMIT_PCT)
+		if proximity >= LIMIT_DAMPEN_START:
+			var t: float = (proximity - LIMIT_DAMPEN_START) / (1.0 - LIMIT_DAMPEN_START)
+			limit_dampen = lerpf(1.0, LIMIT_DAMPEN_MIN, clampf(t, 0.0, 1.0))
+
+	# 4-5: Time-of-day multiplier
 	var tod_mult: float = 1.0
 	if tick_in_day < 10:
 		tod_mult = 2.5
 	elif tick_in_day >= 380:
 		tod_mult = 2.0
 
-	return (state_vol + event_spike) * tod_mult
+	# 4-6: Final volume
+	return base_vol * state_mult * energy_mult * limit_dampen * tod_mult
+
+# ── VI / Circuit Breaker (GDD Rules 2-4, 2-5) ──
+
+## Check if a stock should trigger VI after its price update.
+func _check_vi(stock_id: String) -> void:
+	var s: Dictionary = _stock_states[stock_id]
+	var vi: Dictionary = _vi_states.get(stock_id, {"halt_remaining": 0, "count_today": 0})
+
+	# Already halted or daily limit reached
+	if vi["halt_remaining"] > 0:
+		return
+	if vi["count_today"] >= VI_MAX_PER_DAY:
+		return
+
+	var prev_close: float = float(s["prev_day_close"])
+	if prev_close <= 0.0:
+		return
+
+	var change_pct: float = absf(float(s["current_price"]) - prev_close) / prev_close
+	if change_pct >= VI_THRESHOLD:
+		var is_upper: bool = s["current_price"] > roundi(prev_close)
+		vi["halt_remaining"] = VI_HALT_TICKS
+		vi["count_today"] += 1
+		_vi_states[stock_id] = vi
+		on_vi_triggered.emit(stock_id, is_upper, VI_HALT_TICKS)
+
+
+## Check if circuit breaker should trigger based on market index.
+func _check_circuit_breaker() -> void:
+	if _prev_day_index <= 0.0:
+		return
+
+	var index_change: float = (_current_index - _prev_day_index) / _prev_day_index
+
+	if index_change <= CB_STAGE2_PCT and _cb_stage < 2:
+		_cb_stage = 2
+		on_circuit_breaker.emit(2, 0)
+		_end_trading_day()  # Early close
+		return
+
+	if index_change <= CB_STAGE1_PCT and _cb_stage < 1:
+		_cb_stage = 1
+		_cb_halt_remaining = CB_STAGE1_TICKS
+		on_circuit_breaker.emit(1, CB_STAGE1_TICKS)
+
+
+## Returns whether a stock is currently halted by VI.
+func is_vi_halted(stock_id: String) -> bool:
+	var vi: Dictionary = _vi_states.get(stock_id, {})
+	return vi.get("halt_remaining", 0) > 0
+
+
+## Returns current circuit breaker stage (0=none, 1=halt, 2=early close).
+func get_cb_stage() -> int:
+	return _cb_stage
+
 
 # ── End of Day ──
 
@@ -463,14 +670,79 @@ func _end_trading_day() -> void:
 		for v: float in day_volumes:
 			total_vol += v
 
+		var close_price: int = day_prices[day_prices.size() - 1]
 		var ohlcv: Dictionary = {
 			"open": day_prices[0],
 			"high": high,
 			"low": low,
-			"close": day_prices[day_prices.size() - 1],
+			"close": close_price,
 			"volume": total_vol,
 		}
 		s["ohlcv_daily"].append(ohlcv)
+
+		# Update prev_day_close for next day's daily limit calculation
+		s["prev_day_close"] = close_price
+
+	# Reset VI daily counters (GDD Rule 2-4: max 2 per day resets each day)
+	for stock_id: String in _vi_states:
+		_vi_states[stock_id]["count_today"] = 0
+		_vi_states[stock_id]["halt_remaining"] = 0
+
+	# Reset circuit breaker for next day (GDD Rule 2-5)
+	_cb_stage = 0
+	_cb_halt_remaining = 0
+
+	# Save end-of-day index
+	_prev_day_index = _current_index
+
+# ── Market Index (시총가중지수) ──
+
+func _compute_total_market_cap() -> float:
+	var total: float = 0.0
+	for stock_id: String in _stock_states:
+		var stock: StockData = StockDatabase.get_stock(stock_id)
+		if stock:
+			total += float(_stock_states[stock_id]["current_price"]) * float(stock.listed_shares)
+	return total
+
+
+func _update_index() -> void:
+	if _base_market_cap <= 0.0:
+		return
+	var current_cap: float = _compute_total_market_cap()
+	_current_index = (current_cap / _base_market_cap) * INDEX_BASE
+	_index_history.append(_current_index)
+
+
+## Returns the current market index value.
+func get_market_index() -> float:
+	return _current_index
+
+
+## Returns the previous day's closing index value.
+func get_prev_day_index() -> float:
+	return _prev_day_index
+
+
+## Returns the index change from previous day close (%).
+func get_index_change_pct() -> float:
+	if _prev_day_index <= 0.0:
+		return 0.0
+	return (_current_index - _prev_day_index) / _prev_day_index * 100.0
+
+
+## Returns the market cap of a stock (current_price × listed_shares).
+func get_market_cap(stock_id: String) -> int:
+	var s: Dictionary = _stock_states.get(stock_id, {})
+	var stock: StockData = StockDatabase.get_stock(stock_id)
+	if s.is_empty() or stock == null:
+		return 0
+	return s["current_price"] * stock.listed_shares
+
+
+## Returns the full index tick history.
+func get_index_history() -> Array[float]:
+	return _index_history
 
 # ── Transition Matrix Builder (GDD Rules 1-3, 1-4, 1-5) ──
 

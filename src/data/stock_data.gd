@@ -13,6 +13,7 @@ enum VolatilityProfile { LOW, MEDIUM, HIGH, EXTREME }
 @export var volatility_profile: VolatilityProfile
 @export var macro_sensitivity: float = 1.0
 @export var sector_sensitivity: float = 1.0
+@export var listed_shares: int = 1000000  ## 상장주식수
 @export var per: float = 0.0  ## 0.0 indicates deficit company (null equivalent)
 @export var event_tags: Array[String] = []  ## Tags for INDIVIDUAL event matching
 @export var description: String = ""

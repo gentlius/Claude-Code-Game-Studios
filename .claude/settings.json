@@ -1,9 +1,5 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "statusLine": {
-    "type": "command",
-    "command": "bash .claude/statusline.sh"
-  },
   "permissions": {
     "allow": [
       "Bash(git status*)",
@@ -15,7 +11,30 @@
       "Bash(dir *)",
       "Bash(python -m json.tool*)",
       "Bash(python -m pytest*)",
-      "Bash(py -m pytest*)"
+      "Bash(py -m pytest*)",
+      "Read(//c/Users/joywo/AppData/Local/**)",
+      "Read(//c/Users/joywo/scoop/**)",
+      "Read(//c//**)",
+      "Bash(reg.exe query:*)",
+      "Read(//c/Users/joywo/**)",
+      "Read(//c/Program Files/**)",
+      "Bash(cmd.exe /c \"dir /s /b C:\\\\Godot*.exe C:\\\\Users\\\\joywo\\\\Downloads\\\\Godot*.exe C:\\\\Users\\\\joywo\\\\Desktop\\\\Godot*.exe 2>nul\")",
+      "Bash(/d/Godot4/Godot_v4.6.1-stable_win64_console.exe --path \"d:/Github/ta\" --headless --quit-after 10)",
+      "Bash(/d/Godot4/Godot_v4.6.1-stable_win64_console.exe --path \"d:/Github/ta\" --import --headless)",
+      "Bash(/d/Godot4/Godot_v4.6.1-stable_win64_console.exe --path \"d:/Github/ta\" --headless)",
+      "Bash(taskkill //F //IM Godot_v4.6.1-stable_win64_console.exe)",
+      "Bash(/d/Godot4/Godot_v4.6.1-stable_win64_console.exe --path \"d:/Github/ta\" --headless --fixed-fps 120)",
+      "Bash(\"D:/Godot4/Godot_v4.6.1-stable_win64_console.exe\" --import --headless)",
+      "Bash(\"D:/Godot4/Godot_v4.6.1-stable_win64_console.exe\" --headless --fixed-fps 120)",
+      "Bash(\"D:/Godot4/Godot_v4.6.1-stable_win64_console.exe\" --headless --fixed-fps 120 --main-pack \"\" res://src/ui/TestTradingScreen.tscn)",
+      "Bash(\"D:/Godot4/Godot_v4.6.1-stable_win64_console.exe\" --headless -s addons/gut/cli/gut_cli.gd -gdir=res://tests/unit -gprefix=test_ -gsuffix=.gd)",
+      "Read(//tmp/**)",
+      "Bash(rm /tmp/gut.zip /tmp/godot_templates.tpz)",
+      "Bash(rm -r /tmp/Gut-main)",
+      "Skill(design-system)",
+      "Skill(design-system:*)",
+      "Bash(\"D:\\\\Godot4\\\\Godot_v4.6.1-stable_win64_console.exe\" --headless -s res://addons/gut/gut_cmdln.gd -gdir=res://tests/unit -ginclude_subdirs -gexit -gprefix=test_ -gtest=test_xp_system.gd,test_skill_tree.gd --path \"d:/Github/ta\")",
+      "Bash(\"D:/Godot4/Godot_v4.6.1-stable_win64_console.exe\" --headless -s addons/gut/gut_cmdln.gd -gdir=res://tests/unit/ -gexit)"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -114,5 +133,9 @@
         ]
       }
     ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash .claude/statusline.sh"
   }
 }

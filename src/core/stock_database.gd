@@ -1,4 +1,5 @@
-## Autoload — Manages the 10 stock definitions for the current season.
+## Autoload — Manages stock definitions for the current season.
+## MVP: 10 stocks across 8 sectors. V-Slice: 46 stocks across 11 sectors.
 ## Foundation layer: no dependencies on other game systems.
 extends Node
 
@@ -90,10 +91,10 @@ func _load_default_stocks() -> void:
 		# 시총 = base_price × listed_shares
 		# SK(스카이로직)이 최대 시총, BF/MG(바이오)는 소형
 		{"id": "KF", "name_ko": "코스모푸드", "name_en": "CosmoFood",
-		 "sector": "식품", "base_price": 65000, "listed_shares": 800000,  # 시총 520억
+		 "sector": "유통", "base_price": 65000, "listed_shares": 800000,  # 시총 520억
 		 "vol": StockData.VolatilityProfile.MEDIUM,
 		 "macro": 0.8, "sector_sens": 1.0, "per": 12.5,
-		 "tags": ["food_safety", "earnings", "contract"],
+		 "tags": ["consumption", "season", "retail", "earnings"],
 		 "desc": "국내 1위 종합식품기업. 안정적 매출 성장."},
 
 		{"id": "SC", "name_ko": "스타칩", "name_en": "StarChip",
@@ -125,17 +126,17 @@ func _load_default_stocks() -> void:
 		 "desc": "신약 개발 바이오벤처. 임상 결과에 극단적 반응."},
 
 		{"id": "GC", "name_ko": "그린케미", "name_en": "GreenChem",
-		 "sector": "화학", "base_price": 38000, "listed_shares": 1200000,  # 시총 456억
+		 "sector": "에너지", "base_price": 38000, "listed_shares": 1200000,  # 시총 456억
 		 "vol": StockData.VolatilityProfile.MEDIUM,
 		 "macro": 1.0, "sector_sens": 1.2, "per": 9.7,
-		 "tags": ["environment", "regulation", "raw_material", "earnings"],
+		 "tags": ["chemical", "raw_material", "oil_price", "earnings"],
 		 "desc": "친환경 화학소재 전문. 환경규제 수혜주."},
 
 		{"id": "DH", "name_ko": "대한중공업", "name_en": "DaehanHeavy",
-		 "sector": "조선", "base_price": 95000, "listed_shares": 1000000,  # 시총 950억
+		 "sector": "건설", "base_price": 95000, "listed_shares": 1000000,  # 시총 950억
 		 "vol": StockData.VolatilityProfile.LOW,
 		 "macro": 1.3, "sector_sens": 1.0, "per": 8.2,
-		 "tags": ["shipbuilding", "contract", "defense", "export"],
+		 "tags": ["shipbuilding", "export", "infrastructure", "defense"],
 		 "desc": "국내 2위 조선사. 수주 잔고 3년치 확보."},
 
 		{"id": "PT", "name_ko": "피플텔레콤", "name_en": "PeopleTelecom",

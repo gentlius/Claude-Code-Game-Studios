@@ -3,43 +3,70 @@
 ## Sprint Goal
 
 MVP 보강(VI/서킷브레이커, 지수 HUD, 테스트 환경)을 완료하고,
-V-Slice의 첫 두 시스템(AI 경쟁자, 경험치)을 설계+구현하여
-"경쟁 상대가 있는 투자 게임" 형태를 만든다.
+경험치+스킬 트리를 구현하여 "플레이할수록 도구가 해금되는 성장 루프"를 완성한다.
 
 ## Capacity
 
 - Total sessions: 10
 - Buffer (20%): 2 sessions (버그 수정, 예기치 않은 작업)
 - Available: 8 sessions
+- **Unplanned 소요**: 3 sessions (섹터/종목 확장, mutex_group)
+- **실질 잔여**: 5 sessions
 
 ## Tasks
 
 ### Must Have (Critical Path)
 
-| ID | Task | Category | Est. | Dependencies | Acceptance Criteria |
-|----|------|----------|------|-------------|-------------------|
-| S1-01 | VI(변동성완화장치) 구현 | Gameplay | 1 sess | GDD 완료 | 종목 ±10% 도달 시 8틱 거래정지, 일 2회 제한, 뉴스 생성 |
-| S1-02 | 서킷브레이커 구현 | Gameplay | 0.5 sess | S1-01 | 지수 -8% → 20틱 전종목 정지, -15% → 조기 마감, 뉴스 생성 |
-| S1-03 | 시장 지수 HUD 표시 | UI | 0.5 sess | — | 상단 상태바에 종합지수 + 등락률 표시 |
-| S1-04 | AI 경쟁자 시스템 GDD 작성 | Design | 1 sess | — | 8섹션 완료, /design-review APPROVED |
-| S1-05 | AI 경쟁자 시스템 구현 | Gameplay | 2 sess | S1-04 | 3~5 AI 트레이더가 독립적으로 매매, 포트폴리오 추적 가능 |
-| S1-06 | 경험치 시스템 GDD 작성 | Design | 0.5 sess | — | 8섹션 완료, /design-review APPROVED |
-| S1-07 | 경험치 시스템 구현 | Gameplay | 1 sess | S1-06 | 거래/수익률 기반 XP 산출, 레벨업 시그널 |
+| ID | Task | Category | Est. | Dependencies | Status |
+|----|------|----------|------|-------------|--------|
+| S1-01 | VI(변동성완화장치) 구현 | Gameplay | 1 sess | GDD 완료 | ✅ Done (pre-sprint `d66fa74`) |
+| S1-02 | 서킷브레이커 구현 | Gameplay | 0.5 sess | S1-01 | ✅ Done (pre-sprint `d66fa74`) |
+| S1-03 | 시장 지수 HUD 표시 | UI | 0.5 sess | — | ⬜ UI 연결만 남음 |
+| S1-06 | 경험치 시스템 GDD 작성 | Design | 0.5 sess | — | ⬜ |
+| S1-07 | 경험치 시스템 구현 | Gameplay | 1 sess | S1-06 | ⬜ |
+| S1-13 | 스킬 트리 시스템 구현 | Gameplay | 2 sess | S1-07, GDD Approved | ⬜ (GDD 이미 Approved) |
 
 ### Should Have
 
-| ID | Task | Category | Est. | Dependencies | Acceptance Criteria |
-|----|------|----------|------|-------------|-------------------|
-| S1-08 | GUT 테스트 프레임워크 설치 | Infra | 0.5 sess | — | `gut_cmdln.gd` 실행으로 기존 유닛 테스트 통과 |
-| S1-09 | VI/CB 유닛 테스트 | Test | 0.5 sess | S1-01, S1-02, S1-08 | VI 발동/해제, CB 단계별 발동 테스트 통과 |
-| S1-10 | 호가 단위 유닛 테스트 | Test | 0.5 sess | S1-08 | 7가격대별 tick_size, round_to_tick 검증 |
+| ID | Task | Category | Est. | Dependencies | Status |
+|----|------|----------|------|-------------|--------|
+| S1-08 | GUT 테스트 프레임워크 설치 | Infra | 0.5 sess | — | ✅ Done (pre-sprint `84000a3`) |
+| S1-09 | VI/CB 유닛 테스트 | Test | 0.5 sess | S1-01, S1-02 | ⬜ |
+| S1-10 | 호가 단위 유닛 테스트 | Test | 0.5 sess | — | ✅ Done (test_order_engine.gd) |
 
 ### Nice to Have
 
-| ID | Task | Category | Est. | Dependencies | Acceptance Criteria |
-|----|------|----------|------|-------------|-------------------|
-| S1-11 | ADR 추가 (호가 단위, 에너지-거래량) | Docs | 0.5 sess | — | docs/architecture/에 ADR 2개 추가 |
-| S1-12 | 프로토타입 README 작성 | Docs | 0.25 sess | — | prototypes/price-engine/README.md 존재 |
+| ID | Task | Category | Est. | Dependencies | Status |
+|----|------|----------|------|-------------|--------|
+| S1-11 | ADR 추가 (호가 단위, 에너지-거래량) | Docs | 0.5 sess | — | ⬜ |
+| S1-12 | 프로토타입 README 작성 | Docs | 0.25 sess | — | ⬜ |
+
+### Moved to Sprint 2
+
+| ID | Task | Reason |
+|----|------|--------|
+| S1-04 | AI 경쟁자 시스템 GDD 작성 | 시즌/대회 관리와 강결합. Sprint 2에서 함께 설계 |
+| S1-05 | AI 경쟁자 시스템 구현 | S1-04에 의존. Sprint 2로 이동 |
+
+### Unplanned (스프린트 중 추가)
+
+| ID | Task | Category | Est. | Dependencies | Status |
+|----|------|----------|------|-------------|--------|
+| S1-U1 | 섹터 확장 (8→11) + 종목 확장 (10→46) — stock-database.md GDD 전면 개정 | Design | 1 sess | — | ✅ Done |
+| S1-U2 | Narrative State Tracker 설계 + mutex_group — news-events.md GDD 개정 | Design | 0.5 sess | — | ✅ Done |
+| S1-U3 | event_pool.json 확장 (31→50 템플릿, mutex_group 필드 추가) | Data | 0.5 sess | S1-U2 | ✅ Done |
+| S1-U4 | 섹터명 마이그레이션 (season_themes.json, stock_database.gd) | Code | 0.25 sess | S1-U1 | ✅ Done |
+| S1-U5 | mutex_group 구현 (news_event_system.gd) + 유닛 테스트 13건 | Gameplay/Test | 0.5 sess | S1-U2 | ✅ Done |
+| S1-U6 | 외부 리뷰 반영 — order-engine.md CB 엣지 케이스, news-feed-ui.md Open Questions | Design | 0.25 sess | — | ✅ Done |
+
+## Capacity Check (조정 후)
+
+| Category | Sessions |
+|----------|----------|
+| 잔여 Available | 5 |
+| Must Have 잔여 (S1-03 + S1-06 + S1-07 + S1-13) | 4 |
+| Should Have 잔여 (S1-09) | 0.5 |
+| **여유** | **0.5** |
 
 ## Carryover from Previous Sprint
 

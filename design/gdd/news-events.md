@@ -2,7 +2,7 @@
 
 > **Status**: In Design
 > **Author**: user + game-designer
-> **Last Updated**: 2026-03-25
+> **Last Updated**: 2026-04-01
 > **Implements Pillar**: 읽는 재미 (Read the Market), 판단이 곧 실력 (Judgment is King)
 
 ## Overview
@@ -57,7 +57,7 @@ MVP 풀 규모: **템플릿 50개 이상** (MACRO 10+, SECTOR 30+, INDIVIDUAL 10
 
 | scope | 대상 | target_stocks 결정 방식 |
 |-------|------|------------------------|
-| `MACRO` | 시장 전체 | 10개 종목 전부 |
+| `MACRO` | 시장 전체 | 전체 종목 (46개) |
 | `SECTOR` | 특정 섹터 전체 | `target_sector`로 섹터 결정 → 해당 섹터 소속 종목 전부. `event_tags` 미사용 |
 | `INDIVIDUAL` | 특정 1개 종목 | `event_tags`와 종목 `event_tags` 교집합으로 매칭된 종목 1개 |
 
@@ -105,7 +105,16 @@ EventTemplate {
     season_tags: string[]       # 활성화되는 시즌 테마 태그 (빈 배열 = 항상 활성)
     weight_base: float          # 기본 선택 가중치 (1.0 = 표준)
     cooldown_ticks: int         # 동일 템플릿 재선택 금지 틱 수
-    exclude_same_scope: bool    # true면 같은 scope의 다른 이벤트와 동일 슬롯 불가
+    exclude_same_scope: bool    # ⚠️ DEPRECATED — mutex_group으로 대체 (규칙 3). 하위 호환용 보존
+
+    // --- Narrative State Tracker (규칙 3) ---
+    mutex_group: string | null     # 상호 배타 그룹 ID. 같은 그룹 이벤트는 같은 날 발생 불가
+                                   # INDIVIDUAL scope: "{stock_id}" 플레이스홀더 사용 시
+                                   # 대상 종목별 독립 mutex (예: "bio_clinical_{stock_id}")
+    narrative_sets_state: string | null  # 이 이벤트가 설정하는 narrative state key (null이면 미설정)
+    narrative_state_ttl_days: int   # narrative state 유지 기간 (거래일). 0이면 state 미설정
+    narrative_weight_boosts: {string: float} | null  # 이 state 활성 시 다른 템플릿 가중치 보정 맵
+                                                     # 예: {"SEMI_AI_DEMAND_01": 1.5} → 해당 템플릿 가중치 50% 증가
 
     // --- 텍스트 변수 ---
     variables: {string: string[]}  # 템플릿별 도메인 변수 후보값 목록
@@ -214,7 +223,7 @@ E[일일 이벤트 수] = 1×0.70 + 2×0.55 + 1×0.60 = 2.40
 | `SECTOR` | 0.35 | 약 0.8개 |
 | `MACRO` | 0.10 | 약 0.2개 |
 
-MACRO는 희소하게 유지. 시즌 테마에 따라 가중치 조정 (규칙 5 참조).
+MACRO는 희소하게 유지. 시즌 테마에 따라 가중치 조정 (규칙 6 참조).
 
 ##### 2-3. Impact 등급 배분
 
@@ -258,9 +267,129 @@ MEGA 추가 제약: 하루 MEGA 이미 발생 시 LARGE로 강등.
 
 ---
 
-#### 규칙 3. 이벤트 콘텐츠 구조
+#### 규칙 3. Narrative State Tracker
 
-##### 3-1. 템플릿 변수 시스템
+뉴스 간 논리적 모순을 방지하고 서사적 일관성을 유지하는 시스템.
+Phase 1(mutex_group)은 MVP, Phase 2(narrative_state)는 V-Slice에서 구현.
+
+##### 3-1. Phase 1: mutex_group (일일 상호 배타)
+
+같은 `mutex_group`을 가진 이벤트는 **같은 거래일에 함께 발생할 수 없다**.
+
+**구현**:
+```
+# 일일 시작 시 초기화
+var _daily_mutex: Dictionary = {}  # {mutex_key: template_id}
+
+# 이벤트 선택 시 필터링 (규칙 2-5 절차 1에 추가)
+func _is_mutex_blocked(template: EventTemplate, stock_id: String) -> bool:
+    if template.mutex_group == null:
+        return false
+    # {stock_id} 플레이스홀더 해소
+    var key: String = template.mutex_group.replace("{stock_id}", stock_id)
+    return _daily_mutex.has(key)
+
+# 이벤트 확정 시 등록
+func _register_mutex(template: EventTemplate, stock_id: String) -> void:
+    if template.mutex_group == null:
+        return
+    var key: String = template.mutex_group.replace("{stock_id}", stock_id)
+    _daily_mutex[key] = template.template_id
+```
+
+**`{stock_id}` 플레이스홀더 규칙**:
+- INDIVIDUAL scope 이벤트에서 사용
+- 대상 종목별로 독립된 mutex 키 생성
+- 예: `"bio_clinical_{stock_id}"` → MG에 적용 시 `"bio_clinical_MG"`
+- MG의 임상 성공과 MG의 임상 실패는 같은 날 불가
+- MG의 임상 성공과 BF의 임상 실패는 같은 날 **가능** (다른 종목)
+- SECTOR/MACRO scope에서는 `{stock_id}` 미사용 (고정 문자열)
+
+**mutex_group 매핑 테이블** (현재 확인된 모순 쌍):
+
+| mutex_group | 포함 템플릿 | Scope | 설명 |
+|-------------|-----------|-------|------|
+| `foreign_flow` | MACRO_FOREIGN_BUY_*, MACRO_FOREIGN_SELL_* | MACRO | 외국인 순매수/순매도 동시 불가 |
+| `bio_clinical_{stock_id}` | BIO_CLINICAL_SUCCESS_*, BIO_CLINICAL_FAILURE_* | INDIVIDUAL | 같은 종목 임상 성공/실패 동시 불가 |
+| `rate_direction` | MACRO_RATE_HIKE_*, MACRO_RATE_CUT_* | MACRO | 금리 인상/인하 동시 불가 |
+| `market_sentiment` | MACRO_BULL_SENTIMENT_*, MACRO_BEAR_SENTIMENT_* | MACRO | 시장 낙관/비관 동시 불가 |
+
+> `exclude_same_scope` (기존 필드)는 DEPRECATED. mutex_group이 더 세밀하고
+> 명시적인 제어를 제공한다. 기존 데이터의 하위 호환성을 위해 필드는 보존하되
+> 런타임에서 무시한다.
+
+##### 3-2. Phase 2: narrative_state (다일 서사 지속)
+
+이벤트가 "세계 상태"를 설정하고, 후속 이벤트의 발생 확률에 영향을 준다.
+
+**핵심 필드**:
+- `narrative_sets_state`: 이벤트 발생 시 설정할 state key (예: `"foreign_buying_streak"`)
+- `narrative_state_ttl_days`: state 유지 기간 (거래일 수). 만료 시 자동 삭제
+- `narrative_weight_boosts`: 이 state가 활성일 때 다른 템플릿의 가중치 보정
+
+**구현**:
+```
+# State 저장소
+var _narrative_states: Dictionary = {}  # {state_key: {ttl_remaining: int, source_template: string}}
+
+# 일일 시작 시 TTL 감소
+func _tick_narrative_states() -> void:
+    var expired: Array[String] = []
+    for key in _narrative_states:
+        _narrative_states[key]["ttl_remaining"] -= 1
+        if _narrative_states[key]["ttl_remaining"] <= 0:
+            expired.append(key)
+    for key in expired:
+        _narrative_states.erase(key)
+
+# 이벤트 확정 시 state 등록
+func _set_narrative_state(template: EventTemplate) -> void:
+    if template.narrative_sets_state == null:
+        return
+    _narrative_states[template.narrative_sets_state] = {
+        "ttl_remaining": template.narrative_state_ttl_days,
+        "source_template": template.template_id
+    }
+
+# 템플릿 가중치 계산 시 보정 적용 (규칙 2-5 절차 3에 추가)
+func _apply_narrative_boosts(template: EventTemplate, base_weight: float) -> float:
+    var weight: float = base_weight
+    for state_key in _narrative_states:
+        # 해당 state의 source 템플릿이 보유한 boosts 확인
+        var source_id: String = _narrative_states[state_key]["source_template"]
+        var source_template = _get_template(source_id)
+        if source_template.narrative_weight_boosts != null:
+            if template.template_id in source_template.narrative_weight_boosts:
+                weight *= source_template.narrative_weight_boosts[template.template_id]
+    return weight
+```
+
+**시나리오 예시 A — 외국인 매수 → 금융 연쇄**:
+1. Day 1: "외국인 순매수 15일 연속" 발생 → `narrative_sets_state: "foreign_buying_streak"`, TTL=3
+2. Day 1~3: `narrative_weight_boosts: {"FINANCE_FOREIGN_INFLOW_01": 1.8}` 활성
+3. Day 2: "외국인 자금 금융주 유입" 이벤트 가중치 80% 증가 → 발생 확률 대폭 상승
+4. Day 4: TTL 만료 → boost 해제, 정상 가중치로 복귀
+
+**시나리오 예시 B — 바이오 임상 성공 → 섹터 분위기**:
+1. Day 1: "메디진 3상 임상 성공" → `narrative_sets_state: "bio_positive_mood"`, TTL=5
+2. Day 1~5: `narrative_weight_boosts: {"BIO_PARTNERSHIP_01": 1.5, "BIO_CLINICAL_SUCCESS_02": 0.5}`
+3. 효과: 바이오 제휴 뉴스 확률↑, 추가 임상 성공은 확률↓ (중복 방지)
+
+##### 3-3. 스키마 변경 요약
+
+| 필드 | 변경 | Phase | 비고 |
+|------|------|-------|------|
+| `mutex_group` | **신규** | Phase 1 (MVP) | 일일 상호 배타 그룹 ID |
+| `narrative_sets_state` | **신규** | Phase 2 (V-Slice) | 이벤트가 설정하는 world state key |
+| `narrative_state_ttl_days` | **신규** | Phase 2 (V-Slice) | state 유지 기간 (거래일) |
+| `narrative_weight_boosts` | **신규** | Phase 2 (V-Slice) | state 활성 시 다른 템플릿 가중치 보정 |
+| `exclude_same_scope` | **DEPRECATED** | Phase 1 | mutex_group으로 대체. 런타임 무시 |
+
+---
+
+#### 규칙 4. 이벤트 콘텐츠 구조
+
+##### 4-1. 템플릿 변수 시스템
 
 뉴스 텍스트의 `{변수명}` 플레이스홀더를 실제값으로 치환한다.
 
@@ -279,7 +408,7 @@ MEGA 추가 제약: 하루 MEGA 이미 발생 시 LARGE로 강등.
 변수 치환 순서: 시스템 변수 먼저 → 템플릿 변수. 미해소 플레이스홀더가 남으면
 이벤트 생성 중단 + 경고 로깅.
 
-##### 3-2. INDIVIDUAL 이벤트의 종목 매칭
+##### 4-2. INDIVIDUAL 이벤트의 종목 매칭
 
 ```
 candidate_stocks = [s for s in all_stocks
@@ -296,18 +425,18 @@ selected_stock = weighted_random(candidate_stocks,
 `volatility_weight`: EXTREME=1.5, HIGH=1.2, MEDIUM=1.0, LOW=0.7.
 변동성 높은 종목이 개별 이벤트를 더 자주 받아 "관심 종목" 드라마 강화.
 
-##### 3-3. 동일 템플릿 재사용
+##### 4-3. 동일 템플릿 재사용
 
 INDIVIDUAL 이벤트의 쿨다운은 `template_id + stock_id` 쌍 기준으로 관리한다.
 "바이오 임상 성공" 템플릿이 메디진에 쿨다운 중이어도 다른 종목은 사용 가능.
 
-##### 3-4. 뉴스 텍스트 길이 제약
+##### 4-4. 뉴스 텍스트 길이 제약
 
 - **헤드라인**: 30자 이내 (변수 치환 후). 3초 이내 독해.
 - **본문**: 40~60자 이내. 5초 이내 독해.
 - **impact_hint**: 10자 이내. UI 뱃지 형태.
 
-##### 3-5. Event 오브젝트 조립
+##### 4-5. Event 오브젝트 조립
 
 ```
 Event {
@@ -325,15 +454,15 @@ Event {
 ```
 
 `resolve_target_stocks`:
-- `MACRO`: 전체 10개 종목 ID 배열
+- `MACRO`: 전체 종목 ID 배열
 - `SECTOR`: 해당 섹터 소속 종목 ID 배열
 - `INDIVIDUAL`: `[selected_stock.id]`
 
 ---
 
-#### 규칙 4. 뉴스 딜레이 시스템
+#### 규칙 5. 뉴스 딜레이 시스템
 
-##### 4-1. 딜레이 큐 구조
+##### 5-1. 딜레이 큐 구조
 
 이벤트 생성 시 **가격 엔진에 즉시 전달**하되, 뉴스 텍스트는 플레이어 스킬 레벨에
 따른 딜레이 후 UI에 표시한다. 가격은 이미 움직이지만 플레이어는 이유를 모른다 —
@@ -353,7 +482,7 @@ NewsQueueEntry {
 매 틱 `display_tick <= current_tick`인 항목을 꺼내 `on_news_display(entry: NewsQueueEntry)`
 시그널을 발행한다. 뉴스 피드 UI가 이 시그널을 구독하여 뉴스 카드를 생성한다.
 
-##### 4-2. 스킬 레벨별 딜레이
+##### 5-2. 스킬 레벨별 딜레이
 
 | 스킬 레벨 | player_delay_ticks | 실시간 환산 | 설명 |
 |----------|-------------------|-----------|------|
@@ -362,7 +491,7 @@ NewsQueueEntry {
 | Lv3 | 0틱 | 즉시 | 이벤트와 동시에 뉴스 표시 |
 | Lv4 | -20틱 (선행) | 약 15초 전 | 루머 채널 (4-4 참조). `rumor_advance_ticks`와 동일 값 |
 
-##### 4-3. 장 마감 시 딜레이 큐 처리
+##### 5-3. 장 마감 시 딜레이 큐 처리
 
 `on_market_close` 시 미표시 항목 처리:
 - **INDIVIDUAL/SECTOR**: 폐기. 가격 영향은 이미 반영됐으나 플레이어는 이유를 모름
@@ -372,7 +501,7 @@ NewsQueueEntry {
 Lv1~Lv2에서는 "오늘 왜 이 종목이 이렇게 움직였지?"를 때때로 모른다.
 Lv3 해금이 정보 완전성에 큰 가치를 가지는 이유.
 
-##### 4-4. Lv4 루머 채널 — 선행 정보
+##### 5-4. Lv4 루머 채널 — 선행 정보
 
 Lv4 해금 시 일부 이벤트 발생 전에 불확실한 힌트를 표시한다.
 
@@ -395,9 +524,9 @@ body: "복수의 관계자에 따르면 {company} 관련 중요 발표가 임박
 
 ---
 
-#### 규칙 5. 시즌 테마
+#### 규칙 6. 시즌 테마
 
-##### 5-1. 시즌 테마 개요
+##### 6-1. 시즌 테마 개요
 
 시즌 시작 시 하나의 시즌 테마가 활성화된다. 테마는 특정 Scope/섹터의 이벤트
 발생 확률을 조정하고, 시즌 내내 시장의 "분위기"를 형성한다. 플레이어가 테마를
@@ -405,7 +534,7 @@ body: "복수의 관계자에 따르면 {company} 관련 중요 발표가 임박
 
 MVP: 3개, V-Slice: 5개, Alpha: 7개+.
 
-##### 5-2. 테마 정의 스키마
+##### 6-2. 테마 정의 스키마
 
 ```
 SeasonTheme {
@@ -427,7 +556,7 @@ SeasonTheme {
 }
 ```
 
-##### 5-3. MVP 시즌 테마 3종
+##### 6-3. MVP 시즌 테마 3종
 
 **테마 A: "AI 붐"**
 ```
@@ -435,7 +564,7 @@ theme_id: "AI_BOOM"
 macro_weight_scale: 1.2
 sector_weight_scale: 1.0
 individual_weight_scale: 0.9
-sector_bias: {SEMICONDUCTOR: 2.0, GAMING: 1.3, RETAIL: 0.6, CONSTRUCTION: 0.6}
+sector_bias: {SEMICONDUCTOR: 2.0, GAMING: 1.3, TELECOM: 1.2, RETAIL: 0.6, CONSTRUCTION: 0.6}
 hint_revealed_at_day: 3
 hint_text: "시장에서 AI 관련 소재가 주목받고 있다."
 ```
@@ -446,8 +575,8 @@ theme_id: "RATE_HIKE_CYCLE"
 macro_weight_scale: 2.0
 sector_weight_scale: 0.9
 individual_weight_scale: 0.8
-sector_bias: {FINANCE: 2.0, BATTERY: 0.5, GAMING: 0.5, ENTERTAINMENT: 0.5,
-              CONSTRUCTION: 1.5, ENERGY: 1.3}
+sector_bias: {FINANCE: 2.0, TELECOM: 1.3, CONSTRUCTION: 1.5, ENERGY: 1.3,
+              BATTERY: 0.5, GAMING: 0.5, ENTERTAINMENT: 0.5}
 hint_revealed_at_day: 2
 hint_text: "금리 정책 변화에 시장이 민감하게 반응하고 있다."
 ```
@@ -459,12 +588,12 @@ macro_weight_scale: 1.5
 sector_weight_scale: 1.1
 individual_weight_scale: 0.9
 sector_bias: {ENERGY: 2.5, BATTERY: 1.8, AUTO: 1.5, SEMICONDUCTOR: 1.3,
-              RETAIL: 0.7, ENTERTAINMENT: 0.5}
+              RETAIL: 0.7, ENTERTAINMENT: 0.5, TELECOM: 0.7}
 hint_revealed_at_day: 4
 hint_text: "글로벌 공급망 불안이 특정 업종에 집중되고 있다."
 ```
 
-##### 5-4. 테마 적용 메커니즘
+##### 6-4. 테마 적용 메커니즘
 
 ```
 // Scope 가중치 수정
@@ -481,7 +610,7 @@ effective_weight = template.weight_base
                  × theme.sector_bias.get(template.target_sector, 1.0)
 ```
 
-##### 5-5. 테마 힌트 공개
+##### 6-5. 테마 힌트 공개
 
 `hint_revealed_at_day`번째 거래일의 `on_market_open`에서 힌트 텍스트를
 "시장 분석" 패널에 표시. 테마 이름 자체는 비공개. 숙련 플레이어는
@@ -489,9 +618,9 @@ effective_weight = template.weight_base
 
 ---
 
-#### 규칙 6. 야간/프리마켓 이벤트
+#### 규칙 7. 야간/프리마켓 이벤트
 
-##### 6-1. 야간 이벤트 생성
+##### 7-1. 야간 이벤트 생성
 
 `on_market_close` 직후 야간 이벤트 풀에서 0~2개 생성.
 
@@ -506,7 +635,7 @@ effective_weight = template.weight_base
 - Impact: SMALL 또는 MEDIUM만 (LARGE 이상은 다음날 장중 이벤트로)
 - event_type: GRADUAL_SHIFT 전용 (장 시작 후 서서히 반영)
 
-##### 6-2. 야간 버퍼
+##### 7-2. 야간 버퍼
 
 ```
 OvernightBuffer {
@@ -516,9 +645,10 @@ OvernightBuffer {
 ```
 
 `on_day_transition` 시 각 종목에 대해 5% 확률로 INDIVIDUAL 야간 공시 생성
-(SMALL~MEDIUM). "어닝 서프라이즈", "대규모 계약 체결" 등.
+(SMALL~MEDIUM, **GRADUAL_SHIFT 전용** — 장중 이벤트와 달리 INSTANT_SHOCK 불가).
+"어닝 서프라이즈", "대규모 계약 체결" 등.
 
-##### 6-3. 프리마켓 공개
+##### 7-3. 프리마켓 공개
 
 다음 거래일 `on_market_open` 직전:
 
@@ -533,7 +663,7 @@ OvernightBuffer {
 야간 이벤트는 딜레이 없이 공개. 가격 반영은 MARKET_OPEN 후 첫 틱(틱 1)부터
 시작된다. 장 시작 전 뉴스 분석이 "읽는 재미"의 핵심 모멘트.
 
-##### 6-4. 프리마켓 뉴스 UI 형식
+##### 7-4. 프리마켓 뉴스 UI 형식
 
 ```
 [오늘의 시장 전망] — 3월 16일 (화)
@@ -683,6 +813,9 @@ rumor_probability: LARGE/MEGA=1.0, MEDIUM=0.3, SMALL=0.0
 | direction=VARIABLE 이벤트 | 50:50 무작위 결정. 뉴스 텍스트도 방향에 맞게 조정 | 예측 불가 이벤트 허용 |
 | 강제 발생 vs 하드캡 충돌 | 하드캡(5) 판정이 우선. 슬롯에서 이미 5개 발생 시 강제 발생 없음. 반대로 4슬롯 모두 미발생 시 장 중반에 SMALL MACRO 1개 강제 — 이 강제 이벤트도 하드캡 카운트에 포함 | 하드캡은 절대 상한, 강제는 빈 날 방지용 안전망 |
 | Lv4 루머 타이밍 — 이벤트 발생 틱 < rumor_advance_ticks (20) | 루머 display_tick = 0 (PRE_MARKET). 다음 거래일이 아닌 **현재 거래일 PRE_MARKET** 뉴스 묶음에 루머 포함 — 이미 MARKET_OPEN이면 즉시 표시. 루머가 이벤트보다 20틱 전에 표시될 수 없으므로 가능한 만큼만 선행 | 틱 0 이전은 존재하지 않음. 장 초반 이벤트의 루머는 축소된 선행 시간으로 표시 |
+| mutex_group 필터링으로 후보 템플릿 0개 | mutex 필터 전 단계(scope/impact)로 후퇴 후 재시도. 그래도 없으면 슬롯 건너뜀 | 무한 루프 방지 |
+| narrative_state TTL=0인 이벤트 | state를 설정하지 않음 (narrative_sets_state 무시). 다른 필드는 정상 동작 | 0은 "미설정"의 의미 |
+| 같은 mutex_group의 야간 이벤트 + 장중 이벤트 | 야간 이벤트는 전일 mutex에 등록. 다음 날은 새 mutex 딕셔너리이므로 같은 그룹 장중 이벤트 발생 가능 | mutex는 일일 스코프 |
 | 페이크 루머 생성 기본 사양 | 하루 2회, 장 시작 30~360틱 사이에서 균등분포 배치. 페이크 루머는 실제 이벤트 풀에서 랜덤 template 선택 후 방향/대상만 표시 (실제 이벤트 미발생). `is_fake: true` 플래그로 내부 추적 (UI 비구분). 시즌 종료 시 "루머 적중률" 통계에서 페이크 제외 가능 | 루머 신뢰도 조절. 무조건 루머 추종 전략 방지 |
 
 ## Dependencies
@@ -708,6 +841,8 @@ rumor_probability: LARGE/MEGA=1.0, MEDIUM=0.3, SMALL=0.0
 | `fake_rumor_per_day` | 2 | 0~4 | 루머 신뢰도 하락 | 루머 과신 가능 |
 | `overnight_individual_prob` | 0.05 | 0.02~0.10 | 프리마켓 뉴스 풍부 | 조용한 아침 |
 | `theme.sector_bias` | 테마별 상이 | 0.3~3.0 | 테마 편향 강화 | 균등 분포 |
+| `narrative_state_ttl_days` (per template) | 템플릿별 상이 | 1~10 | 서사 연쇄 기간 증가. 시장 분위기 지속 | 서사 연쇄 단축. 독립적 이벤트 |
+| `narrative_weight_boosts` (per template) | 템플릿별 상이 | 0.3~3.0 | 연쇄 이벤트 발생 확률 강화 | 연쇄 효과 약화 |
 | `impact_tier_weights` | SMALL 35%, MEDIUM 40%, LARGE 20%, MEGA 5% | SMALL 20~50%, MEDIUM 25~50%, LARGE 10~30%, MEGA 2~10%. 합계 100% | LARGE/MEGA 비율↑: 자극적 시장, 빈번한 BREAKOUT | SMALL/MEDIUM 비율↑: 안정적 시장, 분석 중심 |
 | `headline 길이 제한` | 30자 | 15~40자 | 더 상세한 헤드라인 | 더 짧은 스캔 |
 
@@ -726,6 +861,10 @@ rumor_probability: LARGE/MEGA=1.0, MEDIUM=0.3, SMALL=0.0
 - [ ] 야간 이벤트가 다음날 프리마켓에 정확히 공개됨
 - [ ] 동일 종목에 90틱 이내 연속 INDIVIDUAL 이벤트 없음
 - [ ] MEGA 이벤트가 하루 1회를 초과하지 않음
+- [ ] 같은 mutex_group 이벤트가 같은 거래일에 함께 발생하지 않음
+- [ ] INDIVIDUAL mutex의 {stock_id} 플레이스홀더가 종목별로 독립 동작
+- [ ] (V-Slice) narrative_state TTL이 정확히 감소하고 만료 시 삭제됨
+- [ ] (V-Slice) narrative_weight_boosts가 템플릿 가중치에 정확히 반영됨
 - [ ] 성능: 일일 슬롯 생성 1ms 이내, 틱당 슬롯 체크 0.1ms 이내
 
 ## Open Questions

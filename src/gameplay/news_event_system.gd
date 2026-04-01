@@ -47,7 +47,7 @@ const IMPACT_TIER_WEIGHTS: Dictionary = {
 	"MEGA": 0.05,
 }
 
-## Volatility weight for INDIVIDUAL stock selection (GDD Rule 3-2)
+## Volatility weight for INDIVIDUAL stock selection (GDD Rule 4-2)
 const VOL_WEIGHT: Dictionary = {
 	StockData.VolatilityProfile.LOW: 0.7,
 	StockData.VolatilityProfile.MEDIUM: 1.0,
@@ -55,7 +55,7 @@ const VOL_WEIGHT: Dictionary = {
 	StockData.VolatilityProfile.EXTREME: 1.5,
 }
 
-## News delay by skill level (GDD Rule 4-2). MVP: always Lv1.
+## News delay by skill level (GDD Rule 5-2). MVP: always Lv1.
 const DELAY_BY_LEVEL: Dictionary = {1: 30, 2: 15, 3: 0, 4: -20}
 
 ## Overnight event probabilities (GDD Rule 6-1)
@@ -82,6 +82,8 @@ var _cooldown_tracker: Dictionary = {}
 var _recent_individual_targets: Dictionary = {}
 ## Last slot scope for clustering prevention
 var _last_slot_scope: String = ""
+## Mutex group tracking: resolved_mutex_key -> template_id (GDD Rule 3-1)
+var _daily_mutex: Dictionary = {}
 
 ## Season statistics
 var _season_stats: Dictionary = {
@@ -132,6 +134,7 @@ func _on_market_open() -> void:
 	_daily_event_count = 0
 	_daily_mega_fired = false
 	_last_slot_scope = ""
+	_daily_mutex.clear()
 	_state = SystemState.ACTIVE
 
 	# Check theme hint reveal
@@ -364,6 +367,9 @@ func _fire_event_from_slot(scope: String, impact: String, tick: int) -> void:
 		cooldown_key = template["template_id"] + "+" + selected_stock.stock_id
 	_cooldown_tracker[cooldown_key] = tick + GameClock.get_current_day() * 390
 
+	# Register mutex (GDD Rule 3-1)
+	_register_mutex(template, selected_stock)
+
 	# Build headline/body text
 	var headline: String = _resolve_text(template, direction, "headline", selected_stock)
 	var body: String = _resolve_text(template, direction, "body", selected_stock)
@@ -432,6 +438,18 @@ func _select_template(scope: String, impact: String) -> Dictionary:
 			if not match_found:
 				continue
 
+		# Mutex group filter (GDD Rule 3-1)
+		var mutex: Variant = t.get("mutex_group")
+		if mutex != null and mutex is String and str(mutex) != "":
+			# For MACRO/SECTOR scope, no {stock_id} placeholder to resolve yet.
+			# For INDIVIDUAL, we check all possible resolved keys.
+			var mutex_str: String = str(mutex)
+			if not mutex_str.contains("{stock_id}"):
+				# Fixed mutex key (MACRO/SECTOR) — check directly
+				if _daily_mutex.has(mutex_str):
+					continue
+			# INDIVIDUAL with {stock_id}: defer check to _is_mutex_blocked_for_stock()
+
 		# Compute weight
 		var w: float = float(t.get("weight_base", 1.0))
 		# Apply sector bias from theme
@@ -480,7 +498,7 @@ func _pick_impact() -> String:
 			return impact
 	return "SMALL"
 
-# ── INDIVIDUAL Stock Selection (GDD Rule 3-2) ──
+# ── INDIVIDUAL Stock Selection (GDD Rule 4-2) ──
 
 func _select_individual_stock(template: Dictionary, tick: int) -> StockData:
 	var tags: Array = template.get("event_tags", [])
@@ -507,6 +525,10 @@ func _select_individual_stock(template: Dictionary, tick: int) -> StockData:
 				if abs_tick - last_t < 90:
 					continue
 
+			# Mutex check for INDIVIDUAL templates with {stock_id} placeholder
+			if _is_mutex_blocked_for_stock(template, stock.stock_id):
+				continue
+
 			var w: float = stock.sector_sensitivity * float(VOL_WEIGHT.get(stock.volatility_profile, 1.0))
 			candidates.append(stock)
 			weights.append(w)
@@ -516,7 +538,7 @@ func _select_individual_stock(template: Dictionary, tick: int) -> StockData:
 
 	return _weighted_random_pick(candidates, weights)
 
-# ── Text Resolution (GDD Rule 3-1) ──
+# ── Text Resolution (GDD Rule 4-1) ──
 
 func _resolve_text(
 	template: Dictionary, direction: int, field: String, stock: StockData
@@ -555,7 +577,7 @@ func _resolve_text(
 
 	return text
 
-# ── News Delay Queue Processing (GDD Rule 4) ──
+# ── News Delay Queue Processing (GDD Rule 5) ──
 
 func _process_news_delay_queue(tick: int) -> void:
 	var to_display: Array[Dictionary] = []
@@ -574,7 +596,7 @@ func _process_news_delay_queue(tick: int) -> void:
 
 
 func _process_market_close_queue() -> void:
-	## GDD Rule 4-3: INDIVIDUAL/SECTOR → discard, MACRO → summary
+	## GDD Rule 5-3: INDIVIDUAL/SECTOR → discard, MACRO → summary
 	var macro_pending: Array[Dictionary] = []
 
 	for entry: Dictionary in _news_delay_queue:
@@ -587,7 +609,7 @@ func _process_market_close_queue() -> void:
 	for entry: Dictionary in macro_pending:
 		on_news_display.emit(entry)
 
-# ── Overnight Events (GDD Rule 6) ──
+# ── Overnight Events (GDD Rule 7) ──
 
 func _generate_overnight_events() -> void:
 	_overnight_buffer.clear()
@@ -659,7 +681,7 @@ func _generate_overnight_events() -> void:
 
 
 func _generate_overnight_disclosures() -> void:
-	## GDD Rule 6-2: Per-stock 5% chance of INDIVIDUAL overnight disclosure
+	## GDD Rule 7-2: Per-stock 5% chance of INDIVIDUAL overnight disclosure
 	for stock_id: String in StockDatabase.get_all_stock_ids():
 		if randf() >= OVERNIGHT_INDIVIDUAL_PROB:
 			continue
@@ -744,6 +766,28 @@ func _select_overnight_template(scope: String, impact: String) -> Dictionary:
 	if candidates.is_empty():
 		return {}
 	return _weighted_random_pick(candidates, weights)
+
+# ── Mutex Group (GDD Rule 3-1) ──
+
+## Checks if a template is mutex-blocked for a specific stock.
+func _is_mutex_blocked_for_stock(template: Dictionary, stock_id: String) -> bool:
+	var mutex: Variant = template.get("mutex_group")
+	if mutex == null or not (mutex is String) or str(mutex) == "":
+		return false
+	var key: String = str(mutex).replace("{stock_id}", stock_id)
+	return _daily_mutex.has(key)
+
+
+## Registers a mutex key after an event fires.
+func _register_mutex(template: Dictionary, stock: StockData) -> void:
+	var mutex: Variant = template.get("mutex_group")
+	if mutex == null or not (mutex is String) or str(mutex) == "":
+		return
+	var key: String = str(mutex)
+	if stock != null:
+		key = key.replace("{stock_id}", stock.stock_id)
+	_daily_mutex[key] = template["template_id"]
+
 
 # ── Utilities ──
 

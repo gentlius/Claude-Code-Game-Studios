@@ -216,9 +216,14 @@ func _on_tick(tick_number: int, _day: int, _week: int) -> void:
 	for order: Dictionary in market_queue:
 		_fill_market_order(order)
 
-	# Check limit orders
+	# Check limit orders (skip halted stocks)
 	var still_pending: Array[Dictionary] = []
 	for order: Dictionary in _pending_limit_orders:
+		# Skip fill check if stock is halted by VI or CB
+		if PriceEngine.get_cb_stage() > 0 or PriceEngine.is_vi_halted(order["stock_id"]):
+			still_pending.append(order)
+			continue
+
 		var current_price: int = PriceEngine.get_current_price(order["stock_id"])
 		var should_fill: bool = false
 
@@ -372,6 +377,12 @@ func _validate_order(order: Dictionary) -> String:
 	if StockDatabase.get_stock(order["stock_id"]) == null:
 		return "존재하지 않는 종목입니다"
 
+	# 2.5. VI/CB halt check (GDD Rules 2-4, 2-5)
+	if PriceEngine.get_cb_stage() > 0:
+		return "서킷브레이커 발동 중입니다"
+	if PriceEngine.is_vi_halted(order["stock_id"]):
+		return "변동성완화장치(VI) 발동 중입니다"
+
 	# 3. Quantity
 	if order["quantity"] <= 0:
 		return "수량은 1 이상이어야 합니다"
@@ -419,6 +430,10 @@ func _validate_order(order: Dictionary) -> String:
 	if order["order_type"] == "LIMIT":
 		if order["limit_price"] <= 0:
 			return "지정가는 0보다 커야 합니다"
+		# 9. Tick size validation (GDD Rule 5-3)
+		var tick_size: int = PriceEngine.get_tick_size(order["limit_price"])
+		if order["limit_price"] % tick_size != 0:
+			return "지정가가 호가 단위(%d원)에 맞지 않습니다" % tick_size
 
 	return ""
 

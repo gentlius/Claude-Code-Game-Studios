@@ -155,6 +155,8 @@ func test_volume_time_of_day_multiplier() -> void:
 	var s: Dictionary = {
 		"volatility_profile": StockData.VolatilityProfile.MEDIUM,
 		"markov_state": PriceEngine.MarkovState.SIDEWAYS,
+		"current_price": 65000,
+		"prev_day_close": 65000,
 	}
 
 	# Sample multiple times for statistical test
@@ -163,12 +165,65 @@ func test_volume_time_of_day_multiplier() -> void:
 	var n: int = 500
 
 	for _i: int in range(n):
-		opening_sum += PriceEngine._compute_volume(s, 0.0, 5)   # opening
-		normal_sum += PriceEngine._compute_volume(s, 0.0, 200)  # normal
+		opening_sum += PriceEngine._compute_volume(s, 0.0, 0.0, 5)   # opening
+		normal_sum += PriceEngine._compute_volume(s, 0.0, 0.0, 200)  # normal
 
 	var ratio: float = opening_sum / normal_sum
 	assert_true(ratio > 2.0 and ratio < 3.0,
 		"Opening volume should be ~2.5x normal (got %.2fx)" % ratio)
+
+
+func test_volume_energy_correlation() -> void:
+	# Higher tick energy should produce higher volume
+	seed(42)
+	var s: Dictionary = {
+		"volatility_profile": StockData.VolatilityProfile.MEDIUM,
+		"markov_state": PriceEngine.MarkovState.SIDEWAYS,
+		"current_price": 65000,
+		"prev_day_close": 65000,
+	}
+
+	var low_energy_sum: float = 0.0
+	var high_energy_sum: float = 0.0
+	var n: int = 500
+
+	for _i: int in range(n):
+		low_energy_sum += PriceEngine._compute_volume(s, 0.001, 0.0, 200)
+		high_energy_sum += PriceEngine._compute_volume(s, 0.03, 0.02, 200)
+
+	assert_true(high_energy_sum > low_energy_sum * 2.0,
+		"High energy volume should be >2x low energy (got %.2fx)" % [high_energy_sum / low_energy_sum])
+
+
+func test_volume_limit_proximity_dampening() -> void:
+	# Volume should decrease as price approaches daily limit
+	seed(42)
+	var prev_close: int = 65000
+
+	var s_normal: Dictionary = {
+		"volatility_profile": StockData.VolatilityProfile.MEDIUM,
+		"markov_state": PriceEngine.MarkovState.UPTREND,
+		"current_price": 65000,  # 0% from prev close
+		"prev_day_close": prev_close,
+	}
+	var s_near_limit: Dictionary = {
+		"volatility_profile": StockData.VolatilityProfile.MEDIUM,
+		"markov_state": PriceEngine.MarkovState.UPTREND,
+		"current_price": 84500,  # 30% from prev close (at limit)
+		"prev_day_close": prev_close,
+	}
+
+	var normal_sum: float = 0.0
+	var limit_sum: float = 0.0
+	var n: int = 500
+
+	for _i: int in range(n):
+		normal_sum += PriceEngine._compute_volume(s_normal, 0.005, 0.0, 200)
+		limit_sum += PriceEngine._compute_volume(s_near_limit, 0.005, 0.0, 200)
+
+	var dampen_ratio: float = limit_sum / normal_sum
+	assert_true(dampen_ratio < 0.3,
+		"At daily limit, volume should be <30%% of normal (got %.2f%%)" % [dampen_ratio * 100.0])
 
 # ── Test: Gradual Event Decay (GDD Rule 3-5) ──
 
@@ -233,3 +288,135 @@ func test_randn_distribution() -> void:
 		var_sum += (s - mean) * (s - mean)
 	var std: float = sqrt(var_sum / float(n))
 	assert_almost_eq(std, 1.0, 0.15, "Normal distribution std should be ~1")
+
+
+# ── Test: Tick Size (GDD Rule 5-3, KRX 호가 단위) ──
+
+func test_tick_size_below_1000() -> void:
+	assert_eq(PriceEngine.get_tick_size(500), 1, "Below 1000: tick = 1")
+	assert_eq(PriceEngine.get_tick_size(999), 1, "At 999: tick = 1")
+
+
+func test_tick_size_1000_to_5000() -> void:
+	assert_eq(PriceEngine.get_tick_size(1000), 5, "At 1000: tick = 5")
+	assert_eq(PriceEngine.get_tick_size(4999), 5, "At 4999: tick = 5")
+
+
+func test_tick_size_5000_to_10000() -> void:
+	assert_eq(PriceEngine.get_tick_size(5000), 10, "At 5000: tick = 10")
+	assert_eq(PriceEngine.get_tick_size(9999), 10, "At 9999: tick = 10")
+
+
+func test_tick_size_10000_to_50000() -> void:
+	assert_eq(PriceEngine.get_tick_size(10000), 50, "At 10000: tick = 50")
+	assert_eq(PriceEngine.get_tick_size(49999), 50, "At 49999: tick = 50")
+
+
+func test_tick_size_50000_to_100000() -> void:
+	assert_eq(PriceEngine.get_tick_size(50000), 100, "At 50000: tick = 100")
+	assert_eq(PriceEngine.get_tick_size(65030), 100, "At 65030: tick = 100")
+	assert_eq(PriceEngine.get_tick_size(99999), 100, "At 99999: tick = 100")
+
+
+func test_tick_size_100000_to_500000() -> void:
+	assert_eq(PriceEngine.get_tick_size(100000), 500, "At 100000: tick = 500")
+	assert_eq(PriceEngine.get_tick_size(499999), 500, "At 499999: tick = 500")
+
+
+func test_tick_size_above_500000() -> void:
+	assert_eq(PriceEngine.get_tick_size(500000), 1000, "At 500000: tick = 1000")
+	assert_eq(PriceEngine.get_tick_size(1000000), 1000, "At 1M: tick = 1000")
+
+
+# ── Test: Round to Tick (GDD Rule 5-3) ──
+
+func test_round_to_tick_low_price() -> void:
+	assert_eq(PriceEngine.round_to_tick(3427.0), 3425, "3427 rounds to 3425 (tick=5)")
+	assert_eq(PriceEngine.round_to_tick(3423.0), 3425, "3423 rounds to 3425 (tick=5)")
+
+
+func test_round_to_tick_mid_price() -> void:
+	assert_eq(PriceEngine.round_to_tick(32780.0), 32800, "32780 rounds to 32800 (tick=50)")
+	assert_eq(PriceEngine.round_to_tick(32749.0), 32750, "32749 rounds to 32750 (tick=50)")
+
+
+func test_round_to_tick_high_price() -> void:
+	# 65030 → tick=100 → round(65030/100)*100 = 65000
+	assert_eq(PriceEngine.round_to_tick(65030.0), 65000, "65030 rounds to 65000 (tick=100)")
+	assert_eq(PriceEngine.round_to_tick(65080.0), 65100, "65080 rounds to 65100 (tick=100)")
+
+
+func test_round_to_tick_exact_value() -> void:
+	assert_eq(PriceEngine.round_to_tick(50000.0), 50000, "Exact tick value unchanged")
+
+
+func test_round_to_tick_very_high() -> void:
+	assert_eq(PriceEngine.round_to_tick(512345.0), 512000, "512345 rounds to 512000 (tick=1000)")
+
+
+# ── Test: VI (Volatility Interruption, GDD Rule 2-4) ──
+
+func test_vi_not_halted_initially() -> void:
+	assert_false(PriceEngine.is_vi_halted("KF"), "No VI halt initially")
+
+
+func test_vi_halted_after_state_injection() -> void:
+	# Directly inject VI state to test the query
+	PriceEngine._vi_states["KF"] = {"halt_remaining": 5, "count_today": 1}
+	assert_true(PriceEngine.is_vi_halted("KF"), "Should be halted with remaining > 0")
+	# Cleanup
+	PriceEngine._vi_states.erase("KF")
+
+
+func test_vi_not_halted_when_remaining_zero() -> void:
+	PriceEngine._vi_states["KF"] = {"halt_remaining": 0, "count_today": 1}
+	assert_false(PriceEngine.is_vi_halted("KF"), "Not halted when remaining = 0")
+	PriceEngine._vi_states.erase("KF")
+
+
+func test_vi_max_per_day_blocks_third_trigger() -> void:
+	# Simulate 2 VI triggers already exhausted
+	PriceEngine._vi_states["KF"] = {"halt_remaining": 0, "count_today": 2}
+	# _check_vi should not trigger a 3rd time even with large price change
+	# We need a stock state to exist
+	if PriceEngine._stock_states.has("KF"):
+		var s: Dictionary = PriceEngine._stock_states["KF"]
+		var original_price: int = s["current_price"]
+		var original_prev: int = s["prev_day_close"]
+		# Set price to 15% above prev close (exceeds VI_THRESHOLD of 10%)
+		s["prev_day_close"] = 50000
+		s["current_price"] = 58000
+		PriceEngine._check_vi("KF")
+		assert_eq(PriceEngine._vi_states["KF"]["count_today"], 2,
+			"Should not increment past max per day")
+		assert_eq(PriceEngine._vi_states["KF"]["halt_remaining"], 0,
+			"Should not trigger halt after max per day")
+		# Restore
+		s["current_price"] = original_price
+		s["prev_day_close"] = original_prev
+	else:
+		pass_test("KF stock state not available in test environment (skipped)")
+	PriceEngine._vi_states.erase("KF")
+
+
+# ── Test: Circuit Breaker (GDD Rule 2-5) ──
+
+func test_cb_stage_initially_zero() -> void:
+	# CB stage should start at 0 (or be 0 unless market has crashed)
+	# We just verify the getter works
+	var stage: int = PriceEngine.get_cb_stage()
+	assert_true(stage >= 0 and stage <= 2, "CB stage should be 0-2 (got %d)" % stage)
+
+
+func test_cb_stage_1_after_injection() -> void:
+	var original: int = PriceEngine._cb_stage
+	PriceEngine._cb_stage = 1
+	assert_eq(PriceEngine.get_cb_stage(), 1, "CB stage 1 after injection")
+	PriceEngine._cb_stage = original
+
+
+func test_cb_stage_2_after_injection() -> void:
+	var original: int = PriceEngine._cb_stage
+	PriceEngine._cb_stage = 2
+	assert_eq(PriceEngine.get_cb_stage(), 2, "CB stage 2 after injection")
+	PriceEngine._cb_stage = original

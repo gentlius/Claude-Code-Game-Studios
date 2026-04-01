@@ -31,8 +31,8 @@
 | 5 | 주문 처리 엔진 (Order Engine) | Gameplay | MVP | Approved | [order-engine.md](order-engine.md) | 종목 DB, 재화 시스템, 가격 엔진, 게임 시계, 포트폴리오 |
 | 6 | 포트폴리오 관리 (Portfolio Manager) | Gameplay | MVP | Approved | [portfolio-manager.md](portfolio-manager.md) | 종목 DB, 재화 시스템 |
 | 7 | AI 경쟁자 시스템 (AI Competitors) | Gameplay | V-Slice | Not Started | — | 가격 엔진, 주문 엔진, 포트폴리오 |
-| 8 | 스킬 트리 시스템 (Skill Tree) | Progression | V-Slice | Not Started | — | 경험치 시스템 |
-| 9 | 경험치 시스템 (XP System) | Progression | V-Slice | Not Started | — | 주문 엔진, 포트폴리오 |
+| 8 | 스킬 트리 시스템 (Skill Tree) | Progression | V-Slice | Approved | [skill-tree.md](skill-tree.md) | 경험치 시스템 |
+| 9 | 경험치 시스템 (XP System) | Progression | V-Slice | Approved | [xp-system.md](xp-system.md) | 주문 엔진, 포트폴리오, 게임 시계 |
 | 10 | 시즌/대회 관리 (Season Manager) | Progression | V-Slice | Not Started | — | 가격 엔진, 포트폴리오, AI 경쟁자, 재화 |
 | 11 | 재화 시스템 (Currency System) | Economy | MVP | Approved | [currency-system.md](currency-system.md) | — |
 | 12 | 트레이딩 스크린 (Main HUD) | UI | MVP | Approved | [trading-screen.md](trading-screen.md) | 가격 엔진, 주문 엔진, 포트폴리오, 게임 시계 |
@@ -165,11 +165,11 @@
 | Metric | Count |
 |--------|-------|
 | Total systems identified | 21 |
-| Design docs started | 11 |
-| Design docs reviewed | 11 |
-| Design docs approved | 11 |
+| Design docs started | 13 |
+| Design docs reviewed | 13 |
+| Design docs approved | 13 |
 | MVP systems designed | 11/11 |
-| Vertical Slice systems designed | 0/6 |
+| Vertical Slice systems designed | 2/6 |
 
 ---
 

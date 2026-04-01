@@ -54,14 +54,16 @@ CandleData {
 
 ##### 1-2. 타임프레임
 
+1틱 = 게임시간 15초. 타임프레임은 게임시간 기준으로 표기한다.
+
 | 타임프레임 | 틱 수 | 1거래일(390틱) 내 캔들 수 | 용도 |
 |-----------|-------|------------------------|------|
-| 1분 (1T) | 1틱 | 390개 | 초단타 분석. 실시간 가격 추적 |
-| 5분 (5T) | 5틱 | 78개 | 단기 패턴 분석 |
-| 15분 (15T) | 15틱 | 26개 | 중기 추세 분석 |
-| 1일 (1D) | 390틱 | 1개 | 장기 추세. 시즌 전체 조망 |
+| 1분 (M1) | 4틱 | 97개 | 단타 분석. 실시간 가격 추적 |
+| 5분 (M5) | 20틱 | 19개 | 단기 패턴 분석 |
+| 15분 (M15) | 60틱 | 6개 | 중기 추세 분석 |
+| 1일 (D1) | 390틱 | 1개 | 장기 추세. 시즌 전체 조망 |
 
-기본 타임프레임: **5분(5T)**. 플레이어가 탭으로 전환 가능.
+기본 타임프레임: **1분(M1)**. 플레이어가 탭으로 전환 가능.
 
 ##### 1-3. 캔들 집계
 
@@ -113,6 +115,8 @@ aggregate_candle(ticks[], timeframe):
 
 ##### 2-2. Y축 자동 스케일 알고리즘
 
+**Step 1: 가격 범위 계산**
+
 ```
 visible_candles = candles[scroll_offset .. scroll_offset + visible_count]
 price_min = min(c.low for c in visible_candles)
@@ -126,8 +130,58 @@ effective_range = max(price_range, min_range)
 # 패딩 적용
 padded_min = price_min - effective_range × y_axis_padding
 padded_max = price_max + effective_range × y_axis_padding
+```
 
-# Y좌표 변환
+**Step 2: 호가 단위 기반 Y축 그리드 (nice_step)**
+
+그리드 라인을 호가 단위의 배수에 정렬하여, 모든 눈금이 실제 체결 가능한
+가격에 위치하도록 한다.
+
+```
+tick_size = get_tick_size(price_mid)     # 현재 가격대의 호가 단위
+                                         # price_mid = (padded_min + padded_max) / 2
+raw_step = (padded_max - padded_min) / target_grid_lines   # target = 5
+
+# 호가 단위의 배수 중 raw_step에 가장 가까운 "보기 좋은" 값 선택
+nice_step = find_nice_step(raw_step, tick_size)
+
+# 그리드 라인: nice_step 간격으로, 첫 라인은 padded_min 위의 첫 배수
+first_line = ceil(padded_min / nice_step) × nice_step
+grid_lines = [first_line, first_line + nice_step, first_line + 2×nice_step, ...]
+             while line <= padded_max
+```
+
+**nice_step 선택 알고리즘**:
+
+```
+find_nice_step(raw_step: float, tick_size: int) -> int:
+    # 호가 단위의 배수로 구성된 후보 목록
+    NICE_MULTIPLIERS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]
+
+    for m in NICE_MULTIPLIERS:
+        candidate = tick_size × m
+        if candidate >= raw_step:
+            return candidate
+
+    return tick_size × NICE_MULTIPLIERS[-1]   # fallback
+```
+
+**예시**:
+
+| 종목 | 가격대 | 호가 단위 | 1분봉 범위 | raw_step | nice_step | 그리드 라벨 예시 |
+|------|--------|----------|-----------|----------|-----------|----------------|
+| GC (38,000원) | ~50,000 | 50원 | ~300원 | ~60원 | 100원(50×2) | 37,900 / 38,000 / 38,100 |
+| KF (65,000원) | ~100,000 | 100원 | ~500원 | ~100원 | 100원(100×1) | 64,800 / 64,900 / 65,000 / 65,100 |
+| SC (120,000원) | ~500,000 | 500원 | ~1,200원 | ~240원 | 500원(500×1) | 119,500 / 120,000 / 120,500 |
+| SK (210,000원) | ~500,000 | 500원 | ~2,000원 | ~400원 | 500원(500×1) | 209,000 / 209,500 / 210,000 / 210,500 |
+
+> **설계 의도**: 그리드 라벨이 항상 깔끔한 라운드 넘버이면서, 해당 가격대에서
+> 실제 존재할 수 있는 가격에만 위치한다. 호가 단위가 100원인 종목에서 64,850원
+> 같은 불가능한 가격이 그리드에 찍히지 않는다.
+
+**Y좌표 변환** (기존과 동일):
+
+```
 y_position(price) = chart_height × (1 - (price - padded_min) / (padded_max - padded_min))
 ```
 
@@ -137,8 +191,10 @@ y_position(price) = chart_height × (1 - (price - padded_min) / (padded_max - pa
 | `visible_count` | int | 20~200 | 줌 레벨 | 화면에 표시되는 캔들 수 |
 | `min_y_range_ratio` | float | 0.01~0.05 | config | 최소 Y축 범위 비율 |
 | `y_axis_padding` | float | 0.02~0.10 | config | Y축 상하 여백 비율 |
+| `target_grid_lines` | int | 3~8 | config | 목표 그리드 라인 수 (기본 5) |
 
-BREAKOUT 등 급변 시 `price_range`가 커지면서 자동으로 Y축이 확장된다.
+BREAKOUT 등 급변 시 `price_range`가 커지면서 자동으로 Y축이 확장되고,
+nice_step도 더 큰 배수로 올라간다.
 스크롤 시 뷰포트 내 캔들만으로 재계산하므로 과거 탐색 시에도 적절한 스케일이 유지된다.
 
 #### 규칙 3. 스킬별 오버레이
@@ -370,6 +426,7 @@ candle_end_tick = candle_start_tick + timeframe_ticks - 1
 | `candle_down_color` | 파랑 (#3498DB) | — | — | — |
 | `render_skip_at_speed` | int, 2 | 1~4 | 더 높은 배속부터 스킵 시작 (2x에서도 매 틱 렌더 = 시각 품질 향상, 성능 부하 증가) | 더 낮은 배속부터 스킵 시작 (1x부터 스킵 = 성능 개선, 시각 품질 저하) |
 | `y_axis_padding` | 5% | 2~10% | 여유 있는 차트 | 꽉 찬 차트 |
+| `target_grid_lines` | 5 | 3~8 | 촘촘한 그리드 (정밀 가격 읽기) | 여유 있는 그리드 (깔끔한 화면) |
 | `ma_periods` | [5, 20, 60] | 각 1~200 | 장기 추세 추적 | 단기 추세 추적 |
 | `rsi_period` | 14 | 7~21 | 느린 반응 | 빠른 반응, 노이즈 증가 |
 
@@ -384,6 +441,8 @@ candle_end_tick = candle_start_tick + timeframe_ticks - 1
 - [ ] 과거 스크롤 + "현재로 이동" 버튼이 정상 작동
 - [ ] 크로스헤어로 가격/시간을 정확히 표시
 - [ ] BREAKOUT 시 Y축 스케일이 자동 조정됨
+- [ ] Y축 그리드 라벨이 호가 단위의 배수에 정렬됨 (불가능한 가격이 표시되지 않음)
+- [ ] 가격대가 바뀌어 호가 단위가 변경되면 그리드 간격이 동적으로 조정됨
 - [ ] 데이터 부족 시 지표 미표시 + "데이터 부족" 안내
 - [ ] 성능: 60fps 유지 (1분봉 200캔들 + MA3개 + RSI 동시 표시 기준)
 - [ ] 성능: 타임프레임 전환 100ms 이내

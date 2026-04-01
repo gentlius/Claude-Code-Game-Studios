@@ -44,14 +44,16 @@ MVP에서 10종목 전체를 포함한다. 10개 섹터의 다양성이 "읽는 
 | `sector` | enum | 소속 섹터 | SEMICONDUCTOR |
 | `description` | string | 기업 설명 (1-2문장) | "글로벌 반도체 설계 및 제조 기업" |
 | `base_price` | int | 시즌 시작 시 기준가 (원) | 65000 |
-| `market_cap_tier` | enum | 시가총액 등급 | LARGE / MID / SMALL |
+| `listed_shares` | int | 상장주식수. 시총가중지수 산출 기준 | 1500000 |
 | `volatility_profile` | enum | 변동성 프로필 | LOW / MEDIUM / HIGH / EXTREME |
 | `sector_sensitivity` | float | 섹터 뉴스 반응 강도 (0.0-2.0) | 1.0 |
 | `macro_sensitivity` | float | 거시경제 뉴스 반응 강도 (0.0-2.0) | 0.8 |
 | `event_tags` | string[] | 반응하는 이벤트 태그 목록 | ["semiconductor", "export", "tech"] |
 | `per` | float \| null | 주가수익비율. 적자 기업은 null (UI에 "N/A" 표시) | 12.5 (메디진: null) |
-| `market_cap` | int | 시가총액 (억 원). UI 표시 전용 참고 정보. 게임 메카닉에 영향 없음 | 350000 |
 | `dividend_yield` | float | 배당 수익률 (%). MVP에서는 UI 표시 전용 참고 정보. 향후 배당 이벤트 시스템 도입 시 활용 | 1.8 |
+
+> **`market_cap`과 `market_cap_tier` 제거됨**: `listed_shares` 도입으로 시가총액은
+> `current_price × listed_shares`로 실시간 계산. 시총 등급은 런타임 분류로 대체.
 
 ### 섹터 정의
 
@@ -70,22 +72,25 @@ MVP에서 10종목 전체를 포함한다. 10개 섹터의 다양성이 "읽는 
 
 ### 종목 목록
 
-| # | ID | Name | Ticker | Sector | Base Price | Vol Profile | Cap Tier | PER | Div Yield | Sector Sens | Macro Sens |
-|---|-----|------|--------|--------|-----------|-------------|----------|-----|-----------|-------------|------------|
-| 1 | STARCHIP | 스타칩 | STC | SEMICONDUCTOR | 65,000 | MEDIUM | LARGE | 12.5 | 1.8% | 1.0 | 1.2 |
-| 2 | GREENCELL | 그린셀 | GRC | BATTERY | 320,000 | HIGH | LARGE | 45.0 | 0.0% | 1.2 | 0.8 |
-| 3 | MEDIGIN | 메디진 | MDG | BIO | 180,000 | EXTREME | MID | -* | 0.0% | 0.8 | 0.5 |
-| 4 | AUTOMOBILE | 오토모빌 | ATM | AUTO | 185,000 | MEDIUM | LARGE | 8.0 | 3.5% | 1.0 | 1.3 |
-| 5 | KOREABANK | 코리아뱅크 | KBK | FINANCE | 52,000 | LOW | LARGE | 6.5 | 5.0% | 1.0 | 1.5 |
-| 6 | STARENT | 스타엔터 | STE | ENTERTAINMENT | 95,000 | HIGH | MID | 28.0 | 0.5% | 0.8 | 0.4 |
-| 7 | LIFEMART | 라이프마트 | LFM | RETAIL | 120,000 | LOW | LARGE | 15.0 | 2.5% | 0.8 | 0.6 |
-| 8 | BUILDONE | 빌드원 | BDO | CONSTRUCTION | 38,000 | MEDIUM | MID | 7.0 | 4.0% | 1.2 | 1.2 |
-| 9 | PIXELGAMES | 픽셀게임즈 | PXG | GAMING | 210,000 | HIGH | MID | 22.0 | 1.0% | 0.8 | 0.4 |
-| 10 | CHEMITEK | 케미텍 | CMT | ENERGY | 150,000 | MEDIUM | LARGE | 10.0 | 3.0% | 1.0 | 1.0 |
+| # | ID | Name | Sector | Base Price | Listed Shares | 초기 시총 (억) | Vol Profile | PER | Sector Sens | Macro Sens |
+|---|-----|------|--------|-----------|---------------|---------------|-------------|-----|-------------|------------|
+| 1 | KF | 코스모푸드 | 식품 | 65,000 | 800,000 | 520 | MEDIUM | 12.5 | 1.0 | 0.8 |
+| 2 | SC | 스타칩 | 반도체 | 120,000 | 1,500,000 | 1,800 | HIGH | 18.3 | 1.5 | 1.2 |
+| 3 | KB | 코리아뱅크 | 금융 | 52,000 | 2,000,000 | 1,040 | LOW | 6.8 | 0.5 | 1.5 |
+| 4 | NE | 넥스트엔터 | 엔터 | 42,000 | 600,000 | 252 | HIGH | 25.1 | 0.8 | 0.6 |
+| 5 | MG | 메디진 | 바이오 | 180,000 | 200,000 | 360 | EXTREME | -* | 1.8 | 1.0 |
+| 6 | GC | 그린케미 | 화학 | 38,000 | 1,200,000 | 456 | MEDIUM | 9.7 | 1.2 | 1.0 |
+| 7 | DH | 대한중공업 | 조선 | 95,000 | 1,000,000 | 950 | LOW | 8.2 | 1.0 | 1.3 |
+| 8 | PT | 피플텔레콤 | 통신 | 78,000 | 900,000 | 702 | MEDIUM | 11.0 | 1.0 | 1.0 |
+| 9 | SK | 스카이로직 | 반도체 | 210,000 | 2,500,000 | 5,250 | HIGH | 22.0 | 1.3 | 0.9 |
+| 10 | BF | 블루팜 | 바이오 | 320,000 | 150,000 | 480 | EXTREME | -* | 2.0 | 0.7 |
 
-\* 메디진: 바이오 기업으로 아직 흑자 전환 전. PER 미적용 (적자 기업).
+\* 메디진, 블루팜: 바이오 기업으로 아직 흑자 전환 전. PER 미적용 (적자 기업).
 
-**MVP 종목** (10개): 전체 포함. 10개 섹터의 다양성이 코어 루프의 "읽는 재미" 기반.
+**시가총액 = current_price × listed_shares** (실시간 계산). 시총가중지수(KOSPI 방식) 산출에 사용.
+SK(스카이로직)이 최대 시총으로 지수에 가장 큰 영향을 미치고, BF/NE는 소형주로 지수 영향 미미.
+
+**MVP 종목** (10개): 전체 포함. 8개 섹터의 다양성이 코어 루프의 "읽는 재미" 기반.
 
 ### States and Transitions
 

@@ -35,6 +35,7 @@ var _lbl_season_info: Label
 var _lbl_tick_progress: Label
 var _progress_bar: ProgressBar
 var _lbl_speed: Label
+var _lbl_market_index: Label
 var _lbl_total_assets: Label
 var _lbl_cash: Label
 var _btn_market_open: Button
@@ -47,8 +48,8 @@ var _lbl_order_stock_name: Label
 var _lbl_order_current_price: Label
 var _btn_buy_tab: Button
 var _btn_sell_tab: Button
-var _radio_market: CheckBox
-var _radio_limit: CheckBox
+var _radio_market: Button
+var _radio_limit: Button
 var _spin_quantity: SpinBox
 var _spin_limit_price: SpinBox
 var _limit_price_row: HBoxContainer
@@ -84,10 +85,12 @@ var _btn_pause: Button
 # ── Lifecycle ──
 
 func _ready() -> void:
-	_build_ui()
-	_connect_signals()
 	_stock_ids = StockDatabase.get_all_stock_ids()
 	_init_prev_close()
+	_build_ui()
+	_connect_signals()
+	_set_order_side("BUY")
+	_set_order_type("MARKET")
 	if _stock_ids.size() > 0:
 		_select_stock(_stock_ids[0])
 	_sync_ui_state_from_clock()
@@ -300,15 +303,24 @@ func _select_stock(stock_id: String) -> void:
 
 func _set_order_side(side: String) -> void:
 	_order_side = side
-	_btn_buy_tab.button_pressed = (side == "BUY")
-	_btn_sell_tab.button_pressed = (side == "SELL")
+	# Style active tab with full color, inactive with dim
+	if side == "BUY":
+		ThemeSetup.apply_buy_button(_btn_buy_tab)
+		ThemeSetup.apply_button_theme(_btn_sell_tab)
+	else:
+		ThemeSetup.apply_button_theme(_btn_buy_tab)
+		ThemeSetup.apply_sell_button(_btn_sell_tab)
 	_update_order_panel_for_stock()
 
 
 func _set_order_type(type: String) -> void:
 	_order_type = type
-	_radio_market.button_pressed = (type == "MARKET")
-	_radio_limit.button_pressed = (type == "LIMIT")
+	if type == "MARKET":
+		ThemeSetup.apply_accent_button(_radio_market)
+		ThemeSetup.apply_button_theme(_radio_limit)
+	else:
+		ThemeSetup.apply_button_theme(_radio_market)
+		ThemeSetup.apply_accent_button(_radio_limit)
 	_limit_price_row.visible = (type == "LIMIT")
 	_update_estimated_amount()
 
@@ -410,12 +422,11 @@ func _show_order_error(msg: String) -> void:
 
 
 func _flash_order_panel(side: String) -> void:
-	var flash_color: Color = Color(0.2, 0.8, 0.2, 0.3) if side == "BUY" else Color(0.9, 0.5, 0.1, 0.3)
+	var flash_color: Color = Color(0.2, 0.8, 0.2, 1.0) if side == "BUY" else Color(0.9, 0.5, 0.1, 1.0)
 	var panel: Control = _btn_submit_order.get_parent()
-	var original: Color = panel.modulate
 	panel.modulate = flash_color
 	var tween: Tween = create_tween()
-	tween.tween_property(panel, "modulate", original, 0.5)
+	tween.tween_property(panel, "modulate", Color.WHITE, 0.5)
 
 
 # ── Pending Orders ──
@@ -483,36 +494,43 @@ func _update_stock_row(row: HBoxContainer, stock_id: String) -> void:
 	var is_held: bool = PortfolioManager.get_holding(stock_id) != null
 	var is_selected: bool = (stock_id == _selected_stock_id)
 
-	# Labels: [marker] [ticker] [price] [change%] [arrow] [held]
+	# Layout: [0]=marker [1]=key [2]=ticker [3]=price [4]=change [5]=held
 	var children: Array[Node] = []
 	for child: Node in row.get_children():
 		children.append(child)
 
-	if children.size() < 4:
+	if children.size() < 6:
 		return
 
-	# Marker label (▶ for selected)
+	# Selection marker
 	var lbl_marker: Label = children[0] as Label
 	lbl_marker.text = "▶" if is_selected else "  "
 
-	# Ticker + price
-	var lbl_info: Label = children[1] as Label
-	lbl_info.text = "%s  ₩%s" % [stock_id, _format_number(price)]
+	# Price
+	var lbl_price: Label = children[3] as Label
+	lbl_price.text = "₩%s" % _format_number(price)
 
 	# Change %
-	var lbl_change: Label = children[2] as Label
+	var lbl_change: Label = children[4] as Label
 	var arrow: String = "▲" if change_pct > 0.0 else ("▼" if change_pct < 0.0 else "─")
-	lbl_change.text = "%+.1f%% %s" % [change_pct, arrow]
+	lbl_change.text = "%s%+.1f%%" % [arrow, change_pct]
 	if change_pct > 0.0:
-		lbl_change.add_theme_color_override("font_color", Color(0.9, 0.2, 0.2))
+		lbl_change.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
 	elif change_pct < 0.0:
-		lbl_change.add_theme_color_override("font_color", Color(0.2, 0.4, 0.9))
+		lbl_change.add_theme_color_override("font_color", ThemeSetup.LOSS_BLUE)
 	else:
-		lbl_change.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+		lbl_change.add_theme_color_override("font_color", ThemeSetup.NEUTRAL_GRAY)
 
 	# Held marker
-	var lbl_held: Label = children[3] as Label
+	var lbl_held: Label = children[5] as Label
 	lbl_held.text = "★" if is_held else ""
+
+	# Row background highlight for selected
+	if is_selected:
+		var sel_style: StyleBoxFlat = ThemeSetup.make_panel_style(ThemeSetup.BG_SELECTED, 3, ThemeSetup.BORDER_BRIGHT)
+		row.add_theme_stylebox_override("panel", sel_style)
+	else:
+		row.remove_theme_stylebox_override("panel")
 
 
 func _update_stock_list_highlight() -> void:
@@ -525,8 +543,14 @@ func _update_stock_list_highlight() -> void:
 			break
 		var sid: String = _stock_ids[i]
 		var row: HBoxContainer = items[i] as HBoxContainer
+		var is_selected: bool = (sid == _selected_stock_id)
 		var marker: Label = row.get_child(0) as Label
-		marker.text = "▶" if sid == _selected_stock_id else "  "
+		marker.text = "▶" if is_selected else "  "
+		if is_selected:
+			var sel_style: StyleBoxFlat = ThemeSetup.make_panel_style(ThemeSetup.BG_SELECTED, 3, ThemeSetup.BORDER_BRIGHT)
+			row.add_theme_stylebox_override("panel", sel_style)
+		else:
+			row.remove_theme_stylebox_override("panel")
 
 
 # ── Status Bar ──
@@ -571,6 +595,20 @@ func _update_status_bar() -> void:
 		_lbl_cash.text = "시드: ₩%s (예약: ₩%s)" % [_format_number(cash), _format_number(reserved)]
 	else:
 		_lbl_cash.text = "시드: ₩%s" % _format_number(cash)
+
+	# Market index display
+	var index_val: float = PriceEngine.get_market_index()
+	var index_change: float = PriceEngine.get_index_change_pct()
+	var sign_str: String = "+" if index_change >= 0.0 else ""
+	_lbl_market_index.text = "지수 %s (%s%.2f%%)" % [
+		_format_number(roundi(index_val)), sign_str, index_change
+	]
+	if index_change > 0.0:
+		_lbl_market_index.add_theme_color_override("font_color", Color(0.9, 0.2, 0.2))
+	elif index_change < 0.0:
+		_lbl_market_index.add_theme_color_override("font_color", Color(0.2, 0.4, 0.9))
+	else:
+		_lbl_market_index.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
 
 	_update_speed_display()
 
@@ -674,27 +712,38 @@ func _build_ui() -> void:
 	anchor_right = 1.0
 	anchor_bottom = 1.0
 
+	# Dark background
+	var bg_style: StyleBoxFlat = StyleBoxFlat.new()
+	bg_style.bg_color = ThemeSetup.BG_DARKEST
+	add_theme_stylebox_override("panel", bg_style)
+
 	# Main HBoxContainer: [stock_list | center_area | order_panel]
 	var main_hbox: HBoxContainer = HBoxContainer.new()
 	main_hbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	main_hbox.add_theme_constant_override("separation", 4)
+	main_hbox.add_theme_constant_override("separation", 2)
 	add_child(main_hbox)
 
-	# ── Left: Stock List (15%) ──
+	# ── Left: Stock List (15%, min 220px) ──
 	var stock_panel: PanelContainer = PanelContainer.new()
 	stock_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	stock_panel.size_flags_stretch_ratio = 0.15
+	stock_panel.size_flags_stretch_ratio = 0.18
+	stock_panel.custom_minimum_size.x = 220
+	stock_panel.add_theme_stylebox_override("panel", ThemeSetup.make_panel_style(ThemeSetup.BG_DARK))
 	main_hbox.add_child(stock_panel)
 
 	var stock_vbox: VBoxContainer = VBoxContainer.new()
+	stock_vbox.add_theme_constant_override("separation", 2)
 	stock_panel.add_child(stock_vbox)
 
 	var stock_title: Label = Label.new()
 	stock_title.text = "종목 리스트"
 	stock_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	stock_title.add_theme_font_size_override("font_size", 13)
+	ThemeSetup.style_label_secondary(stock_title)
 	stock_vbox.add_child(stock_title)
 
 	var stock_sep: HSeparator = HSeparator.new()
+	stock_sep.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
 	stock_vbox.add_child(stock_sep)
 
 	_stock_list_container = VBoxContainer.new()
@@ -707,10 +756,11 @@ func _build_ui() -> void:
 		var row: HBoxContainer = _create_stock_row(sid, i)
 		_stock_list_container.add_child(row)
 
-	# ── Center: Status bar + Chart + Bottom tabs (45%) ──
+	# ── Center: Status bar + Chart + Bottom tabs (50%) ──
 	var center_vbox: VBoxContainer = VBoxContainer.new()
 	center_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center_vbox.size_flags_stretch_ratio = 0.50
+	center_vbox.size_flags_stretch_ratio = 0.55
+	center_vbox.add_theme_constant_override("separation", 2)
 	main_hbox.add_child(center_vbox)
 
 	# Status bar
@@ -735,17 +785,20 @@ func _build_ui() -> void:
 
 func _build_status_bar(parent: VBoxContainer) -> void:
 	var bar: PanelContainer = PanelContainer.new()
+	bar.add_theme_stylebox_override("panel", ThemeSetup.make_panel_style(ThemeSetup.BG_PANEL, 2, ThemeSetup.BORDER_DIM))
 	parent.add_child(bar)
 
 	var hbox: HBoxContainer = HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 16)
+	hbox.add_theme_constant_override("separation", 12)
 	bar.add_child(hbox)
 
 	_lbl_season_info = Label.new()
 	_lbl_season_info.text = "1주차 월요일"
+	ThemeSetup.style_label_primary(_lbl_season_info)
 	hbox.add_child(_lbl_season_info)
 
 	var sep1: VSeparator = VSeparator.new()
+	sep1.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
 	hbox.add_child(sep1)
 
 	_progress_bar = ProgressBar.new()
@@ -765,38 +818,55 @@ func _build_status_bar(parent: VBoxContainer) -> void:
 
 	_lbl_speed = Label.new()
 	_lbl_speed.text = "▶ 1x"
+	ThemeSetup.style_label_primary(_lbl_speed)
 	hbox.add_child(_lbl_speed)
 
 	# Speed buttons
 	_btn_speed_1x = Button.new()
-	_btn_speed_1x.text = "1x"
+	_btn_speed_1x.text = "1x ⇧1"
 	_btn_speed_1x.pressed.connect(func() -> void: _set_speed(1.0))
+	ThemeSetup.apply_button_theme(_btn_speed_1x)
 	hbox.add_child(_btn_speed_1x)
 
 	_btn_speed_2x = Button.new()
-	_btn_speed_2x.text = "2x"
+	_btn_speed_2x.text = "2x ⇧2"
 	_btn_speed_2x.pressed.connect(func() -> void: _set_speed(2.0))
+	ThemeSetup.apply_button_theme(_btn_speed_2x)
 	hbox.add_child(_btn_speed_2x)
 
 	_btn_speed_4x = Button.new()
-	_btn_speed_4x.text = "4x"
+	_btn_speed_4x.text = "4x ⇧3"
 	_btn_speed_4x.pressed.connect(func() -> void: _set_speed(4.0))
+	ThemeSetup.apply_button_theme(_btn_speed_4x)
 	hbox.add_child(_btn_speed_4x)
 
 	_btn_pause = Button.new()
 	_btn_pause.text = "⏸ Space"
 	_btn_pause.pressed.connect(_handle_pause_toggle)
+	ThemeSetup.apply_button_theme(_btn_pause)
 	hbox.add_child(_btn_pause)
 
 	var sep3: VSeparator = VSeparator.new()
+	sep3.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
 	hbox.add_child(sep3)
+
+	_lbl_market_index = Label.new()
+	_lbl_market_index.text = "지수 1,000.0 (0.00%)"
+	ThemeSetup.style_label_primary(_lbl_market_index)
+	hbox.add_child(_lbl_market_index)
+
+	var sep4: VSeparator = VSeparator.new()
+	sep4.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
+	hbox.add_child(sep4)
 
 	_lbl_total_assets = Label.new()
 	_lbl_total_assets.text = "총 자산: ₩0"
+	ThemeSetup.style_label_primary(_lbl_total_assets)
 	hbox.add_child(_lbl_total_assets)
 
 	_lbl_cash = Label.new()
 	_lbl_cash.text = "시드: ₩0"
+	ThemeSetup.style_label_secondary(_lbl_cash)
 	hbox.add_child(_lbl_cash)
 
 	# Market open button (PRE_MARKET only)
@@ -804,6 +874,7 @@ func _build_status_bar(parent: VBoxContainer) -> void:
 	_btn_market_open.text = "장 시작 Enter"
 	_btn_market_open.visible = false
 	_btn_market_open.pressed.connect(func() -> void: GameClock.confirm_market_open())
+	ThemeSetup.apply_accent_button(_btn_market_open)
 	hbox.add_child(_btn_market_open)
 
 
@@ -821,6 +892,7 @@ func _build_bottom_panel(parent: VBoxContainer) -> void:
 	_btn_tab_news.text = "뉴스 Tab"
 	_btn_tab_news.toggle_mode = true
 	_btn_tab_news.button_pressed = true
+	ThemeSetup.apply_button_theme(_btn_tab_news)
 	_btn_tab_news.pressed.connect(func() -> void:
 		_news_panel.visible = true
 		_portfolio_panel.visible = false
@@ -833,6 +905,7 @@ func _build_bottom_panel(parent: VBoxContainer) -> void:
 	_btn_tab_portfolio.text = "포트폴리오 Tab"
 	_btn_tab_portfolio.toggle_mode = true
 	_btn_tab_portfolio.button_pressed = false
+	ThemeSetup.apply_button_theme(_btn_tab_portfolio)
 	_btn_tab_portfolio.pressed.connect(func() -> void:
 		_news_panel.visible = false
 		_portfolio_panel.visible = true
@@ -862,43 +935,47 @@ func _build_bottom_panel(parent: VBoxContainer) -> void:
 func _build_order_panel(parent: HBoxContainer) -> void:
 	var panel: PanelContainer = PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.size_flags_stretch_ratio = 0.20
+	panel.size_flags_stretch_ratio = 0.22
+	panel.custom_minimum_size.x = 240
+	panel.add_theme_stylebox_override("panel", ThemeSetup.make_panel_style(ThemeSetup.BG_DARK))
 	parent.add_child(panel)
 
 	var vbox: VBoxContainer = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 8)
+	vbox.add_theme_constant_override("separation", 6)
 	panel.add_child(vbox)
 
 	# Stock name + price
 	_lbl_order_stock_name = Label.new()
 	_lbl_order_stock_name.text = "종목 선택"
 	_lbl_order_stock_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_lbl_order_stock_name.add_theme_font_size_override("font_size", 15)
+	ThemeSetup.style_label_primary(_lbl_order_stock_name)
 	vbox.add_child(_lbl_order_stock_name)
 
 	_lbl_order_current_price = Label.new()
 	_lbl_order_current_price.text = "현재가 ₩0"
 	_lbl_order_current_price.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_lbl_order_current_price.add_theme_font_size_override("font_size", 16)
+	ThemeSetup.style_label_primary(_lbl_order_current_price)
 	vbox.add_child(_lbl_order_current_price)
 
 	var sep1: HSeparator = HSeparator.new()
+	sep1.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
 	vbox.add_child(sep1)
 
 	# Buy/Sell tabs
 	var side_hbox: HBoxContainer = HBoxContainer.new()
+	side_hbox.add_theme_constant_override("separation", 4)
 	vbox.add_child(side_hbox)
 
 	_btn_buy_tab = Button.new()
 	_btn_buy_tab.text = "매수 B"
-	_btn_buy_tab.toggle_mode = true
-	_btn_buy_tab.button_pressed = true
 	_btn_buy_tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_btn_buy_tab.pressed.connect(func() -> void: _set_order_side("BUY"))
 	side_hbox.add_child(_btn_buy_tab)
 
 	_btn_sell_tab = Button.new()
 	_btn_sell_tab.text = "매도 S"
-	_btn_sell_tab.toggle_mode = true
-	_btn_sell_tab.button_pressed = false
 	_btn_sell_tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_btn_sell_tab.pressed.connect(func() -> void: _set_order_side("SELL"))
 	side_hbox.add_child(_btn_sell_tab)
@@ -907,15 +984,15 @@ func _build_order_panel(parent: HBoxContainer) -> void:
 	var type_hbox: HBoxContainer = HBoxContainer.new()
 	vbox.add_child(type_hbox)
 
-	_radio_market = CheckBox.new()
+	_radio_market = Button.new()
 	_radio_market.text = "시장가"
-	_radio_market.button_pressed = true
+	_radio_market.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_radio_market.pressed.connect(func() -> void: _set_order_type("MARKET"))
 	type_hbox.add_child(_radio_market)
 
-	_radio_limit = CheckBox.new()
+	_radio_limit = Button.new()
 	_radio_limit.text = "지정가"
-	_radio_limit.button_pressed = false
+	_radio_limit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_radio_limit.pressed.connect(func() -> void: _set_order_type("LIMIT"))
 	type_hbox.add_child(_radio_limit)
 
@@ -955,32 +1032,38 @@ func _build_order_panel(parent: HBoxContainer) -> void:
 	_btn_max_qty = Button.new()
 	_btn_max_qty.text = "최대"
 	_btn_max_qty.pressed.connect(_calculate_max_quantity)
+	ThemeSetup.apply_button_theme(_btn_max_qty)
 	qty_hbox.add_child(_btn_max_qty)
 
 	# Estimated amount
 	_lbl_estimated_amount = Label.new()
 	_lbl_estimated_amount.text = "예상 금액: ₩0"
+	ThemeSetup.style_label_secondary(_lbl_estimated_amount)
 	vbox.add_child(_lbl_estimated_amount)
 
 	# Submit button
 	_btn_submit_order = Button.new()
 	_btn_submit_order.text = "주문 실행 Enter"
 	_btn_submit_order.pressed.connect(_submit_order)
+	_btn_submit_order.custom_minimum_size.y = 36
+	ThemeSetup.apply_accent_button(_btn_submit_order)
 	vbox.add_child(_btn_submit_order)
 
 	# Error label
 	_lbl_order_error = Label.new()
 	_lbl_order_error.text = ""
-	_lbl_order_error.add_theme_color_override("font_color", Color(0.9, 0.2, 0.2))
+	_lbl_order_error.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
 	_lbl_order_error.autowrap_mode = TextServer.AUTOWRAP_WORD
 	vbox.add_child(_lbl_order_error)
 
 	var sep2: HSeparator = HSeparator.new()
+	sep2.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
 	vbox.add_child(sep2)
 
 	# Pending orders
 	var pending_title: Label = Label.new()
 	pending_title.text = "미체결 주문"
+	ThemeSetup.style_label_secondary(pending_title)
 	vbox.add_child(pending_title)
 
 	var scroll: ScrollContainer = ScrollContainer.new()
@@ -994,6 +1077,7 @@ func _build_order_panel(parent: HBoxContainer) -> void:
 	# Cancel all button
 	_btn_cancel_order = Button.new()
 	_btn_cancel_order.text = "전체 취소 Esc"
+	ThemeSetup.apply_sell_button(_btn_cancel_order)
 	_btn_cancel_order.pressed.connect(func() -> void:
 		var pending: Array[Dictionary] = OrderEngine.get_pending_orders()
 		for order: Dictionary in pending:
@@ -1011,10 +1095,9 @@ func _build_overlays() -> void:
 	_pause_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_pause_overlay)
 
-	# Make it semi-transparent
-	var style: StyleBoxFlat = StyleBoxFlat.new()
-	style.bg_color = Color(0, 0, 0, 0.3)
-	_pause_overlay.add_theme_stylebox_override("panel", style)
+	var pause_style: StyleBoxFlat = StyleBoxFlat.new()
+	pause_style.bg_color = Color(0.0, 0.0, 0.0, 0.5)
+	_pause_overlay.add_theme_stylebox_override("panel", pause_style)
 
 	var pause_lbl: Label = Label.new()
 	pause_lbl.text = "⏸ 일시정지"
@@ -1022,6 +1105,7 @@ func _build_overlays() -> void:
 	pause_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	pause_lbl.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	pause_lbl.add_theme_font_size_override("font_size", 48)
+	pause_lbl.add_theme_color_override("font_color", ThemeSetup.TEXT_PRIMARY)
 	_pause_overlay.add_child(pause_lbl)
 
 	# Settlement panel
@@ -1029,6 +1113,7 @@ func _build_overlays() -> void:
 	_settlement_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	_settlement_panel.custom_minimum_size = Vector2(400, 300)
 	_settlement_panel.visible = false
+	_settlement_panel.add_theme_stylebox_override("panel", ThemeSetup.make_panel_style(ThemeSetup.BG_PANEL, 8, ThemeSetup.BORDER_BRIGHT, 2))
 	add_child(_settlement_panel)
 
 	var settle_vbox: VBoxContainer = VBoxContainer.new()
@@ -1039,23 +1124,28 @@ func _build_overlays() -> void:
 	_lbl_settlement_title.text = "정산"
 	_lbl_settlement_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_lbl_settlement_title.add_theme_font_size_override("font_size", 24)
+	ThemeSetup.style_label_primary(_lbl_settlement_title)
 	settle_vbox.add_child(_lbl_settlement_title)
 
 	_lbl_settlement_body = RichTextLabel.new()
 	_lbl_settlement_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_lbl_settlement_body.bbcode_enabled = false
+	_lbl_settlement_body.add_theme_color_override("default_color", ThemeSetup.TEXT_SECONDARY)
 	settle_vbox.add_child(_lbl_settlement_body)
 
 	_btn_settlement_confirm = Button.new()
 	_btn_settlement_confirm.text = "확인 Enter"
+	ThemeSetup.apply_accent_button(_btn_settlement_confirm)
+	_btn_settlement_confirm.custom_minimum_size.y = 40
 	_btn_settlement_confirm.pressed.connect(_confirm_settlement)
 	settle_vbox.add_child(_btn_settlement_confirm)
 
 
 func _create_stock_row(stock_id: String, index: int) -> HBoxContainer:
 	var row: HBoxContainer = HBoxContainer.new()
-	row.add_theme_constant_override("separation", 4)
+	row.add_theme_constant_override("separation", 2)
 	row.mouse_filter = Control.MOUSE_FILTER_STOP
+	row.custom_minimum_size.y = 38
 
 	# Click handler via gui_input
 	row.gui_input.connect(func(event: InputEvent) -> void:
@@ -1068,35 +1158,48 @@ func _create_stock_row(stock_id: String, index: int) -> HBoxContainer:
 	# Selection marker
 	var lbl_marker: Label = Label.new()
 	lbl_marker.text = "  "
-	lbl_marker.custom_minimum_size.x = 20
+	lbl_marker.custom_minimum_size.x = 16
+	lbl_marker.add_theme_color_override("font_color", ThemeSetup.BTN_ACCENT_HOVER)
 	row.add_child(lbl_marker)
-
-	# Stock info (ticker + price)
-	var lbl_info: Label = Label.new()
-	var stock: StockData = StockDatabase.get_stock(stock_id)
-	var price: int = stock.base_price if stock else 0
-	lbl_info.text = "%s  ₩%s" % [stock_id, _format_number(price)]
-	lbl_info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(lbl_info)
-
-	# Change %
-	var lbl_change: Label = Label.new()
-	lbl_change.text = "+0.0% ─"
-	lbl_change.custom_minimum_size.x = 80
-	row.add_child(lbl_change)
-
-	# Held marker
-	var lbl_held: Label = Label.new()
-	lbl_held.text = ""
-	lbl_held.custom_minimum_size.x = 20
-	row.add_child(lbl_held)
 
 	# Shortcut hint
 	var shortcut_key: String = str((index + 1) % 10)
 	var lbl_key: Label = Label.new()
 	lbl_key.text = shortcut_key
-	lbl_key.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5, 0.6))
+	lbl_key.custom_minimum_size.x = 14
+	ThemeSetup.style_label_dim(lbl_key)
 	row.add_child(lbl_key)
+
+	# Stock ticker
+	var lbl_info: Label = Label.new()
+	var stock: StockData = StockDatabase.get_stock(stock_id)
+	var price: int = stock.base_price if stock else 0
+	lbl_info.text = "%s" % stock_id
+	lbl_info.custom_minimum_size.x = 32
+	ThemeSetup.style_label_primary(lbl_info)
+	row.add_child(lbl_info)
+
+	# Price
+	var lbl_price: Label = Label.new()
+	lbl_price.text = "₩%s" % _format_number(price)
+	lbl_price.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lbl_price.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	ThemeSetup.style_label_primary(lbl_price)
+	row.add_child(lbl_price)
+
+	# Change %
+	var lbl_change: Label = Label.new()
+	lbl_change.text = " 0.0%"
+	lbl_change.custom_minimum_size.x = 65
+	lbl_change.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	row.add_child(lbl_change)
+
+	# Held marker
+	var lbl_held: Label = Label.new()
+	lbl_held.text = ""
+	lbl_held.custom_minimum_size.x = 16
+	lbl_held.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
+	row.add_child(lbl_held)
 
 	return row
 

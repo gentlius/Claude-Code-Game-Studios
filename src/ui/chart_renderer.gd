@@ -6,7 +6,8 @@ extends Control
 # ── Enums ──
 
 enum ChartState { UNLOADED, LOADING, LIVE, PAUSED, STATIC }
-enum Timeframe { T1 = 1, T5 = 5, T15 = 15, D1 = 390 }
+## 1 tick = 15 game-seconds → 4 ticks = 1 min, 20 ticks = 5 min, 60 ticks = 15 min
+enum Timeframe { M1 = 4, M5 = 20, M15 = 60, D1 = 390 }
 
 # ── Constants (Tuning Knobs from GDD) ──
 
@@ -15,6 +16,8 @@ const MIN_VISIBLE_CANDLES: int = 20
 const MAX_VISIBLE_CANDLES: int = 200
 const Y_AXIS_PADDING: float = 0.05
 const MIN_Y_RANGE_RATIO: float = 0.02
+const TARGET_GRID_LINES: int = 5
+const NICE_MULTIPLIERS: Array[int] = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]
 const CANDLE_UP_COLOR: Color = Color(0.906, 0.298, 0.235)    # #E74C3C red
 const CANDLE_DOWN_COLOR: Color = Color(0.204, 0.580, 0.859)  # #3498DB blue
 const CANDLE_NEUTRAL_COLOR: Color = Color(0.6, 0.6, 0.6)
@@ -25,7 +28,7 @@ const RENDER_SKIP_AT_SPEED: int = 2  ## Skip frames at 2x+ speed
 
 var _chart_state: ChartState = ChartState.UNLOADED
 var _stock_id: String = ""
-var _timeframe: Timeframe = Timeframe.T5
+var _timeframe: Timeframe = Timeframe.M1
 var _visible_count: int = DEFAULT_VISIBLE_CANDLES
 var _scroll_offset: int = 0  ## 0 = latest candles visible
 var _auto_scroll: bool = true
@@ -80,14 +83,20 @@ func _build_header() -> void:
 	_header_bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	_header_bar.offset_bottom = HEADER_HEIGHT
 	_header_bar.add_theme_constant_override("separation", 8)
+	var header_style: StyleBoxFlat = ThemeSetup.make_panel_style(ThemeSetup.BG_PANEL, 0, ThemeSetup.BORDER_DIM)
+	_header_bar.add_theme_stylebox_override("panel", header_style)
 	add_child(_header_bar)
 
 	_lbl_stock_name = Label.new()
 	_lbl_stock_name.text = "종목 선택"
+	_lbl_stock_name.add_theme_font_size_override("font_size", 15)
+	ThemeSetup.style_label_primary(_lbl_stock_name)
 	_header_bar.add_child(_lbl_stock_name)
 
 	_lbl_current_price = Label.new()
 	_lbl_current_price.text = ""
+	_lbl_current_price.add_theme_font_size_override("font_size", 15)
+	ThemeSetup.style_label_primary(_lbl_current_price)
 	_header_bar.add_child(_lbl_current_price)
 
 	_lbl_change = Label.new()
@@ -101,22 +110,26 @@ func _build_header() -> void:
 
 	# Timeframe buttons
 	_btn_tf_1t = Button.new()
-	_btn_tf_1t.text = "1T"
-	_btn_tf_1t.pressed.connect(func() -> void: set_timeframe(Timeframe.T1))
+	_btn_tf_1t.text = "1분"
+	ThemeSetup.apply_button_theme(_btn_tf_1t)
+	_btn_tf_1t.pressed.connect(func() -> void: set_timeframe(Timeframe.M1))
 	_header_bar.add_child(_btn_tf_1t)
 
 	_btn_tf_5t = Button.new()
-	_btn_tf_5t.text = "5T"
-	_btn_tf_5t.pressed.connect(func() -> void: set_timeframe(Timeframe.T5))
+	_btn_tf_5t.text = "5분"
+	ThemeSetup.apply_button_theme(_btn_tf_5t)
+	_btn_tf_5t.pressed.connect(func() -> void: set_timeframe(Timeframe.M5))
 	_header_bar.add_child(_btn_tf_5t)
 
 	_btn_tf_15t = Button.new()
-	_btn_tf_15t.text = "15T"
-	_btn_tf_15t.pressed.connect(func() -> void: set_timeframe(Timeframe.T15))
+	_btn_tf_15t.text = "15분"
+	ThemeSetup.apply_button_theme(_btn_tf_15t)
+	_btn_tf_15t.pressed.connect(func() -> void: set_timeframe(Timeframe.M15))
 	_header_bar.add_child(_btn_tf_15t)
 
 	_btn_tf_1d = Button.new()
-	_btn_tf_1d.text = "1D"
+	_btn_tf_1d.text = "1일"
+	ThemeSetup.apply_button_theme(_btn_tf_1d)
 	_btn_tf_1d.pressed.connect(func() -> void: set_timeframe(Timeframe.D1))
 	_header_bar.add_child(_btn_tf_1d)
 
@@ -124,6 +137,7 @@ func _build_header() -> void:
 	_btn_go_latest = Button.new()
 	_btn_go_latest.text = "현재로 이동 →"
 	_btn_go_latest.visible = false
+	ThemeSetup.apply_accent_button(_btn_go_latest)
 	_btn_go_latest.pressed.connect(func() -> void:
 		_auto_scroll = true
 		_scroll_offset = 0
@@ -430,17 +444,22 @@ func _volume_to_y(volume: float) -> float:
 
 
 func _draw_background() -> void:
-	draw_rect(_chart_rect, Color(0.08, 0.08, 0.1), true)
+	draw_rect(_chart_rect, ThemeSetup.BG_DARKEST, true)
 	draw_rect(_volume_rect, Color(0.06, 0.06, 0.08), true)
 
 
 func _draw_grid() -> void:
-	var grid_color: Color = Color(0.15, 0.15, 0.2)
+	var grid_color: Color = ThemeSetup.BORDER_DIM
 
-	# Horizontal price grid lines (5 lines)
-	for i: int in range(1, 5):
-		var price: float = _price_min + (_price_max - _price_min) * float(i) / 5.0
-		var y: float = _price_to_y(price)
+	# Horizontal price grid lines — aligned to tick size multiples (GDD 2-2)
+	var nice_step: int = _compute_nice_step()
+	if nice_step <= 0:
+		return
+
+	var first_line: int = ceili(_price_min / float(nice_step)) * nice_step
+	var line_price: int = first_line
+	while float(line_price) <= _price_max:
+		var y: float = _price_to_y(float(line_price))
 		draw_line(
 			Vector2(_chart_rect.position.x, y),
 			Vector2(_chart_rect.position.x + _chart_rect.size.x, y),
@@ -450,9 +469,27 @@ func _draw_grid() -> void:
 		draw_string(
 			ThemeDB.fallback_font,
 			Vector2(_chart_rect.position.x + _chart_rect.size.x + 4, y + 4),
-			_format_number(int(price)), HORIZONTAL_ALIGNMENT_LEFT,
+			_format_number(line_price), HORIZONTAL_ALIGNMENT_LEFT,
 			-1, 10, Color(0.5, 0.5, 0.5)
 		)
+		line_price += nice_step
+
+
+## Finds a "nice" grid step that is a multiple of the current tick size (GDD 2-2).
+func _compute_nice_step() -> int:
+	var price_range: float = _price_max - _price_min
+	if price_range <= 0.0:
+		return 100
+	var raw_step: float = price_range / float(TARGET_GRID_LINES)
+	var price_mid: int = roundi((_price_min + _price_max) / 2.0)
+	var tick_size: int = PriceEngine.get_tick_size(price_mid)
+
+	for m: int in NICE_MULTIPLIERS:
+		var candidate: int = tick_size * m
+		if float(candidate) >= raw_step:
+			return candidate
+
+	return tick_size * NICE_MULTIPLIERS[NICE_MULTIPLIERS.size() - 1]
 
 
 func _draw_candles() -> void:
@@ -464,6 +501,7 @@ func _draw_candles() -> void:
 	var body_width: float = maxf(candle_width * 0.6, 1.0)
 	var wick_width: float = maxf(1.0, candle_width * 0.1)
 
+	var prev_close_price: float = -1.0
 	for i: int in range(visible.size()):
 		var c: Dictionary = visible[i]
 		var x_center: float = _chart_rect.position.x + (float(i) + 0.5) * candle_width
@@ -479,22 +517,36 @@ func _draw_candles() -> void:
 		var y_low: float = _price_to_y(low_price)
 
 		var color: Color
-		if close_price > open_price:
+		var is_flat: bool = absf(close_price - open_price) < 0.01
+		if is_flat and prev_close_price >= 0.0:
+			# 1T candles: open==close, so compare against previous candle
+			if close_price > prev_close_price:
+				color = CANDLE_UP_COLOR
+			elif close_price < prev_close_price:
+				color = CANDLE_DOWN_COLOR
+			else:
+				color = CANDLE_NEUTRAL_COLOR
+		elif close_price > open_price:
 			color = CANDLE_UP_COLOR
 		elif close_price < open_price:
 			color = CANDLE_DOWN_COLOR
 		else:
 			color = CANDLE_NEUTRAL_COLOR
+		prev_close_price = close_price
 
-		# Wick (high to low)
+		# Wick (high to low) — enforce minimum height for visibility
+		var wick_h: float = maxf(y_low - y_high, 3.0)
+		var wick_top: float = y_high if y_low > y_high else y_high - 1.5
 		draw_rect(
-			Rect2(x_center - wick_width * 0.5, y_high, wick_width, y_low - y_high),
+			Rect2(x_center - wick_width * 0.5, wick_top, wick_width, wick_h),
 			color, true
 		)
 
-		# Body
+		# Body — enforce minimum height so 1T candles are visible bars, not dots
 		var body_top: float = minf(y_open, y_close)
-		var body_height: float = maxf(absf(y_open - y_close), 1.0)
+		var body_height: float = maxf(absf(y_open - y_close), 4.0)
+		if is_flat:
+			body_top -= 2.0  # Center the minimum-height bar on the price level
 		draw_rect(
 			Rect2(x_center - body_width * 0.5, body_top, body_width, body_height),
 			color, true
@@ -571,11 +623,12 @@ func _draw_crosshair() -> void:
 
 	# Price label at crosshair Y
 	if _crosshair_pos.y >= _chart_rect.position.y and _crosshair_pos.y <= _chart_rect.position.y + _chart_rect.size.y:
-		var price: float = _price_min + (_price_max - _price_min) * (1.0 - (_crosshair_pos.y - _chart_rect.position.y) / _chart_rect.size.y)
+		var raw_price: float = _price_min + (_price_max - _price_min) * (1.0 - (_crosshair_pos.y - _chart_rect.position.y) / _chart_rect.size.y)
+		var snapped_price: int = PriceEngine.round_to_tick(raw_price)
 		draw_string(
 			ThemeDB.fallback_font,
 			Vector2(_chart_rect.position.x + _chart_rect.size.x + 4, _crosshair_pos.y + 4),
-			"₩%s" % _format_number(int(price)), HORIZONTAL_ALIGNMENT_LEFT,
+			"₩%s" % _format_number(snapped_price), HORIZONTAL_ALIGNMENT_LEFT,
 			-1, 10, Color(0.9, 0.9, 0.2)
 		)
 

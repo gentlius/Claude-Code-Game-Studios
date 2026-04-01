@@ -34,10 +34,13 @@ func _build_ui() -> void:
 
 	var title: Label = Label.new()
 	title.text = "포트폴리오 요약"
+	title.add_theme_font_size_override("font_size", 14)
+	ThemeSetup.style_label_primary(title)
 	_summary_bar.add_child(title)
 
 	_lbl_total_assets = Label.new()
 	_lbl_total_assets.text = "총 자산: ₩0"
+	ThemeSetup.style_label_primary(_lbl_total_assets)
 	_summary_bar.add_child(_lbl_total_assets)
 
 	_lbl_return_rate = Label.new()
@@ -46,6 +49,7 @@ func _build_ui() -> void:
 
 	_lbl_cash_info = Label.new()
 	_lbl_cash_info.text = ""
+	ThemeSetup.style_label_secondary(_lbl_cash_info)
 	_summary_bar.add_child(_lbl_cash_info)
 
 	var sep: HSeparator = HSeparator.new()
@@ -69,7 +73,7 @@ func _build_ui() -> void:
 		var lbl: Label = Label.new()
 		lbl.text = col
 		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+		ThemeSetup.style_label_dim(lbl)
 		header.add_child(lbl)
 
 	_holdings_container = VBoxContainer.new()
@@ -109,11 +113,11 @@ func _refresh() -> void:
 
 	_lbl_return_rate.text = "(%+.1f%%)" % rate
 	if rate > 0.0:
-		_lbl_return_rate.add_theme_color_override("font_color", Color(0.9, 0.2, 0.2))
+		_lbl_return_rate.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
 	elif rate < 0.0:
-		_lbl_return_rate.add_theme_color_override("font_color", Color(0.2, 0.4, 0.9))
+		_lbl_return_rate.add_theme_color_override("font_color", ThemeSetup.LOSS_BLUE)
 	else:
-		_lbl_return_rate.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+		_lbl_return_rate.add_theme_color_override("font_color", ThemeSetup.NEUTRAL_GRAY)
 
 	if reserved > 0:
 		_lbl_cash_info.text = "현금: ₩%s | 예약: ₩%s | %d/%d종목" % [
@@ -138,7 +142,7 @@ func _refresh_holdings() -> void:
 	if holdings.size() == 0:
 		var empty: Label = Label.new()
 		empty.text = "보유 종목 없음. 첫 매수를 시작하세요!"
-		empty.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+		ThemeSetup.style_label_dim(empty)
 		_holdings_container.add_child(empty)
 		return
 
@@ -173,11 +177,11 @@ func _refresh_holdings() -> void:
 		lbl_rate.text = "%+.1f%%" % pnl_pct
 		lbl_rate.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		if pnl_pct > 0.0:
-			lbl_rate.add_theme_color_override("font_color", Color(0.9, 0.2, 0.2))
+			lbl_rate.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
 		elif pnl_pct < 0.0:
-			lbl_rate.add_theme_color_override("font_color", Color(0.2, 0.4, 0.9))
+			lbl_rate.add_theme_color_override("font_color", ThemeSetup.LOSS_BLUE)
 		else:
-			lbl_rate.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+			lbl_rate.add_theme_color_override("font_color", ThemeSetup.NEUTRAL_GRAY)
 		row.add_child(lbl_rate)
 
 		# Value
@@ -208,7 +212,7 @@ func _refresh_transactions() -> void:
 	if tx_list.size() == 0:
 		var empty: Label = Label.new()
 		empty.text = "거래 내역 없음"
-		empty.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+		ThemeSetup.style_label_dim(empty)
 		_tx_container.add_child(empty)
 		return
 
@@ -226,9 +230,9 @@ func _refresh_transactions() -> void:
 		]
 
 		if tx["type"] == "BUY":
-			lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.7))
+			lbl.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
 		else:
-			lbl.add_theme_color_override("font_color", Color(0.8, 0.7, 0.6))
+			lbl.add_theme_color_override("font_color", ThemeSetup.LOSS_BLUE)
 
 		_tx_container.add_child(lbl)
 

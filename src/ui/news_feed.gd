@@ -56,11 +56,13 @@ func _build_ui() -> void:
 
 	_lbl_title = Label.new()
 	_lbl_title.text = "뉴스 피드"
+	_lbl_title.add_theme_font_size_override("font_size", 14)
+	ThemeSetup.style_label_primary(_lbl_title)
 	_header_bar.add_child(_lbl_title)
 
 	_lbl_unread_badge = Label.new()
 	_lbl_unread_badge.text = ""
-	_lbl_unread_badge.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))
+	_lbl_unread_badge.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
 	_header_bar.add_child(_lbl_unread_badge)
 
 	# Pre-market panel (hidden by default)
@@ -155,6 +157,7 @@ func _show_pre_market_bundle() -> void:
 	title.text = "오늘의 시장 전망 (Day %d)" % day
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 16)
+	ThemeSetup.style_label_primary(title)
 	_pre_market_panel.add_child(title)
 
 	var sep: HSeparator = HSeparator.new()
@@ -163,7 +166,7 @@ func _show_pre_market_bundle() -> void:
 	if _pre_market_entries.size() == 0:
 		var empty_lbl: Label = Label.new()
 		empty_lbl.text = "오늘은 특별한 시장 전망이 없습니다"
-		empty_lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+		ThemeSetup.style_label_dim(empty_lbl)
 		_pre_market_panel.add_child(empty_lbl)
 	else:
 		for entry: Dictionary in _pre_market_entries:
@@ -190,10 +193,13 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 
 	var is_read: bool = entry.get("is_read", false)
 	if is_read:
-		style.bg_color = Color(0.12, 0.12, 0.15)
+		style.bg_color = ThemeSetup.BG_DARK
 	else:
-		style.bg_color = Color(0.15, 0.15, 0.2)
+		style.bg_color = ThemeSetup.BG_CARD
 	style.set_corner_radius_all(4)
+	style.border_color = ThemeSetup.BORDER_DIM
+	style.set_border_width_all(1)
+	style.set_content_margin_all(6)
 	card.add_theme_stylebox_override("panel", style)
 
 	var vbox: VBoxContainer = VBoxContainer.new()
@@ -208,7 +214,7 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 	# Unread marker
 	var marker: Label = Label.new()
 	marker.text = "●" if not is_read else ""
-	marker.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))
+	marker.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
 	marker.custom_minimum_size.x = 14
 	row1.add_child(marker)
 
@@ -229,6 +235,7 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 	headline.text = str(entry.get("headline", ""))
 	headline.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	headline.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	ThemeSetup.style_label_primary(headline)
 	row1.add_child(headline)
 
 	# Row 2: [impact hint] | [timestamp]
@@ -258,7 +265,7 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 	var display_tick: int = int(entry.get("display_tick", 0))
 	var period: String = _tick_to_period(display_tick)
 	tick_lbl.text = "틱 %d (%s)" % [display_tick, period]
-	tick_lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.4))
+	ThemeSetup.style_label_dim(tick_lbl)
 	row2.add_child(tick_lbl)
 
 	# Click to mark as read

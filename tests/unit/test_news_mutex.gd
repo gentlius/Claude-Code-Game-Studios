@@ -163,7 +163,7 @@ func test_register_mutex_with_stock_resolves_placeholder() -> void:
 	NewsEventSystem._register_mutex(template, stock)
 
 	# Assert
-	assert_true(NewsEventSystem._daily_mutex.has("bio_clinical_BF"),
+	assert_true(NewsEventSystem._daily_mutex.has("bio_clinical_BPH"),
 		"mutex key should resolve {stock_id} to actual stock ID")
 	assert_false(NewsEventSystem._daily_mutex.has("bio_clinical_{stock_id}"),
 		"unresolved placeholder should not be stored")
@@ -189,12 +189,12 @@ func test_mutex_clears_on_market_open() -> void:
 	NewsEventSystem._register_mutex(tpl, null)
 	assert_eq(NewsEventSystem._daily_mutex.size(), 1, "precondition: mutex registered")
 
-	# Act — simulate market open clearing mutex
-	NewsEventSystem._daily_mutex.clear()
+	# Act — invoke the actual market-open handler that clears the mutex
+	NewsEventSystem._on_market_open()
 
 	# Assert
 	assert_eq(NewsEventSystem._daily_mutex.size(), 0,
-		"mutex dictionary should be empty after daily clear")
+		"mutex dictionary should be empty after _on_market_open()")
 
 
 func test_mutex_blocked_then_cleared_then_unblocked() -> void:

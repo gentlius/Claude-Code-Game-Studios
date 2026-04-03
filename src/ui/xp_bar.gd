@@ -102,6 +102,7 @@ func _ready() -> void:
 	# Connect signals
 	XpSystem.on_xp_gained.connect(_on_xp_gained)
 	XpSystem.on_level_up.connect(_on_level_up)
+	tree_exiting.connect(_disconnect_signals)
 
 	update_display()
 
@@ -209,6 +210,13 @@ func _update_sp_badge(sp: int) -> void:
 	else:
 		_btn_sp_badge.visible = false
 		_sp_visible = false
+
+
+func _disconnect_signals() -> void:
+	if XpSystem.on_xp_gained.is_connected(_on_xp_gained):
+		XpSystem.on_xp_gained.disconnect(_on_xp_gained)
+	if XpSystem.on_level_up.is_connected(_on_level_up):
+		XpSystem.on_level_up.disconnect(_on_level_up)
 
 
 func _spawn_float_text(text: String) -> void:

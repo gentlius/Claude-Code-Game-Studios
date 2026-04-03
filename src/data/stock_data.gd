@@ -15,5 +15,6 @@ enum VolatilityProfile { LOW, MEDIUM, HIGH, EXTREME }
 @export var sector_sensitivity: float = 1.0
 @export var listed_shares: int = 1000000  ## 상장주식수
 @export var per: float = 0.0  ## 0.0 indicates deficit company (null equivalent)
+@export var dividend_yield: float = 0.0  ## Annual dividend yield as a decimal (e.g. 0.02 = 2%). 0.0 = no dividend.
 @export var event_tags: Array[String] = []  ## Tags for INDIVIDUAL event matching
 @export var description: String = ""

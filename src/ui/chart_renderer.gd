@@ -104,6 +104,7 @@ func _ready() -> void:
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
 	PriceEngine.on_price_updated.connect(_on_price_updated)
 	clip_contents = true
+	tree_exiting.connect(_disconnect_signals)
 
 
 func _build_header() -> void:
@@ -267,6 +268,15 @@ func _on_market_state_changed(
 		GameClock.MarketState.PRE_MARKET:
 			if _chart_state != ChartState.UNLOADED:
 				_chart_state = ChartState.STATIC
+
+
+func _disconnect_signals() -> void:
+	if GameClock.on_tick.is_connected(_on_tick):
+		GameClock.on_tick.disconnect(_on_tick)
+	if GameClock.on_market_state_changed.is_connected(_on_market_state_changed):
+		GameClock.on_market_state_changed.disconnect(_on_market_state_changed)
+	if PriceEngine.on_price_updated.is_connected(_on_price_updated):
+		PriceEngine.on_price_updated.disconnect(_on_price_updated)
 
 
 # ── Input ──

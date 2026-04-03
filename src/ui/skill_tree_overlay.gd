@@ -60,6 +60,7 @@ func _ready() -> void:
 
 	_build_ui()
 	SkillTree.on_skill_unlocked.connect(_on_skill_unlocked)
+	tree_exiting.connect(_disconnect_signals)
 
 
 # ── Public API ──

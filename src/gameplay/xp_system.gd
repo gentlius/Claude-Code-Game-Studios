@@ -6,7 +6,7 @@ extends Node
 # ── Signals ──
 
 signal on_level_up(new_level: int, skill_points: int)
-signal on_xp_gained(amount: int, source: String)
+signal on_xp_gained(amount: int, new_total: int)
 
 # ── Config (Tuning Knobs — see GDD Tuning Knobs section) ──
 
@@ -104,7 +104,7 @@ func _grant_xp(amount: int, source: String) -> int:
 	if amount <= 0:
 		return 0
 	_total_xp += amount
-	on_xp_gained.emit(amount, source)
+	on_xp_gained.emit(amount, _total_xp)
 	return _check_level_ups()
 
 
@@ -153,7 +153,10 @@ func _calculate_season_xp(final_rank: int, season_return_pct: float) -> int:
 
 func _on_season_start() -> void:
 	_daily_has_trade = false
-	_prev_close_assets = CurrencySystem.DEFAULT_SEASON_SEED
+	# Use actual current cash rather than the hardcoded constant so that
+	# carry-over cash from a previous season (or test setup) is reflected
+	# correctly as the day-1 baseline. (R-07 fix)
+	_prev_close_assets = CurrencySystem.get_sim_cash()
 
 
 func _on_market_open() -> void:

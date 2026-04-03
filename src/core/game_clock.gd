@@ -69,6 +69,11 @@ func get_current_day() -> int:
 
 
 ## Returns the current week within the season (0-indexed).
+## Invariant: during WEEK_END and SEASON_END signal handlers this still returns
+## the week that just ended (the pre-increment value), because _current_week is
+## only incremented inside _advance_to_next_day(), which runs after the player
+## confirms the transition. Subscribers must not assume the value has advanced
+## until on_day_transition fires.
 func get_current_week() -> int:
 	return _current_week
 
@@ -85,9 +90,23 @@ func get_speed_multiplier() -> float:
 	return _speed_multiplier
 
 
-## Sets game speed multiplier, clamped to [1.0, 4.0].
+## Sets game speed multiplier. Valid values are the discrete set {1, 2, 4}.
+## If an invalid value is passed, a warning is pushed and the nearest valid
+## speed is used instead.
 func set_speed(multiplier: float) -> void:
-	_speed_multiplier = clampf(multiplier, 1.0, 4.0)
+	const VALID_SPEEDS: Array[float] = [1.0, 2.0, 4.0]
+	if multiplier in VALID_SPEEDS:
+		_speed_multiplier = multiplier
+		return
+	push_warning("GameClock.set_speed: invalid speed %.2f — snapping to nearest valid value" % multiplier)
+	var nearest: float = VALID_SPEEDS[0]
+	var best_dist: float = absf(multiplier - nearest)
+	for speed: float in VALID_SPEEDS:
+		var dist: float = absf(multiplier - speed)
+		if dist < best_dist:
+			best_dist = dist
+			nearest = speed
+	_speed_multiplier = nearest
 
 
 ## Call to begin a new season. Resets all counters and emits on_season_start.
@@ -142,8 +161,11 @@ func _process(delta: float) -> void:
 
 
 func _process_tick() -> void:
-	on_tick.emit(_current_tick, _current_day, _current_week)
 	_current_tick += 1
+	# Emit the tick number that was just completed (1-based from the subscriber's
+	# perspective). The pre-increment value is passed so that subscribers calling
+	# get_current_tick() during on_tick receive the same value as tick_number.
+	on_tick.emit(_current_tick, _current_day, _current_week)
 
 	if _current_tick >= TICKS_PER_DAY:
 		_end_trading_day()
@@ -162,14 +184,26 @@ func _end_trading_day() -> void:
 
 	var day_in_week := _current_day % DAYS_PER_WEEK
 	if day_in_week == DAYS_PER_WEEK - 1:
-		# End of week
-		_change_state(MarketState.WEEK_END)
-		on_week_end.emit()
+		# End of week — defer so MARKET_CLOSED state is stable for one frame
+		# before subscribers see the WEEK_END transition.
+		call_deferred("_emit_week_end_deferred")
 
-		var is_last_week := _current_week >= WEEKS_PER_SEASON - 1
-		if is_last_week:
-			_change_state(MarketState.SEASON_END)
-			on_season_end.emit()
+
+## Deferred so MARKET_CLOSED is stable for one full frame before this fires.
+func _emit_week_end_deferred() -> void:
+	_change_state(MarketState.WEEK_END)
+	on_week_end.emit()
+
+	var is_last_week := _current_week >= WEEKS_PER_SEASON - 1
+	if is_last_week:
+		# Defer again so WEEK_END is stable for one full frame before SEASON_END.
+		call_deferred("_emit_season_end_deferred")
+
+
+## Deferred so WEEK_END is stable for one full frame before this fires.
+func _emit_season_end_deferred() -> void:
+	_change_state(MarketState.SEASON_END)
+	on_season_end.emit()
 
 
 func _advance_to_next_day() -> void:

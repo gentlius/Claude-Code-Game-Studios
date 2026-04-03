@@ -133,24 +133,26 @@ func test_price_clamp_boundaries() -> void:
 
 
 func test_100won_rounding() -> void:
-	# Test that rounding to 100원 works correctly
-	var test_cases: Array[Array] = [
-		[65432.0, 65400],  # round down
-		[65450.0, 65400],  # round to even (or 65500 depending on impl)
-		[65499.0, 65500],  # round up
-		[65550.0, 65600],  # round up
-		[1050.0, 1100],    # small value
-	]
-	for tc: Array in test_cases:
-		var raw: float = tc[0]
-		var rounded: int = roundi(raw / 100.0) * 100
-		# Just check it's a multiple of 100
-		assert_eq(rounded % 100, 0, "Should be multiple of 100: %d" % rounded)
+	# Test that PriceEngine.round_to_tick() rounds prices at the 100-won tier correctly.
+	# At prices 50000–99999, tick size is 100 (KRX 호가 단위).
+	assert_eq(PriceEngine.round_to_tick(65432.0), 65400,
+		"65432 should round to 65400 (tick=100, round down)")
+	assert_eq(PriceEngine.round_to_tick(65450.0), 65500,
+		"65450 should round to 65500 (tick=100, round half-up)")
+	assert_eq(PriceEngine.round_to_tick(65499.0), 65500,
+		"65499 should round to 65500 (tick=100, round up)")
+	assert_eq(PriceEngine.round_to_tick(65550.0), 65600,
+		"65550 should round to 65600 (tick=100, round half-up)")
+	assert_eq(PriceEngine.round_to_tick(65001.0), 65000,
+		"65001 should round to 65000 (tick=100, round down)")
 
 # ── Test: Volume (GDD Rule 4) ──
 
 func test_volume_time_of_day_multiplier() -> void:
-	# Opening (tick 0-9) should have 2.5x, closing (380-389) should have 2.0x
+	# Time-of-day multipliers (GDD Rule 4-5, in ticks, not minutes):
+	#   Opening: ticks 0-39 (first 10 game-minutes × 4 ticks/min) → 2.5x multiplier
+	#   Closing: ticks 1520-1559 (last 10 game-minutes) → 2.0x multiplier
+	#   Normal:  any tick in 40-1519 → 1.0x multiplier
 	seed(42)
 	var s: Dictionary = {
 		"volatility_profile": StockData.VolatilityProfile.MEDIUM,
@@ -159,18 +161,22 @@ func test_volume_time_of_day_multiplier() -> void:
 		"prev_day_close": 65000,
 	}
 
-	# Sample multiple times for statistical test
 	var opening_sum: float = 0.0
+	var closing_sum: float = 0.0
 	var normal_sum: float = 0.0
 	var n: int = 500
 
 	for _i: int in range(n):
-		opening_sum += PriceEngine._compute_volume(s, 0.0, 0.0, 5)   # opening
-		normal_sum += PriceEngine._compute_volume(s, 0.0, 0.0, 200)  # normal
+		opening_sum += PriceEngine._compute_volume(s, 0.0, 0.0, 5)     # opening tick (< 40)
+		closing_sum += PriceEngine._compute_volume(s, 0.0, 0.0, 1525)  # closing tick (>= 1520)
+		normal_sum += PriceEngine._compute_volume(s, 0.0, 0.0, 200)    # normal tick (40-1519)
 
-	var ratio: float = opening_sum / normal_sum
-	assert_true(ratio > 2.0 and ratio < 3.0,
-		"Opening volume should be ~2.5x normal (got %.2fx)" % ratio)
+	var opening_ratio: float = opening_sum / normal_sum
+	var closing_ratio: float = closing_sum / normal_sum
+	assert_true(opening_ratio > 2.0 and opening_ratio < 3.0,
+		"Opening volume should be ~2.5x normal (got %.2fx)" % opening_ratio)
+	assert_true(closing_ratio > 1.5 and closing_ratio < 2.5,
+		"Closing window volume should be ~2.0x normal (got %.2fx)" % closing_ratio)
 
 
 func test_volume_energy_correlation() -> void:
@@ -375,28 +381,39 @@ func test_vi_not_halted_when_remaining_zero() -> void:
 
 
 func test_vi_max_per_day_blocks_third_trigger() -> void:
-	# Simulate 2 VI triggers already exhausted
-	PriceEngine._vi_states["KSF"] = {"halt_remaining": 0, "count_today": 2}
-	# _check_vi should not trigger a 3rd time even with large price change
-	# We need a stock state to exist
-	if PriceEngine._stock_states.has("KSF"):
-		var s: Dictionary = PriceEngine._stock_states["KSF"]
-		var original_price: int = s["current_price"]
-		var original_prev: int = s["prev_day_close"]
-		# Set price to 15% above prev close (exceeds VI_THRESHOLD of 10%)
-		s["prev_day_close"] = 50000
-		s["current_price"] = 58000
-		PriceEngine._check_vi("KSF")
-		assert_eq(PriceEngine._vi_states["KSF"]["count_today"], 2,
-			"Should not increment past max per day")
-		assert_eq(PriceEngine._vi_states["KSF"]["halt_remaining"], 0,
-			"Should not trigger halt after max per day")
-		# Restore
-		s["current_price"] = original_price
-		s["prev_day_close"] = original_prev
-	else:
-		pass_test("KF stock state not available in test environment (skipped)")
+	# Arrange — inject stock state and VI state with count already at daily max
+	PriceEngine._stock_states["KSF"] = {
+		"stock_id": "KSF",
+		"current_price": 58000,
+		"base_price": 50000,
+		"prev_day_close": 50000,
+		"volatility_profile": StockData.VolatilityProfile.MEDIUM,
+		"macro_sensitivity": 1.0,
+		"sector_sensitivity": 1.0,
+		"markov_state": PriceEngine.MarkovState.SIDEWAYS,
+		"state_duration": 0,
+		"season_bias": PriceEngine.SeasonBias.NEUTRAL,
+		"tick_prices": [] as Array[int],
+		"tick_volumes": [] as Array[float],
+		"ohlcv_daily": [] as Array[Dictionary],
+		"event_queue": [] as Array,
+		"gradual_events": [] as Array,
+	}
+	# count_today = VI_MAX_PER_DAY means the daily limit is already reached
+	PriceEngine._vi_states["KSF"] = {"halt_remaining": 0, "count_today": PriceEngine.VI_MAX_PER_DAY, "cooldown": 0}
+
+	# Act — price is +16% above prev_close (well above VI_THRESHOLD), but limit is exhausted
+	PriceEngine._check_vi("KSF")
+
+	# Assert — no additional trigger
+	assert_eq(PriceEngine._vi_states["KSF"]["count_today"], PriceEngine.VI_MAX_PER_DAY,
+		"Should not increment past VI_MAX_PER_DAY")
+	assert_eq(PriceEngine._vi_states["KSF"]["halt_remaining"], 0,
+		"Should not trigger halt after daily max per day")
+
+	# Cleanup
 	PriceEngine._vi_states.erase("KSF")
+	PriceEngine._stock_states.erase("KSF")
 
 
 # ── Test: Circuit Breaker (GDD Rule 2-5) ──

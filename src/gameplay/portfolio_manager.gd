@@ -9,10 +9,6 @@ signal holding_added(stock_id: String, quantity: int, price: int)
 signal holding_removed(stock_id: String, quantity: int, price: int, realized_pnl: int)
 signal valuation_updated(total_assets: int, return_rate: float)
 
-# ── Constants ──
-
-const DEFAULT_MAX_HOLDINGS: int = 3  ## Lv1 skill tree default
-
 # ── State ──
 
 var _holdings: Dictionary = {}         ## stock_id -> HoldingEntry dict
@@ -74,7 +70,12 @@ func get_transaction_history(limit: int = 50) -> Array[Dictionary]:
 
 
 ## Assembles a PortfolioSummary dict from cached values.
-func get_portfolio_summary(max_holdings: int = DEFAULT_MAX_HOLDINGS) -> Dictionary:
+## max_holdings defaults to SkillTree.get_max_holdings() (R-12: removed
+## duplicate DEFAULT_MAX_HOLDINGS constant — SkillTree.MAX_HOLDINGS_T0 is
+## the single source of truth for the base slot count).
+func get_portfolio_summary(max_holdings: int = -1) -> Dictionary:
+	if max_holdings < 0:
+		max_holdings = SkillTree.get_max_holdings()
 	return {
 		"sim_cash": _cached_sim_cash,
 		"reserved_cash": _cached_reserved_cash,
@@ -125,6 +126,7 @@ func remove_holding(stock_id: String, quantity: int, price: int) -> int:
 
 	var h: Dictionary = _holdings[stock_id]
 	if quantity > h["quantity"]:
+		push_error("PortfolioManager: remove_holding quantity %d exceeds held %d for %s" % [quantity, h["quantity"], stock_id])
 		quantity = h["quantity"]
 
 	var avg: int = h["avg_buy_price"]
@@ -145,6 +147,9 @@ func remove_holding(stock_id: String, quantity: int, price: int) -> int:
 
 ## Force liquidate all holdings at current prices (season end).
 ## Bypasses OrderEngine — calls CurrencySystem.sim_add directly.
+## Must be called AFTER OrderEngine._expire_pending_orders() has cleared all
+## locks. Called during season-end sequence only. (R-14: _sell_locks in
+## OrderEngine will be stale if this runs before pending orders are expired.)
 func force_liquidate() -> void:
 	var stock_ids: Array[String] = []
 	for sid: String in _holdings:

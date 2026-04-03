@@ -46,7 +46,8 @@ func _ready() -> void:
 	NewsEventSystem.on_pre_market_news.connect(_on_pre_market_news)
 	NewsEventSystem.on_theme_hint.connect(_on_theme_hint)
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
-	SkillTree.on_skill_unlocked.connect(func(_id: String) -> void: _update_title_with_skill())
+	SkillTree.on_skill_unlocked.connect(_on_skill_unlocked_refresh_title)
+	tree_exiting.connect(_disconnect_signals)
 
 
 func _build_ui() -> void:
@@ -375,12 +376,8 @@ func _mark_read(entry: Dictionary, card: PanelContainer, marker: Label) -> void:
 	style.border_color = ThemeSetup.BORDER_DIM
 	style.set_border_width_all(1)
 	card.add_theme_stylebox_override("panel", style)
-
-	# Check for stock link
-	var target_stocks: Variant = entry.get("target_stock_ids")
-	if target_stocks is Array and (target_stocks as Array).size() > 0:
-		var first_stock: String = str((target_stocks as Array)[0])
-		stock_clicked.emit(first_stock)
+	# NOTE: stock_clicked is NOT emitted here — marking a card read must not
+	# trigger navigation. Stock navigation belongs to a dedicated click handler.
 
 
 func _clear_cards() -> void:
@@ -409,6 +406,23 @@ func _tick_to_period(tick: int) -> String:
 		return "장 중반"
 	else:
 		return "장 후반"
+
+
+func _on_skill_unlocked_refresh_title(_id: String) -> void:
+	_update_title_with_skill()
+
+
+func _disconnect_signals() -> void:
+	if NewsEventSystem.on_news_display.is_connected(_on_news_display):
+		NewsEventSystem.on_news_display.disconnect(_on_news_display)
+	if NewsEventSystem.on_pre_market_news.is_connected(_on_pre_market_news):
+		NewsEventSystem.on_pre_market_news.disconnect(_on_pre_market_news)
+	if NewsEventSystem.on_theme_hint.is_connected(_on_theme_hint):
+		NewsEventSystem.on_theme_hint.disconnect(_on_theme_hint)
+	if GameClock.on_market_state_changed.is_connected(_on_market_state_changed):
+		GameClock.on_market_state_changed.disconnect(_on_market_state_changed)
+	if SkillTree.on_skill_unlocked.is_connected(_on_skill_unlocked_refresh_title):
+		SkillTree.on_skill_unlocked.disconnect(_on_skill_unlocked_refresh_title)
 
 
 func _update_title_with_skill() -> void:

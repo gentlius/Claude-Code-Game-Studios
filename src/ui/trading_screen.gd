@@ -135,6 +135,7 @@ func _connect_signals() -> void:
 	OrderEngine.on_order_filled.connect(_on_order_filled)
 	OrderEngine.on_order_rejected.connect(_on_order_rejected)
 	OrderEngine.on_order_cancelled.connect(_on_order_cancelled)
+	OrderEngine.on_order_expired.connect(_on_order_expired)
 	PortfolioManager.valuation_updated.connect(_on_valuation_updated)
 	CurrencySystem.sim_cash_changed.connect(_on_sim_cash_changed)
 	XpSystem.on_level_up.connect(_on_level_up)
@@ -283,6 +284,7 @@ func _on_market_state_changed(
 ) -> void:
 	match new_state:
 		GameClock.MarketState.PRE_MARKET:
+			_refresh_limit_price_bounds()
 			_set_ui_state(UIState.PRE_MARKET)
 		GameClock.MarketState.MARKET_OPEN:
 			_set_ui_state(UIState.MARKET_OPEN)
@@ -322,6 +324,10 @@ func _on_order_rejected(order: Dictionary) -> void:
 
 
 func _on_order_cancelled(_order: Dictionary) -> void:
+	_update_pending_orders()
+
+
+func _on_order_expired(_order: Dictionary) -> void:
 	_update_pending_orders()
 
 
@@ -425,17 +431,22 @@ func _update_order_panel_for_stock() -> void:
 	if stock == null:
 		return
 	_lbl_order_stock_name.text = "%s (%s)" % [stock.name_ko, _selected_stock_id]
-	# Clamp SpinBox to daily limits (상/하한가)
+	_refresh_limit_price_bounds()
+	_spin_limit_price.value = PriceEngine.get_current_price(_selected_stock_id)
+	_update_order_panel_price()
+	_lbl_order_error.text = ""
+	_spin_quantity.value = 0
+
+
+func _refresh_limit_price_bounds() -> void:
+	if _selected_stock_id == "":
+		return
 	var limits: Dictionary = PriceEngine.get_daily_limits(_selected_stock_id)
 	if limits.size() > 0:
 		_spin_limit_price.min_value = limits["lower"]
 		_spin_limit_price.max_value = limits["upper"]
-	var current_price: int = PriceEngine.get_current_price(_selected_stock_id)
-	_spin_limit_price.step = PriceEngine.get_tick_size(current_price)
-	_spin_limit_price.value = current_price
-	_update_order_panel_price()
-	_lbl_order_error.text = ""
-	_spin_quantity.value = 0
+	var price: int = PriceEngine.get_current_price(_selected_stock_id)
+	_spin_limit_price.step = PriceEngine.get_tick_size(price)
 
 
 func _update_order_panel_price() -> void:

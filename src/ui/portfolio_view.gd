@@ -22,8 +22,9 @@ var _tx_container: VBoxContainer
 func _ready() -> void:
 	_build_ui()
 	PortfolioManager.valuation_updated.connect(_on_valuation_updated)
-	PortfolioManager.holding_added.connect(func(_s: String, _q: int, _p: int) -> void: _refresh())
-	PortfolioManager.holding_removed.connect(func(_s: String, _q: int, _p: int, _pnl: int) -> void: _refresh())
+	PortfolioManager.holding_added.connect(_on_holding_added)
+	PortfolioManager.holding_removed.connect(_on_holding_removed)
+	tree_exiting.connect(_disconnect_signals)
 
 
 func _build_ui() -> void:
@@ -95,6 +96,23 @@ func _build_ui() -> void:
 
 
 # ── Signal Handlers ──
+
+func _on_holding_added(_s: String, _q: int, _p: int) -> void:
+	_refresh()
+
+
+func _on_holding_removed(_s: String, _q: int, _p: int, _pnl: int) -> void:
+	_refresh()
+
+
+func _disconnect_signals() -> void:
+	if PortfolioManager.valuation_updated.is_connected(_on_valuation_updated):
+		PortfolioManager.valuation_updated.disconnect(_on_valuation_updated)
+	if PortfolioManager.holding_added.is_connected(_on_holding_added):
+		PortfolioManager.holding_added.disconnect(_on_holding_added)
+	if PortfolioManager.holding_removed.is_connected(_on_holding_removed):
+		PortfolioManager.holding_removed.disconnect(_on_holding_removed)
+
 
 func _on_valuation_updated(_total: int, _rate: float) -> void:
 	_refresh()

@@ -12,6 +12,8 @@ func before_each() -> void:
 	OrderEngine._pre_market_queue.clear()
 	OrderEngine._order_history.clear()
 	OrderEngine._sell_locks.clear()
+	# Ensure limit order skill (TR1) is unlocked so tests exercise tick size logic
+	SkillTree._unlocked_skills["TR1"] = true
 
 
 # ── Tick Size Validation in Limit Orders ──
@@ -34,6 +36,7 @@ func test_limit_order_accepted_valid_tick_size() -> void:
 
 	# 65000 is valid (tick=100 at this price level)
 	var order: Dictionary = OrderEngine.submit_limit_order("BUY", "KSF", 1, 65000)
+	assert_eq(order["status"], "PENDING", "Valid tick size order should be accepted")
 	assert_ne(order["reject_reason"], "지정가가 호가 단위(100원)에 맞지 않습니다",
 		"Valid tick should not be rejected for tick size")
 
@@ -54,5 +57,6 @@ func test_limit_order_tick_size_boundary() -> void:
 
 	# At price 5000, tick=10. 5000 is valid.
 	var order: Dictionary = OrderEngine.submit_limit_order("BUY", "KSF", 1, 5000)
+	assert_eq(order["status"], "PENDING", "Valid tick size boundary order should be accepted")
 	assert_ne(order["reject_reason"], "지정가가 호가 단위(10원)에 맞지 않습니다",
 		"5000 should be valid (tick=10)")

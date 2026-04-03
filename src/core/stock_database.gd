@@ -25,7 +25,15 @@ func _ready() -> void:
 
 ## Returns a StockData by ID, or null if not found.
 func get_stock(stock_id: String) -> StockData:
+	if not _stocks.has(stock_id):
+		push_warning("StockDatabase: stock_id '%s' not found" % stock_id)
+		return null
 	return _stocks.get(stock_id)
+
+
+## Returns true if a stock with the given ID exists in the database.
+func stock_exists(stock_id: String) -> bool:
+	return _stocks.has(stock_id)
 
 
 ## Returns all stock IDs as an array.
@@ -113,18 +121,34 @@ func _load_stocks_from_json() -> void:
 	var stock_list: Array = data.get("stocks", [])
 
 	for d: Variant in stock_list:
+		if not d is Dictionary:
+			push_error("StockDatabase: unexpected entry type %s — skipping" % typeof(d))
+			continue
 		var entry: Dictionary = d as Dictionary
+
+		# Validate required fields before accessing them.
+		const REQUIRED_FIELDS: Array[String] = ["id", "name_ko", "name_en", "sector", "base_price"]
+		var missing_field := false
+		for field: String in REQUIRED_FIELDS:
+			if not entry.has(field):
+				push_error("StockDatabase: entry missing required field '%s' — skipping entry" % field)
+				missing_field = true
+				break
+		if missing_field:
+			continue
+
 		var stock := StockData.new()
-		stock.stock_id = entry["id"]
-		stock.name_ko = entry["name_ko"]
-		stock.name_en = entry["name_en"]
-		stock.sector = entry["sector"]
-		stock.base_price = int(entry["base_price"])
+		stock.stock_id = entry.get("id", "")
+		stock.name_ko = entry.get("name_ko", "")
+		stock.name_en = entry.get("name_en", "")
+		stock.sector = entry.get("sector", "")
+		stock.base_price = int(entry.get("base_price", 0))
 		stock.volatility_profile = VOL_MAP.get(entry.get("volatility", "MEDIUM"), StockData.VolatilityProfile.MEDIUM)
 		stock.macro_sensitivity = float(entry.get("macro_sensitivity", 1.0))
 		stock.sector_sensitivity = float(entry.get("sector_sensitivity", 1.0))
 		stock.listed_shares = int(entry.get("listed_shares", 1000000))
 		stock.per = float(entry.get("per", 0.0))
+		stock.dividend_yield = float(entry.get("dividend_yield", 0.0))
 		var tags: Array = entry.get("event_tags", [])
 		stock.event_tags = Array(tags, TYPE_STRING, &"", null)
 		stock.description = entry.get("description", "")

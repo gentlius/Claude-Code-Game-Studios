@@ -222,8 +222,13 @@ func _on_tick(tick_number: int, _day: int, _week: int) -> void:
 	var still_pending: Array[Dictionary] = []
 	var to_fill: Array[Array] = []  # [[order, price], ...]
 	for order: Dictionary in _pending_limit_orders:
-		# Skip fill check if stock is halted by VI or CB
-		if PriceEngine.get_cb_stage() > 0 or PriceEngine.is_vi_halted(order["stock_id"]):
+		# Skip fill check if stock is halted by VI or CB Stage 2 (early close).
+		# Stage 1 is a temporary halt — once _cb_halt_remaining reaches 0 the
+		# stage stays at 1 for the rest of the day, so checking > 0 would
+		# permanently block all limit fills after Stage 1 lifts. Only Stage 2
+		# (permanent early-close) should suppress fills for the remainder of
+		# the session. (R-01 fix)
+		if PriceEngine.get_cb_stage() >= 2 or PriceEngine.is_vi_halted(order["stock_id"]):
 			still_pending.append(order)
 			continue
 
@@ -363,12 +368,22 @@ func _fill_limit_order(order: Dictionary, current_price: int) -> void:
 # ── Expiry ──
 
 func _expire_pending_orders() -> void:
-	for order: Dictionary in _pending_limit_orders:
+	# Clear ALL queues BEFORE emitting signals — UI reads get_pending_orders()
+	# inside signal handlers, so the lists must already be empty.
+	# Covers: limit orders, PAUSED market orders, and PRE_MARKET orders
+	# (PRE_MARKET/PAUSED queues may have residual orders on CB Stage 2 early close)
+	var to_expire: Array[Dictionary] = []
+	to_expire.append_array(_pending_limit_orders)
+	to_expire.append_array(_market_order_queue)
+	to_expire.append_array(_pre_market_queue)
+	_pending_limit_orders.clear()
+	_market_order_queue.clear()
+	_pre_market_queue.clear()
+	for order: Dictionary in to_expire:
 		_refund_order(order)
 		order["status"] = "EXPIRED"
 		_order_history.append(order)
 		on_order_expired.emit(order)
-	_pending_limit_orders.clear()
 
 # ── Validation (GDD Rule 3, 8 steps) ──
 
@@ -387,8 +402,10 @@ func _validate_order(order: Dictionary) -> String:
 		return "존재하지 않는 종목입니다"
 
 	# 2.5. VI/CB halt check (GDD Rules 2-4, 2-5)
-	if PriceEngine.get_cb_stage() > 0:
-		return "CB 발동 중 — 전종목 거래정지"
+	# Stage 1 is a temporary halt; _cb_stage stays at 1 after it lifts.
+	# Only reject new orders during Stage 2 (permanent early close). (R-01 fix)
+	if PriceEngine.get_cb_stage() >= 2:
+		return "CB 2단계 발동 중 — 조기 장 마감"
 	if PriceEngine.is_vi_halted(order["stock_id"]):
 		return "변동성완화장치(VI) 발동 중입니다"
 
@@ -414,7 +431,11 @@ func _validate_order(order: Dictionary) -> String:
 			if effective_count >= SkillTree.get_max_holdings():
 				return "보유 종목 한도 초과"
 
-	# 6. Balance (BUY) — actual deduction happens in submit
+	# 6. Balance (BUY) — actual deduction happens in submit.
+	# Note: balance check and deduction are not atomic. Safe because GDScript is
+	# single-threaded and no signal is emitted between _validate_order and the
+	# CurrencySystem.sim_deduct call in submit_market_order / submit_limit_order.
+	# (R-03: TOCTOU is benign under GDScript's cooperative execution model)
 	if order["side"] == "BUY":
 		var required: int
 		if order["order_type"] == "LIMIT":
@@ -517,6 +538,13 @@ func _get_effective_holding_count(new_stock_id: String) -> int:
 			count += 1
 
 	for order: Dictionary in _market_order_queue:
+		if order["side"] == "BUY" and not known_stocks.has(order["stock_id"]):
+			known_stocks[order["stock_id"]] = true
+			count += 1
+
+	# Count pending limit BUY orders for new stocks (R-04 fix: was missing this
+	# queue, allowing slot limit bypass via limit orders on unseen stocks).
+	for order: Dictionary in _pending_limit_orders:
 		if order["side"] == "BUY" and not known_stocks.has(order["stock_id"]):
 			known_stocks[order["stock_id"]] = true
 			count += 1

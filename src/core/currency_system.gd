@@ -58,20 +58,26 @@ func sim_add(amount: int) -> void:
 
 # ── Public API: Season Lifecycle ──
 
-## Initialize sim seed for a new season.
-func init_season_seed(amount: int = DEFAULT_SEASON_SEED) -> void:
+## Initialize sim seed for the very first season only.
+## Must not be called mid-game; use start_season() for subsequent seasons.
+## Emits season_initialized and sim_cash_changed.
+func init_first_season(amount: int = DEFAULT_SEASON_SEED) -> void:
+	if _sim_cash > 0:
+		push_warning("CurrencySystem.init_first_season called on non-zero balance (%d) — ignoring" % _sim_cash)
+		return
 	_sim_cash = amount
 	_season_active = true
 	season_initialized.emit(amount)
 	sim_cash_changed.emit(_sim_cash, amount)
 
 
-## Settle the season — reset sim cash.
+## Settle the season. Marks the season inactive without touching the balance.
+## The settlement flow (cancel orders → liquidate → award prizes) uses
+## sim_add/sim_deduct directly, so the balance is already correct by the time
+## this is called. Wiping _sim_cash here would erase carry-over funds.
 func settle_season() -> void:
-	_sim_cash = 0
 	_season_active = false
 	season_settled.emit()
-	sim_cash_changed.emit(0, 0)
 
 
 ## Award prize money to the permanent deposit.

@@ -71,7 +71,8 @@ season_xp = BASE_SEASON_XP + rank_bonus + return_bonus
 | 항목 | 공식 | 예시 |
 |------|------|------|
 | BASE_SEASON_XP | 200 (시즌 완주 보상) | 200 |
-| rank_bonus | `RANK_XP_TABLE[final_rank]` | 1위: 500, 2위: 350, 3위: 250, 4~5위: 150, 6위+: 50 |
+| rank_bonus | `RANK_XP_TABLE[final_rank]` | §F2 테이블 참조 (1위: 500 … 11위+: 30) |
+| completion_bonus | `20 if (return_pct ≥ 0% AND season_trade_count ≥ MIN_TRADES_FOR_RANK) else 0` | 조건 충족 시 +20 |
 | return_bonus | `floor(season_return_pct × RETURN_XP_SCALE)` | +25% → 25 × 10 = 250 |
 
 - `RETURN_XP_SCALE` = 10 (튜닝 가능)
@@ -156,9 +157,11 @@ daily_return_multiplier 테이블 (Detailed Design 규칙 1-1 참조):
 ### F2. 시즌 보너스 XP
 
 ```
-season_xp = BASE_SEASON_XP + rank_bonus + return_bonus
+season_xp = BASE_SEASON_XP + rank_bonus + return_bonus + completion_bonus
 rank_bonus = RANK_XP_TABLE[final_rank]
 return_bonus = floor(max(0, season_return_pct) × RETURN_XP_SCALE)
+completion_bonus = 20 if (season_return_pct >= 0.0 AND season_trade_count >= MIN_TRADES_FOR_RANK) else 0
+# MIN_TRADES_FOR_RANK = 5 (season-manager.md §4-5 기준)
 ```
 
 | 변수 | 기본값 | 범위 | 설명 |
@@ -168,15 +171,23 @@ return_bonus = floor(max(0, season_return_pct) × RETURN_XP_SCALE)
 
 RANK_XP_TABLE:
 
+> 상세 규칙은 `design/gdd/season-manager.md §3-4` 참조.
+
 | 순위 | rank_bonus |
 |------|-----------|
 | 1위 | 500 |
 | 2위 | 350 |
 | 3위 | 250 |
-| 4~5위 | 150 |
-| 6위+ | 50 |
+| 4위 | 180 |
+| 5위 | 150 |
+| 6위 | 120 |
+| 7위 | 100 |
+| 8위 | 80 |
+| 9위 | 60 |
+| 10위 | 50 |
+| 11위+ | 30 |
 
-예시: 시즌 3위, 수익률 +25% → BASE_SEASON_XP(200) + rank_bonus(250) + return_bonus(floor(25×10)=250) = **700 XP**
+예시: 시즌 3위, 수익률 +25%, 체결 ≥ 5회 → BASE_SEASON_XP(200) + rank_bonus(250) + return_bonus(250) + completion_bonus(20) = **720 XP**
 
 ### F3. 레벨업 필요 XP
 

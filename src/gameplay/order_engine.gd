@@ -212,6 +212,25 @@ func get_locked_quantity(stock_id: String) -> int:
 	return _sell_locks.get(stock_id, 0)
 
 
+## Cancel all PENDING orders and refund reserved cash. Called by SeasonManager at season end.
+## See: design/gdd/season-manager.md §3-1 step ②
+func cancel_all_pending_orders() -> void:
+	var pending: Array[Dictionary] = get_pending_orders()
+	for order: Dictionary in pending:
+		cancel_order(order["order_id"])
+
+
+## Returns count of FILLED orders this season. Called by SeasonManager for rank eligibility.
+## _order_history is reset at season start in _on_season_start(), so this count is season-scoped.
+## See: design/gdd/season-manager.md §4-5
+func get_season_trade_count() -> int:
+	var count: int = 0
+	for order: Dictionary in _order_history:
+		if order.get("status", "") == "FILLED":
+			count += 1
+	return count
+
+
 ## Returns order history.
 func get_order_history(limit: int = 50) -> Array[Dictionary]:
 	if limit >= _order_history.size():

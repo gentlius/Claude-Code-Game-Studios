@@ -46,7 +46,6 @@ var _prev_close_assets: int = 0     ## Previous day's closing total assets
 
 func _ready() -> void:
 	GameClock.on_market_close.connect(_on_market_close)
-	GameClock.on_season_end.connect(_on_season_end)
 	GameClock.on_season_start.connect(_on_season_start)
 	GameClock.on_market_open.connect(_on_market_open)
 	OrderEngine.on_order_filled.connect(_on_order_filled)
@@ -183,26 +182,27 @@ func _on_market_close() -> void:
 	_prev_close_assets = current_assets
 
 
-func _on_season_end() -> void:
-	var season_return_pct: float = PortfolioManager.get_return_rate()
-	var final_rank: int = _estimate_season_rank(season_return_pct)
+## Called by SeasonManager at season end. Grants season bonus XP.
+## Implements GDD §3-1 step ⑤ and §4-7 free-market XP penalty rules.
+## See: design/gdd/season-manager.md §3-4, §4-7
+func grant_season_bonus(
+	final_rank: int,
+	is_free_market: bool,
+	season_return_pct: float,
+	season_trade_count: int
+) -> void:
+	# Free-market participants receive no rank bonus XP (no official ranking).
+	# Official league participants receive full season XP based on rank + return.
+	if not is_free_market:
+		var season_xp: int = _calculate_season_xp(final_rank, season_return_pct)
+		_grant_xp(season_xp, "season_bonus")
 
-	var season_xp: int = _calculate_season_xp(final_rank, season_return_pct)
-	_grant_xp(season_xp, "season_bonus")
-
-
-## Estimate player rank from return rate until Season Manager is implemented.
-## Rank 1 = top tier (>20%), Rank 5 = bottom tier (<-10%).
-static func _estimate_season_rank(return_pct: float) -> int:
-	if return_pct >= 20.0:
-		return 1
-	if return_pct >= 10.0:
-		return 2
-	if return_pct >= 0.0:
-		return 3
-	if return_pct >= -10.0:
-		return 4
-	return 5
+	# Completion bonus: 20 XP for any participant (free-market or official)
+	# who finishes with return_pct >= 0% AND at least 5 filled orders.
+	# No XP penalty applies to the completion bonus (GDD §3-4, §4-7).
+	# See: design/gdd/season-manager.md AC-12, AC-19
+	if season_return_pct >= 0.0 and season_trade_count >= 5:
+		_grant_xp(20, "completion_bonus")
 
 
 # ── Serialization ──

@@ -30,16 +30,16 @@
 | 4 | 뉴스/이벤트 시스템 (News & Events) | Gameplay | MVP | In Review | ✅ Done | [news-events.md](news-events.md) | 게임 시계, 종목 DB |
 | 5 | 주문 처리 엔진 (Order Engine) | Gameplay | MVP | In Review | ✅ Done | [order-engine.md](order-engine.md) | 종목 DB, 재화 시스템, 가격 엔진, 게임 시계, 포트폴리오 |
 | 6 | 포트폴리오 관리 (Portfolio Manager) | Gameplay | MVP | Approved | ✅ Done | [portfolio-manager.md](portfolio-manager.md) | 종목 DB, 재화 시스템 |
-| 7 | AI 경쟁자 시스템 (AI Competitors) | Gameplay | V-Slice | Not Started | — | — | 가격 엔진, 주문 엔진, 포트폴리오 |
+| 7 | AI 경쟁자 시스템 (AI Competitors) | Gameplay | V-Slice | Approved | 🚧 In Progress | [ai-competitor.md](ai-competitor.md) | 게임 시계 (TICKS_PER_DAY), 시즌/대회 관리 |
 | 8 | 스킬 트리 시스템 (Skill Tree) | Progression | V-Slice | In Review | ✅ Done | [skill-tree.md](skill-tree.md) | 경험치 시스템 |
 | 9 | 경험치 시스템 (XP System) | Progression | V-Slice | Approved | ✅ Done | [xp-system.md](xp-system.md) | 주문 엔진, 포트폴리오, 게임 시계 |
-| 10 | 시즌/대회 관리 (Season Manager) | Progression | V-Slice | Not Started | — | — | 가격 엔진, 포트폴리오, AI 경쟁자, 재화 |
+| 10 | 시즌/대회 관리 (Season Manager) | Progression | V-Slice | Approved | 🚧 In Progress | [season-manager.md](season-manager.md) | 가격 엔진, 포트폴리오, AI 경쟁자, 재화 |
 | 11 | 재화 시스템 (Currency System) | Economy | MVP | In Review | ✅ Done | [currency-system.md](currency-system.md) | — |
 | 12 | 트레이딩 스크린 (Main HUD) | UI | MVP | In Review | ✅ Done | [trading-screen.md](trading-screen.md) | 가격 엔진, 주문 엔진, 포트폴리오, 게임 시계 |
 | 13 | 차트 렌더러 (Chart Renderer) | UI | MVP | In Review | ✅ Done | [chart-renderer.md](chart-renderer.md) | 가격 엔진, 게임 시계 |
 | 14 | 뉴스 피드 UI (News Feed UI) | UI | MVP | In Review | ✅ Done | [news-feed-ui.md](news-feed-ui.md) | 뉴스/이벤트 시스템, 게임 시계 |
 | 15 | 포트폴리오 UI (Portfolio UI) | UI | MVP | In Review | ✅ Done | [portfolio-ui.md](portfolio-ui.md) | 포트폴리오 관리, 게임 시계 |
-| 16 | 리더보드 UI (Leaderboard UI) | UI | V-Slice | Not Started | — | — | 시즌/대회 관리 |
+| 16 | 리그/시즌 UI (League & Season UI) | UI | V-Slice | Approved | — | [league-ui.md](league-ui.md) | 시즌/대회 관리, AI 경쟁자, 게임 시계 |
 | 17 | 프로그레션 UI (Progression UI) | UI | V-Slice | In Review | ✅ Done | [progression-ui.md](progression-ui.md) | 경험치 시스템, 스킬 트리, 게임 시계, 트레이딩 스크린 |
 | 18 | 세이브/로드 (Save/Load) | Persistence | Alpha | Not Started | — | — | 포트폴리오, 스킬 트리, 시즌, 경험치 |
 | 19 | 오디오 시스템 (Audio) | Audio | Alpha | Not Started | — | — | 주문 엔진, 뉴스 시스템 |
@@ -167,13 +167,13 @@
 | Total systems identified | 21 |
 | Design docs started | 15 |
 | Design docs reviewed (2차 리뷰 완료) | 15 |
-| Design docs approved | 3 (종목 DB, 포트폴리오, XP) |
-| Design docs in review | 12 (2차 리뷰 수정 반영, 재승인 필요) |
+| Design docs approved | 7 (종목 DB, 포트폴리오, XP, AI 경쟁자, 시즌/대회 관리, 리그/시즌 UI, currency-system 갱신) |
+| Design docs in review | 9 |
 | **Implemented** | **15** (MVP 11/11 + V-Slice 4: XP, Skill Tree, Progression UI) |
 | MVP systems designed | 11/11 |
 | MVP systems implemented | 11/11 |
-| Vertical Slice systems designed | 3/6 (XP, Skill Tree, Progression UI — GDD 완료) |
-| Vertical Slice systems implemented | 3/6 (XP, Skill Tree, Progression UI) |
+| Vertical Slice systems designed | 6/6 ✅ (XP, Skill Tree, Progression UI, AI 경쟁자, 시즌 관리, 리그 UI) |
+| Vertical Slice systems implemented | 3/6 (XP, Skill Tree, Progression UI — AI 경쟁자·시즌 관리 In Progress) |
 | GDD vs 구현 QA 완료 | **15/15** ✅ (전체 구현 시스템 검증 완료, GDD 갱신 완료) |
 | 컨셉 변경 | 모의투자→실전투자 (단일 계좌, 복리 구조) 반영 완료 |
 
@@ -189,6 +189,6 @@
 - [x] **GDD vs 구현 QA**: 15/15 전체 완료 (2026-04-02). game-clock.md 대폭 갱신, price-engine/chart-renderer/stock-database 소폭 갱신
 - [x] **2차 전체 GDD 리뷰** (2026-04-03): 47개 이슈 발견 → 수정 완료. Lv→스킬ID 표기 통일, 수치 오류 수정, API 일관성 확보
 - [x] **컨셉 변경** (2026-04-03): 모의투자→실전투자. 단일 계좌(예수금 직접 투자), 복리 성장 구조. currency-system.md 전면 재작성
-- [ ] Design remaining V-Slice systems: AI 경쟁자, 시즌/대회 관리, 리더보드 UI
+- [x] Design remaining V-Slice systems: AI 경쟁자 (Approved), 시즌/대회 관리 (Approved), 리그/시즌 UI (Approved) — Sprint 2, 2026-04-03
 - [ ] Run `/gate-check pre-production` when ready
 - [ ] Run `/design-review` on each new GDD

@@ -42,6 +42,18 @@ Every task follows: **Question -> Options -> Decision -> Draft -> Approval**
 
 See `docs/COLLABORATIVE-DESIGN-PRINCIPLE.md` for full protocol and examples.
 
+## Escalation Policy
+
+Not every decision requires user input. Use this table to determine who decides:
+
+| Level | Decision Owner | Examples |
+|-------|---------------|---------|
+| **Team Autonomous** | Director agents decide internally (TD, UX, Game Designer, etc.) | Scene structure, UI layout options, tech implementation choices, formula details, edge case handling |
+| **Report to User** | Team resolves, then summarizes outcome | Cross-domain conflicts, decisions affecting multiple GDDs simultaneously, design review findings |
+| **User Decision Required** | Must escalate to user | Core game concept changes, scope expansion/reduction, monetization direction, narrative pillars, any decision that changes what the game fundamentally is |
+
+**Rule**: If two or more director-level agents can resolve a question by consulting each other, they MUST do so before escalating to the user. Only escalate when the team is genuinely split or the decision exceeds team authority.
+
 > **First session?** If the project has no engine configured and no game concept,
 > run `/start` to begin the guided onboarding flow.
 

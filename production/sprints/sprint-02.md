@@ -1,5 +1,13 @@
 # Sprint 2 -- 2026-04-14 to 2026-04-28
 
+## Progress Snapshot (2026-04-03)
+
+- **계획 작업**: 2/8 완료 (S2-01 In Progress, S2-02 Completed)
+- **비계획 작업**: 4/4 완료 (league-ui GDD, 연동 업데이트, 기존 GDD 수정)
+- **소화 sessions**: ~4.75 (계획 1.5 + 비계획 2 + S2-01 진행 ~1.25)
+- **남은 Must Have**: S2-01 완료 → S2-03 → S2-04 (5.5 sessions)
+- **판정**: 타이트하지만 실현 가능. S2-01 조기 완료가 핵심.
+
 ## Sprint Goal
 
 AI 경쟁자 시스템과 시즌/대회 관리(리그 승강제 포함)를 설계 및 구현하여,
@@ -34,26 +42,35 @@ Formulas, Edge Cases, Dependencies, Tuning Knobs, Acceptance Criteria.
 
 ### Must Have (Critical Path)
 
-| ID | Task | Category | Est. | Dependencies | Acceptance Criteria |
-|----|------|----------|------|-------------|---------------------|
-| S2-01 | AI 경쟁자 시스템 GDD 작성 (ai-competitor.md) | Design | 1 sess | — | 8 필수 섹션 완료, AI 성격 유형/매매 로직/난이도 스케일링 정의, Approved 상태 |
-| S2-02 | 시즌/대회 관리 + 리그 승강제 GDD 작성 (season-manager.md) | Design | 1.5 sess | S2-01 | 8 필수 섹션 완료, 시즌 수명주기/리그 티어/승강 조건/상금 공식 정의, Approved 상태 |
-| S2-03 | AI 경쟁자 시스템 구현 | Gameplay | 2 sess | S2-01 (Approved) | AI 트레이더 5-10명 생성, 각자 매매 행동 실행, 수익률 추적 가능, 유닛 테스트 통과 |
-| S2-04 | 시즌/대회 관리 + 리그 승강제 구현 | Gameplay | 2.5 sess | S2-02 (Approved), S2-03 | 시즌 시작→진행→종료 수명주기, 리그 티어별 AI 배정, 승강 판정, 상금 지급, 유닛 테스트 통과 |
+| ID | Task | Category | Est. | Dependencies | Status | Acceptance Criteria |
+|----|------|----------|------|-------------|--------|---------------------|
+| S2-01 | AI 경쟁자 시스템 GDD 작성 (ai-competitor.md) | Design | 1 sess | — | **In Progress** | 8 필수 섹션 완료, AI 성격 유형/매매 로직/난이도 스케일링 정의, Approved 상태 |
+| S2-02 | 시즌/대회 관리 + 리그 승강제 GDD 작성 (season-manager.md) | Design | 1.5 sess | S2-01 | **Completed/Approved** | 8 필수 섹션 완료, 시즌 수명주기/리그 티어/승강 조건/상금 공식 정의, Approved 상태 |
+| S2-03 | AI 경쟁자 시스템 구현 | Gameplay | 2 sess | S2-01 (Approved) | Not Started | AI 트레이더 5-10명 생성, 각자 매매 행동 실행, 수익률 추적 가능, 유닛 테스트 통과 |
+| S2-04 | 시즌/대회 관리 + 리그 승강제 구현 | Gameplay | 2.5 sess | S2-02 (Approved), S2-03 | Not Started | 시즌 시작→진행→종료 수명주기, 리그 티어별 AI 배정, 승강 판정, 상금 지급, 유닛 테스트 통과 |
 
 ### Should Have
 
-| ID | Task | Category | Est. | Dependencies | Acceptance Criteria |
-|----|------|----------|------|-------------|---------------------|
-| S2-05 | TD-01 수정: 틱 처리 순서 보장 | Tech Debt | 0.5 sess | — | GameClock이 process_tick() 순차 호출, 기존 테스트 전부 통과 |
-| S2-06 | TD-02 수정: reset_for_testing() 메서드 추가 | Tech Debt | 0.5 sess | — | 모든 gameplay/core 시스템에 reset_for_testing() 추가, before_each에서 호출 |
+| ID | Task | Category | Est. | Dependencies | Status | Acceptance Criteria |
+|----|------|----------|------|-------------|--------|---------------------|
+| S2-05 | TD-01 수정: 틱 처리 순서 보장 | Tech Debt | 0.5 sess | — | Not Started | GameClock이 process_tick() 순차 호출, 기존 테스트 전부 통과 |
+| S2-06 | TD-02 수정: reset_for_testing() 메서드 추가 | Tech Debt | 0.5 sess | — | Not Started | 모든 gameplay/core 시스템에 reset_for_testing() 추가, before_each에서 호출 |
 
 ### Nice to Have
 
-| ID | Task | Category | Est. | Dependencies | Acceptance Criteria |
-|----|------|----------|------|-------------|---------------------|
-| S2-07 | systems-index.md 갱신 (AI, Season GDD 링크 추가) | Docs | 0.25 sess | S2-01, S2-02 | Systems Index에 새 GDD 파일 링크, 상태 업데이트 |
-| S2-08 | v-slice.md 마일스톤 진행 상태 업데이트 | Docs | 0.1 sess | S2-03, S2-04 | Sprint 2 시스템 상태 반영 |
+| ID | Task | Category | Est. | Dependencies | Status | Acceptance Criteria |
+|----|------|----------|------|-------------|--------|---------------------|
+| S2-07 | systems-index.md 갱신 (AI, Season GDD 링크 추가) | Docs | 0.25 sess | S2-01, S2-02 | Not Started | Systems Index에 새 GDD 파일 링크, 상태 업데이트 |
+| S2-08 | v-slice.md 마일스톤 진행 상태 업데이트 | Docs | 0.1 sess | S2-03, S2-04 | Not Started | Sprint 2 시스템 상태 반영 |
+
+### Unplanned Work (Sprint 중 발생)
+
+| ID | Task | Category | Est. | Dependencies | Status | Notes |
+|----|------|----------|------|-------------|--------|-------|
+| S2-U1 | league-ui.md GDD 작성 | Design | ~1 sess | S2-02 | **Completed/Approved** | 시즌/리그 GDD 작성 과정에서 리그 UI 설계 필요성 발견, 별도 GDD로 분리 |
+| S2-U2 | xp-system.md, currency-system.md 연동 업데이트 | Design | ~0.5 sess | S2-02 | **Completed** | 시즌 보상 체계와의 연동 반영을 위해 기존 GDD 수정 |
+| S2-U3 | trading-screen.md 수정 | Design | ~0.25 sess | S2-U1 | **Completed** | 리그/시즌 관련 UI 요소 반영 |
+| S2-U4 | progression-ui.md 수정 | Design | ~0.25 sess | S2-U1 | **Completed** | 리그 승강 관련 프로그레션 UI 반영 |
 
 ## Capacity Check
 
@@ -63,40 +80,47 @@ Formulas, Edge Cases, Dependencies, Tuning Knobs, Acceptance Criteria.
 | Must Have 합계 | 7 |
 | Should Have 합계 | 1 |
 | Nice to Have 합계 | 0.35 |
-| **합계** | **8.35** |
-| **여유** | **-0.35 (buffer에서 충당)** |
+| Unplanned 합계 (실제 소화) | 2 |
+| **합계** | **10.35** |
+| **초과** | **-2.35 (buffer 초과)** |
 
-> Must Have 7 sessions + Should Have 1 session = 8 sessions으로 available capacity와 정확히 일치.
-> Nice to Have는 buffer에서 소화하거나 여유 시 처리. 타이트하지만 실현 가능한 계획.
+> 비계획 작업 2 sessions 발생 (league-ui GDD, 연동 업데이트, 기존 GDD 수정).
+> S2-02 완료 과정에서 파생된 필수 작업이므로 정당한 scope 추가.
+> Sprint 1 비계획 비율(53%) 대비 개선(~20%) -- 기반 시스템 안정화 효과 확인.
 
 ## Critical Path
 
 ```
-S2-01 (AI GDD, 1s)
-  └─→ S2-02 (Season GDD, 1.5s)
-        └─→ S2-04 (Season 구현, 2.5s)
+S2-01 (AI GDD, 1s) ◀── IN PROGRESS
   └─→ S2-03 (AI 구현, 2s)
         └─→ S2-04 (Season 구현, 2.5s)
+
+S2-02 (Season GDD, 1.5s) ✅ DONE
+  └─→ S2-04 (Season 구현, 2.5s) -- S2-02 의존성 해소됨
 ```
 
-S2-04는 S2-02와 S2-03 모두에 의존. AI GDD(S2-01)가 블로커.
-S2-05, S2-06 (Tech Debt)은 독립적이므로 GDD 작성과 병행 가능.
+~~S2-04는 S2-02와 S2-03 모두에 의존. AI GDD(S2-01)가 블로커.~~
+S2-02 완료로 의존성 1개 해소. S2-04의 남은 블로커는 S2-03 (AI 구현) 완료뿐.
+현재 블로커: S2-01 (AI GDD) -- S2-01 Approved 후 S2-03 착수 가능.
+S2-05, S2-06 (Tech Debt)은 독립적이므로 S2-01 완료 대기 중 병행 가능.
 
-**최적 실행 순서**:
-1. S2-01 (AI GDD) + S2-05/S2-06 (Tech Debt) 병행
-2. S2-02 (Season GDD) -- S2-01 완료 후
-3. S2-03 (AI 구현) -- S2-01 Approved 후 바로 시작 가능 (S2-02와 병행)
-4. S2-04 (Season 구현) -- S2-02 Approved + S2-03 완료 후
+**현재 실행 순서** (업데이트):
+1. ~~S2-01 (AI GDD) + S2-05/S2-06 (Tech Debt) 병행~~ → S2-01 진행 중
+2. ~~S2-02 (Season GDD)~~ → **완료**
+3. S2-03 (AI 구현) -- S2-01 Approved 후 바로 시작
+4. S2-04 (Season 구현) -- S2-03 완료 후 (S2-02 의존성은 이미 해소)
 
 ## Risks
 
-| Risk | Probability | Impact | Mitigation |
-|------|------------|--------|------------|
-| 리그 승강제 설계 복잡도가 예상 초과 | Medium | High | V-Slice는 3티어(하/중/상)로 최소 구현. 세분화된 티어(5+)는 Alpha로 연기 |
-| AI 매매 로직 밸런싱에 시간 소모 | Medium | Medium | MVP 수준 AI(규칙 기반 3종 성격)로 시작. 학습형/적응형 AI는 후속 |
-| GDD 승인에 예상보다 많은 반복 필요 | Low | High | 인크리멘탈 작성(섹션별 승인). 핵심 설계 질문을 사전 합의 |
-| Season Manager가 GameClock/Portfolio에 대규모 변경 요구 | Low | Medium | 시즌 수명주기를 GameClock 외부에서 관리 (orchestrator 패턴). 기존 시스템 최소 수정 |
-| Sprint 1 수준의 비계획 작업 발생 (5+ sessions) | Low | High | 기반 시스템 안정화됨. 비계획 작업 발생 시 Nice to Have → 다음 스프린트 |
+| Risk | Probability | Impact | Status | Mitigation |
+|------|------------|--------|--------|------------|
+| 리그 승강제 설계 복잡도가 예상 초과 | Medium | High | **해소** | season-manager.md GDD에서 5티어 설계 완료. 구현 복잡도는 S2-04에서 재평가 |
+| AI 매매 로직 밸런싱에 시간 소모 | Medium | Medium | 유지 | MVP 수준 AI(규칙 기반 3종 성격)로 시작. 학습형/적응형 AI는 후속 |
+| GDD 승인에 예상보다 많은 반복 필요 | Low | High | **부분 해소** | S2-02 승인 완료. S2-01은 현재 작성 중 -- 반복 가능성 잔존 |
+| Season Manager가 GameClock/Portfolio에 대규모 변경 요구 | Low | Medium | **해소** | season-manager.md 설계에서 orchestrator 패턴 확정, 기존 시스템 최소 수정 확인 |
+| Sprint 1 수준의 비계획 작업 발생 (5+ sessions) | Low | High | **완화** | 비계획 작업 ~2 sessions 발생 (Sprint 1의 5.35 대비 대폭 감소). Buffer 내 관리 가능 |
+| S2-01 (AI GDD) 완료 지연으로 S2-03/S2-04 착수 불가 | **Medium** | **High** | **신규** | S2-01이 유일한 블로커. 지연 시 S2-05/S2-06 (Tech Debt)을 선행 처리하여 유휴 시간 최소화 |
+| 비계획 GDD 수정 추가 발생 (AI GDD 파생) | Low | Medium | **신규** | S2-02에서 league-ui.md 등 파생 작업 경험. S2-01에서도 유사 패턴 가능. Buffer 잔여분으로 대응 |
 
 ## Key Design Questions (Sprint 시작 전 합의 필요)
 
@@ -152,7 +176,10 @@ S2-05, S2-06 (Tech Debt)은 독립적이므로 GDD 작성과 병행 가능.
 ## Definition of Done for this Sprint
 
 - [ ] ai-competitor.md GDD Approved
-- [ ] season-manager.md GDD Approved (리그 승강제 포함)
+- [x] season-manager.md GDD Approved (리그 승강제 포함)
+- [x] league-ui.md GDD Approved (비계획 추가)
+- [x] xp-system.md, currency-system.md 연동 업데이트 완료
+- [x] trading-screen.md, progression-ui.md 수정 완료
 - [ ] AI 경쟁자 시스템 구현 완료 (ai_competitor.gd + 유닛 테스트)
 - [ ] 시즌/대회 관리 시스템 구현 완료 (season_manager.gd + 유닛 테스트)
 - [ ] 리그 승강 로직 구현 및 테스트 통과

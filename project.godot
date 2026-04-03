@@ -23,6 +23,8 @@ PortfolioManager="*res://src/gameplay/portfolio_manager.gd"
 OrderEngine="*res://src/gameplay/order_engine.gd"
 XpSystem="*res://src/gameplay/xp_system.gd"
 SkillTree="*res://src/gameplay/skill_tree.gd"
+AiCompetitor="*res://src/gameplay/ai_competitor.gd"
+SeasonManager="*res://src/gameplay/season_manager.gd"
 
 [display]
 

@@ -1,6 +1,8 @@
 # 포트폴리오 관리 (Portfolio Manager)
 
-> **Status**: In Design
+> **Status**: In Review
+
+> **Note**: xp-system.md (Approved)가 이 시스템에 Hard 의존. XP 구현 전 리뷰 완료 필요.
 > **Author**: user + game-designer
 > **Last Updated**: 2026-03-26
 > **Implements Pillar**: 판단이 곧 실력 (Judgment is King), 체감있는 성장 (Feel the Growth)
@@ -13,9 +15,8 @@
 기준이 되는 대회 내 총 자산(`sim_total_assets = sim_cash + 보유 주식 평가액`)을
 산출하는 핵심 시스템이다.
 
-아키텍처는 BasePortfolio(공통 로직) + SimPortfolio(모의투자) / RealPortfolio(현물,
-향후 확장) 패턴으로 설계한다. MVP에서는 SimPortfolio만 구현하며, 시즌 종료 시
-전체 리셋된다.
+MVP에서는 단일 포트폴리오(`SimPortfolio`)로 구현한다. `RealPortfolio`는 향후 확장용 스텁이다. 시즌 종료 시 보유 주식을 강제 청산하고,
+예수금 잔액은 다음 시즌으로 이월된다 (복리 구조).
 
 ## Player Fantasy
 
@@ -59,24 +60,25 @@ PortfolioSummary {
     max_holdings: int           # 최대 보유 가능 종목 수 (스킬 레벨 기준)
 }
 
-SimPortfolio extends BasePortfolio {
+SimPortfolio extends BasePortfolio {  # "Sim" = simulation (게임 경제). 예수금 직접 투자.
     season_id: string
-    initial_seed: int           # 시즌 시작 시드 (재화 시스템의 sim_seed_amount, 기본 1,000,000)
+    season_start_cash: int      # 시즌 시작 시 예수금 스냅샷 (첫 시즌: 1,000,000, 이후 이월된 잔액)
 
     update_valuation(price_provider, sim_cash, reserved_cash)
                                 # 틱별 호출. 평가 갱신 + 캐시 갱신
     get_return_rate(): float    # 캐시된 최신 수익률 반환 (파라미터 불필요)
     get_total_assets(): int     # 캐시된 최신 총 자산 반환
-    get_portfolio_summary(max_holdings): PortfolioSummary
+    get_portfolio_summary(): PortfolioSummary
                                 # 캐시된 값으로 PortfolioSummary 조립.
+                                # 내부적으로 SkillTree.get_max_holdings()를 호출하여 슬롯 정보를 조회한다.
                                 # sim_cash, reserved_cash는 update_valuation에서
                                 # 캐시된 값 사용 (추가 외부 조회 불필요)
     reset()                     # 시즌 종료 시 전체 초기화
 }
 
-// 향후 확장
+// 향후 확장: 수수료, 배당, 공매도 등 고급 기능 추가 시
 RealPortfolio extends BasePortfolio {
-    // 예수금 기반 투자, 수수료, 배당 등
+    // 매매 수수료, 배당금, 공매도 잔고 등
 }
 ```
 
@@ -156,9 +158,9 @@ TransactionRecord {
 
 | 스킬 레벨 | max_holdings | 설명 |
 |----------|-------------|------|
-| Lv1 (기본) | 3 | 집중 투자 강제 |
-| Lv2 | 5 | 분산 투자 시작 |
-| Lv3 | 10 | 전 종목 보유 가능 |
+| P0 (기본) | 3 | 집중 투자 강제 |
+| P1 | 5 | 분산 투자 시작 |
+| P2 | 10 | 전 종목 보유 가능 |
 
 - 보유 종목 수 = `holdings.size` (수량 0이 아닌 종목만 카운트)
 - 한도 도달 시 새로운 종목 매수 불가. 기존 보유 종목 추가 매수는 허용.
@@ -181,7 +183,7 @@ update_valuation(price_provider, sim_cash, reserved_cash):
 
     // Step 2: 캐시 갱신 (get_total_assets, get_return_rate의 반환값)
     _cached_total_assets = sim_cash + reserved_cash + total_stock_value
-    _cached_return_rate = (_cached_total_assets - initial_seed) / initial_seed × 100
+    _cached_return_rate = (_cached_total_assets - season_start_cash) / season_start_cash × 100
     _cached_sim_cash = sim_cash
     _cached_reserved_cash = reserved_cash
 ```
@@ -207,12 +209,12 @@ update_valuation(price_provider, sim_cash, reserved_cash):
 |--------|-----------|-----------|
 | **주문 처리 엔진** | 주문 엔진 → 포트폴리오 | 주문 엔진이 체결 시 `add_holding()` / `remove_holding()`을 **직접 메서드 호출** (시그널 아님). `get_holding_count()` → 보유 한도 검증. `get_total_reserved_cash()` → 미체결 지정가 매수 예약금 합계 (총 자산 계산용) |
 | **가격 엔진** | 포트폴리오가 참조 | `get_current_price(stock_id)` → 틱별 평가 금액 계산 |
-| **재화 시스템** | 포트폴리오가 참조 | `get_sim_cash()` → 총 자산 계산의 현금 파트 |
+| **재화 시스템** | 포트폴리오가 참조 / 포트폴리오가 쓰기 | `get_sim_cash()` → 총 자산 계산의 현금 파트. `sim_add(amount)` → `force_liquidate()` 시 청산 대금 직접 입금 (주문 엔진 우회) |
 | **종목 DB** | 포트폴리오가 참조 | `get_stock(stock_id)` → 종목명/섹터 등 표시 정보 |
 | **시즌/대회 관리** | 시즌이 참조 | `get_total_assets()`, `get_return_rate()` → 캐시된 값으로 순위 산출. `force_liquidate(price_provider)` → 강제 청산. `reset()` → 시즌 리셋 |
 | **포트폴리오 UI** | UI가 참조 | `get_all_holdings()`, `get_total_assets()`, `get_return_rate()`, `get_transaction_history()` |
-| **트레이딩 스크린** | UI가 참조 | `get_portfolio_summary(max_holdings)` → 캐시된 값으로 PortfolioSummary 조립 |
-| **스킬 트리** | 포트폴리오가 참조 | `get_portfolio_level()` → max_holdings 결정 |
+| **트레이딩 스크린** | UI가 참조 | `get_portfolio_summary()` → 캐시된 값으로 PortfolioSummary 조립. 내부적으로 `SkillTree.get_max_holdings()`를 호출하여 슬롯 정보를 조회한다 |
+| **스킬 트리** | 포트폴리오가 참조 | `get_max_holdings()` → max_holdings 결정 |
 
 ## Formulas
 
@@ -270,7 +272,7 @@ sim_total_assets = sim_cash + reserved_cash + Σ(holding_i.quantity × current_p
 
 | Variable | Type | Range | Source | Description |
 |----------|------|-------|--------|-------------|
-| `sim_cash` | int | 0+ | 재화 시스템 | 모의투자 현금 잔액 (지정가 예약금 차감 후) |
+| `sim_cash` | int | 0+ | 재화 시스템 | 예수금 잔액 (지정가 예약금 차감 후) |
 | `reserved_cash` | int | 0+ | 주문 엔진 | 미체결 지정가 매수 주문의 예약금 합계. `Σ(pending_buy_limit.reserved_cash)` |
 | `sim_total_assets` | int | 0+ | calculated | 현금 + 예약금 + 보유 주식 평가액 |
 
@@ -285,12 +287,12 @@ sim_total_assets = sim_cash + reserved_cash + Σ(holding_i.quantity × current_p
 ### F5. 대회 수익률
 
 ```
-return_rate = (sim_total_assets - initial_seed) / initial_seed × 100
+return_rate = (sim_total_assets - season_start_cash) / season_start_cash × 100
 ```
 
 | Variable | Type | Range | Source | Description |
 |----------|------|-------|--------|-------------|
-| `initial_seed` | int | 1,000,000 (기본) | config | 시즌 시작 시드 |
+| `season_start_cash` | int | 변동 (첫 시즌 1,000,000) | 재화 시스템 | 시즌 시작 시 예수금 스냅샷 |
 | `return_rate` | float | -100%~∞ | calculated | 대회 수익률 (%) |
 
 **예시**: `return_rate = (1,015,000 - 1,000,000) / 1,000,000 × 100 = 1.5%`
@@ -301,22 +303,29 @@ return_rate = (sim_total_assets - initial_seed) / initial_seed × 100
 if sim_total_assets == 0:
     weight_i = 0.0
     cash_weight = 0.0
+    reserved_weight = 0.0
 else:
     weight_i = (holding_i.quantity × current_price_i) / sim_total_assets × 100
     cash_weight = sim_cash / sim_total_assets × 100
+    reserved_weight = reserved_cash / sim_total_assets × 100
 ```
 
-전 보유 종목의 weight + cash_weight = 100%. `sim_total_assets = 0`은 정상 플레이에서
-발생하지 않으나 (initial_seed ≥ 1,000,000), 방어 코드로 0 반환.
+전 보유 종목의 weight + cash_weight + reserved_weight = 100%.
+`reserved_cash`는 `OrderEngine.get_total_reserved_cash()`에서 조회한다.
+`reserved_cash = 0`이면 reserved_weight가 0이 되어 UI에 표시하지 않는다.
+`sim_total_assets = 0`은 예수금 전액 손실 시 발생할 수 있다.
+방어 코드로 weight 0% 반환, 빈 상태 메시지 표시.
 
 ### 변수 마스터 테이블
 
 | Variable | Default | Range | Owner | Description |
 |----------|---------|-------|-------|-------------|
-| `max_holdings_lv1` | 3 | 1~5 | config | Lv1 동시 보유 종목 수 |
-| `max_holdings_lv2` | 5 | 3~7 | config | Lv2 동시 보유 종목 수 |
-| `max_holdings_lv3` | 10 | 5~10 | config | Lv3 동시 보유 종목 수 |
-| `initial_seed` | 1,000,000 | 100,000~10,000,000 | 재화 시스템 | 시즌 시드 |
+| `max_holdings_p0` | 3 | 1~5 | config | P0 동시 보유 종목 수 |
+| `max_holdings_p1` | 5 | 3~7 | config | P1 동시 보유 종목 수 |
+| `max_holdings_p2` | 10 | 5~15 | config | P2 동시 보유 종목 수 |
+| `season_start_cash` | 변동 (이월) | N/A | 재화 시스템 | 시즌 시작 시 예수금 (이월, 첫 시즌 1,000,000) |
+
+> **초기화 순서**: `season_start_cash`는 `on_season_start` 시그널 수신 시 `CurrencySystem.get_sim_cash()`를 호출하여 스냅샷한다. XP 시스템도 동일 시점에 동일 값을 스냅샷하므로 단일 소스(CurrencySystem)에서 읽어 일관성을 보장한다.
 
 ## Edge Cases
 
@@ -325,11 +334,12 @@ else:
 | 전량 매도 후 동일 종목 재매수 | 새로운 HoldingEntry 생성. 이전 평균 매수가는 무관 | 청산 후 재진입은 새 포지션 |
 | 동일 종목 반복 매수 (5회 연속) | 매번 avg_buy_price 재계산. 모든 거래 TransactionRecord에 기록 | 물타기/불타기 전략 지원 |
 | 전량 매도 시 holdings 정리 | holdings에서 해당 종목 제거. holding_count 감소. 새 종목 매수 가능 | 슬롯 즉시 해제 |
-| 시즌 종료 시 보유 종목 존재 | **오케스트레이터: 시즌/대회 관리 시스템** (Game Clock `on_season_end` 수신 후 실행). 강제 청산 시퀀스: ①시즌 관리가 주문 엔진에 `expire_all_pending()` 호출 → 미체결 전량 EXPIRED + 예약/잠금 복원 → ②시즌 관리가 포트폴리오에 `force_liquidate(price_provider)` 호출 → 아래 상세 참조 → ③포트폴리오 `get_total_assets()` → sim_total_assets 최종 스냅샷 (순위용) → ④시즌 관리가 재화 시스템 `settle_season()` 호출 → 시드 리셋 + 상금 지급 → ⑤시즌 관리가 포트폴리오 `reset()` 호출. **트리거 시점**: MARKET_CLOSED 직후, 플레이어에게 리포트를 표시하기 전에 ①~③ 실행하여 최종 자산 확정. 리포트 확인 후 ④~⑤ 실행. **`force_liquidate(price_provider)` 상세**: 주문 엔진을 거치지 않고 직접 처리. `for each holding: sell_price = price_provider.get_current_price(stock_id)` → `realized_pnl = (sell_price - avg_buy_price) × quantity` → TransactionRecord(type=SELL) 기록 → `currency.sim_add(sell_price × quantity)` 직접 호출 → `holdings.remove(stock_id)`. `on_order_filled` 시그널 미발행 (주문 엔진 비경유). | 순위 확정 필요. 가격 엔진은 마지막 틱 가격을 리셋 전까지 유지. 시즌/대회 관리가 V-Slice에서 구현 시 상세 설계 |
+| 시즌 종료 시 보유 종목 존재 | **오케스트레이터: 시즌/대회 관리 시스템** (Game Clock `on_season_end` 수신 후 실행). 강제 청산 시퀀스: ①시즌 관리가 주문 엔진에 `expire_all_pending()` 호출 → 미체결 전량 EXPIRED + 예약/잠금 복원 → ②시즌 관리가 포트폴리오에 `force_liquidate(price_provider)` 호출 → 아래 상세 참조 → ③포트폴리오 `get_total_assets()` → sim_total_assets 최종 스냅샷 (순위용) → ④시즌 관리가 재화 시스템 `settle_season()` 호출 → 상금 지급 (예수금은 이월, 리셋 없음) → ⑤시즌 관리가 포트폴리오 `reset()` 호출. **트리거 시점**: MARKET_CLOSED 직후, 플레이어에게 리포트를 표시하기 전에 ①~③ 실행하여 최종 자산 확정. 리포트 확인 후 ④~⑤ 실행. **`force_liquidate(price_provider)` 상세**: 주문 엔진을 거치지 않고 직접 처리. `for each holding: sell_price = price_provider.get_current_price(stock_id)` → `realized_pnl = (sell_price - avg_buy_price) × quantity` → TransactionRecord(type=SELL) 기록 → `currency.sim_add(sell_price × quantity)` 직접 호출 → `holdings.remove(stock_id)`. `on_order_filled` 시그널 미발행 (주문 엔진 비경유). | 순위 확정 필요. 가격 엔진은 마지막 틱 가격을 리셋 전까지 유지. 시즌/대회 관리가 V-Slice에서 구현 시 상세 설계 |
+| ①~③ 실행 중 게임 크래시 | **MVP 미대응**. 재시작 시 시즌 종료 직전 세이브에서 복구, ①부터 재실행. 원자성 보장은 세이브/로드 GDD에서 설계 | 시즌 정산은 단일 프레임 내 완료 가능 (46종목 청산 ~1ms). 크래시 확률 극히 낮음 |
 | 보유 종목 0개 상태에서 총 자산 조회 | sim_total_assets = sim_cash. 보유 주식 평가액 = 0 | 정상 작동 |
 | 가격이 매우 높은 종목 (320,000원) 1주 매수 | 정상 처리. 금액 제한은 주문 엔진이 sim_cash 기준으로 검증 | 포트폴리오는 체결 후만 관여 |
 | floor() 반올림으로 1원 오차 | 허용. 모든 금액은 floor() 후 정수. 누적 오차 최대 보유 종목 수만큼 | 정수 원칙 일관 유지 |
-| get_return_rate() 호출 시 initial_seed가 0 | 발생 불가 (재화 시스템이 보장). 방어 코드로 0 반환 | 0으로 나누기 방지 |
+| get_return_rate() 호출 시 season_start_cash가 0 | 예수금 전액 손실 후 새 시즌 시작 시 발생 가능. 방어 코드로 return_rate = 0% 반환 | 0으로 나누기 방지. 완주 보너스(30,000원)로 복귀 |
 | 스킬 레벨 다운그레이드 (현재 보유 > 새 한도) | 발생 불가 (스킬은 영구 해금). 만약 발생 시 기존 보유 유지, 추가 매수만 차단 | 플레이어 자산 보호 |
 
 ## Dependencies
@@ -338,12 +348,13 @@ else:
 |--------|-----------|---------------------|
 | 주문 처리 엔진 | 주문 엔진 → 포트폴리오 | 체결 통보로 보유 종목 갱신. **Hard** |
 | 가격 엔진 | 포트폴리오가 참조 | 현재가로 평가 금액 계산. **Hard** |
-| 재화 시스템 | 포트폴리오가 참조 | sim_cash 조회로 총 자산 계산. **Hard** |
+| 재화 시스템 | 포트폴리오가 참조 | `get_sim_cash()` → 현금 잔액 조회. `sim_add(amount)` → `force_liquidate()` 시 청산 대금 직접 입금 (주문 엔진 우회). **Hard** |
 | 종목 DB | 포트폴리오가 참조 | 종목 정보 표시용. **Soft** |
 | 시즌/대회 관리 | 시즌이 참조 | `get_total_assets()`, `get_return_rate()` → 순위 산출. `force_liquidate(price_provider)` → 강제 청산 (Step ②). `reset()` → 시즌 리셋 (Step ⑤). **Hard** (시즌 입장) |
 | 포트폴리오 UI | UI가 참조 | 보유 종목/손익 표시. **Soft** |
 | 트레이딩 스크린 | UI가 참조 | 사이드바 요약 표시. **Soft** |
-| 스킬 트리 | 포트폴리오가 참조 | max_holdings 결정. **Soft** (미구현 시 Lv1 기본값) |
+| 스킬 트리 | 포트폴리오가 참조 | `get_max_holdings()` → max_holdings 결정. **Soft** (미구현 시 P0 기본값 3) |
+| 경험치 시스템 | XP가 참조 | `get_return_rate()` → 일일/시즌 수익률 산출. **Soft** |
 
 이 시스템은 재화 시스템, 종목 DB에 의존하는 Core 시스템이다.
 
@@ -351,12 +362,11 @@ else:
 
 | Parameter | Current Value | Safe Range | Effect of Increase | Effect of Decrease |
 |-----------|--------------|------------|-------------------|-------------------|
-| `max_holdings_lv1` | 3 | 1~5 | 초보자도 분산 가능 | 극단적 집중 투자 강제 |
-| `max_holdings_lv2` | 5 | 3~7 | Lv2 해금 가치 감소 | Lv2 해금 가치 증가 |
-| `max_holdings_lv3` | 10 | 5~10 | 전 종목 보유 가능 | 고레벨에서도 선택 필요 |
+| `max_holdings_p0` | 3 | 1~5 | 초보자도 분산 가능 | 극단적 집중 투자 강제 |
+| `max_holdings_p1` | 5 | 3~7 | P1 해금 가치 감소 | P1 해금 가치 증가 |
+| `max_holdings_p2` | 10 | 5~15 | 전 종목 보유 가능 | 고레벨에서도 선택 필요 |
 | `transaction_history_limit` | 200 | 50~500 | 메모리 사용 증가 | 오래된 거래 조회 불가 |
-| `valuation_update_interval` | 1틱 | 1~5틱 | — | 성능 개선. UI 갱신 빈도 감소 |
-| `season_end_settlement` | 종가 강제 청산 | — | — | — |
+| `valuation_update_interval` | 1틱 | 1~5틱 | UI 갱신 빈도 감소. 성능 개선 | 실시간 피드백 향상. 성능 부담 증가 |
 
 ## Acceptance Criteria
 
@@ -368,7 +378,7 @@ else:
 - [ ] unrealized_pnl이 (current_price - avg_buy_price) × quantity와 일치
 - [ ] realized_pnl이 (sell_price - avg_buy_price) × sell_quantity와 일치
 - [ ] sim_total_assets = sim_cash + reserved_cash + Σ(quantity × current_price)
-- [ ] return_rate = (sim_total_assets - initial_seed) / initial_seed × 100
+- [ ] return_rate = (sim_total_assets - season_start_cash) / season_start_cash × 100
 - [ ] 보유 종목 수가 max_holdings를 초과하지 않음
 - [ ] 시즌 종료 시 종가 기준 강제 청산 후 전체 리셋
 - [ ] 시즌 리셋 후 holdings 빈 상태, 거래 내역 초기화
@@ -381,5 +391,5 @@ else:
 | Question | Owner | Deadline | Resolution |
 |----------|-------|----------|------------|
 | 시즌 종료 강제 청산의 정확한 시점 — 마지막 틱 종가 vs 장 마감 후 별도 처리 | game-designer | 시즌 관리 GDD 시 | 잠정 결정: MARKET_CLOSED 직후 ①~③(청산+스냅샷) 실행, 리포트 확인 후 ④~⑤(리셋). 시즌/대회 관리가 오케스트레이터. 시즌 관리 GDD에서 최종 확정 |
-| 거래 내역 시즌 간 보존 여부 — 이전 시즌 기록 열람 가능? | game-designer | 세이브/로드 GDD 시 | 미정 |
+| 거래 내역 시즌 간 보존 여부 — 이전 시즌 기록 열람 가능? | game-designer | 세이브/로드 GDD 시 | 미정. 영향: TransactionRecord 보관 범위 (현 설계: 시즌 내 전체 보존). 세이브/로드 GDD에서 결정 전까지 현 범위 유지. |
 | RealPortfolio 확장 시 수수료/배당 처리 | systems-designer | 확장 시점 | 향후 |

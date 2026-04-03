@@ -1,5 +1,5 @@
 {
-  "KF": {
+  "KSF": {
     "name": "코스모푸드",
     "base_price": 65000,
     "volatility": "MEDIUM",
@@ -23,7 +23,7 @@
     "avg_daily_return_pct": 1.9905,
     "daily_return_std_pct": 13.7709
   },
-  "SC": {
+  "STC": {
     "name": "스타칩",
     "base_price": 120000,
     "volatility": "HIGH",
@@ -47,7 +47,7 @@
     "avg_daily_return_pct": 0.518,
     "daily_return_std_pct": 22.7093
   },
-  "KB": {
+  "KRB": {
     "name": "코리아뱅크",
     "base_price": 52000,
     "volatility": "LOW",
@@ -71,7 +71,7 @@
     "avg_daily_return_pct": -0.0226,
     "daily_return_std_pct": 7.0569
   },
-  "NE": {
+  "NXE": {
     "name": "넥스트엔터",
     "base_price": 42000,
     "volatility": "HIGH",
@@ -95,7 +95,7 @@
     "avg_daily_return_pct": 3.1965,
     "daily_return_std_pct": 19.8887
   },
-  "MG": {
+  "MDG": {
     "name": "메디진",
     "base_price": 180000,
     "volatility": "EXTREME",
@@ -119,7 +119,7 @@
     "avg_daily_return_pct": 3.3932,
     "daily_return_std_pct": 35.0618
   },
-  "GC": {
+  "GRC": {
     "name": "그린케미",
     "base_price": 38000,
     "volatility": "MEDIUM",
@@ -143,7 +143,7 @@
     "avg_daily_return_pct": -0.6472,
     "daily_return_std_pct": 16.682
   },
-  "DH": {
+  "DHI": {
     "name": "대한중공업",
     "base_price": 95000,
     "volatility": "LOW",
@@ -167,7 +167,7 @@
     "avg_daily_return_pct": -0.1828,
     "daily_return_std_pct": 9.4169
   },
-  "PT": {
+  "PLT": {
     "name": "피플텔레콤",
     "base_price": 78000,
     "volatility": "MEDIUM",
@@ -191,7 +191,7 @@
     "avg_daily_return_pct": 2.8542,
     "daily_return_std_pct": 16.6467
   },
-  "SK": {
+  "SKL": {
     "name": "스카이로직",
     "base_price": 210000,
     "volatility": "HIGH",
@@ -215,7 +215,7 @@
     "avg_daily_return_pct": 0.8126,
     "daily_return_std_pct": 19.1189
   },
-  "BF": {
+  "BPH": {
     "name": "블루팜",
     "base_price": 320000,
     "volatility": "EXTREME",

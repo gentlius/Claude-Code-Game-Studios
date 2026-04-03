@@ -23,12 +23,17 @@ enum SystemState { UNINITIALIZED, READY, ACTIVE, DAY_END, SEASON_END }
 
 # ── Constants: Slot Configuration (GDD Rule 2-1) ──
 
-const SLOT_CONFIG: Array[Dictionary] = [
-	{"name": "opening", "tick_min": 1, "tick_max": 100, "probability": 0.70},
-	{"name": "midday_1", "tick_min": 101, "tick_max": 190, "probability": 0.55},
-	{"name": "midday_2", "tick_min": 191, "tick_max": 280, "probability": 0.55},
-	{"name": "closing", "tick_min": 281, "tick_max": 390, "probability": 0.60},
+## Slot ranges in game-minutes (resolved to ticks at runtime via _build_slot_config).
+## max_min 390 = GameClock.MINUTES_PER_DAY (const cannot reference autoload).
+const SLOT_CONFIG_MINUTES: Array[Dictionary] = [
+	{"name": "opening", "min_min": 1, "max_min": 100, "probability": 0.70},
+	{"name": "midday_1", "min_min": 101, "max_min": 190, "probability": 0.55},
+	{"name": "midday_2", "min_min": 191, "max_min": 280, "probability": 0.55},
+	{"name": "closing", "min_min": 281, "max_min": 390, "probability": 0.60},
 ]
+
+## Resolved at _ready(): minute ranges × TICKS_PER_MINUTE.
+var _slot_config: Array[Dictionary] = []
 
 const DAILY_HARD_CAP: int = 5
 
@@ -55,12 +60,23 @@ const VOL_WEIGHT: Dictionary = {
 	StockData.VolatilityProfile.EXTREME: 1.5,
 }
 
-## News delay by skill level (GDD Rule 5-2). MVP: always Lv1.
-const DELAY_BY_LEVEL: Dictionary = {1: 30, 2: 15, 3: 0, 4: -20}
+## Individual target cooldown: minimum minutes between events targeting the same stock.
+const INDIVIDUAL_TARGET_COOLDOWN_MIN: int = 22  ## ~22 game-minutes
 
 ## Overnight event probabilities (GDD Rule 6-1)
 const OVERNIGHT_PROBS: Array[float] = [0.40, 0.45, 0.15]  # 0, 1, 2 events
 const OVERNIGHT_INDIVIDUAL_PROB: float = 0.05
+
+## Clustering prevention: penalty probability for same-scope repeat (GDD Rule 2-2)
+const CLUSTER_PENALTY_PROB: float = 0.5
+
+## Overnight scope/impact split ratios (GDD Rule 6-1)
+const OVERNIGHT_MACRO_PROB: float = 0.4   ## MACRO vs SECTOR split
+const OVERNIGHT_SMALL_PROB: float = 0.6   ## SMALL vs MEDIUM split
+
+## Minimum valid decay in minutes; values below are clamped to default (GDD Rule 3-2)
+const MIN_DECAY_MINUTES: int = 8    ## ~8 game-minutes
+const DEFAULT_DECAY_MINUTES: int = 15  ## ~15 game-minutes
 
 # ── State ──
 
@@ -95,6 +111,7 @@ var _season_stats: Dictionary = {
 # ── Lifecycle ──
 
 func _ready() -> void:
+	_build_slot_config()
 	GameClock.on_season_start.connect(_on_season_start)
 	GameClock.on_tick.connect(_on_tick)
 	GameClock.on_market_open.connect(_on_market_open)
@@ -105,6 +122,24 @@ func _ready() -> void:
 	PriceEngine.on_vi_triggered.connect(_on_vi_triggered)
 	PriceEngine.on_vi_released.connect(_on_vi_released)
 	PriceEngine.on_circuit_breaker.connect(_on_circuit_breaker)
+
+
+## Converts SLOT_CONFIG_MINUTES to tick-based _slot_config using GameClock constants.
+func _build_slot_config() -> void:
+	_slot_config.clear()
+	var tpm: int = GameClock.TICKS_PER_MINUTE
+	for slot: Dictionary in SLOT_CONFIG_MINUTES:
+		_slot_config.append({
+			"name": slot["name"],
+			"tick_min": int(slot["min_min"]) * tpm,
+			"tick_max": int(slot["max_min"]) * tpm,
+			"probability": slot["probability"],
+		})
+
+
+## Converts game-minutes to ticks.
+static func _minutes_to_ticks(minutes: int) -> int:
+	return minutes * GameClock.TICKS_PER_MINUTE
 
 
 func _on_season_start() -> void:
@@ -122,8 +157,8 @@ func _on_season_start() -> void:
 	_state = SystemState.READY
 
 
+
 func _on_season_end() -> void:
-	_state = SystemState.SEASON_END
 	_state = SystemState.UNINITIALIZED
 
 
@@ -193,10 +228,9 @@ func get_season_stats() -> Dictionary:
 	return _season_stats.duplicate(true)
 
 
-## Returns the current news skill level. MVP: always 1.
-## Future: reads from SkillTree autoload.
-func get_news_skill_level() -> int:
-	return 1
+## Returns the current news delay in ticks based on SkillTree unlocks.
+func get_news_delay() -> int:
+	return SkillTree.get_news_delay_ticks()
 
 # ── Data Loading ──
 
@@ -210,7 +244,7 @@ func _load_event_pool() -> void:
 	var err: Error = json.parse(file.get_as_text())
 	file.close()
 	if err != OK:
-		push_warning("NewsEventSystem: event_pool.json parse error: %s" % json.get_error_message())
+		push_warning("NewsEventSystem: event_pool.json parse error at line %d: %s" % [json.get_error_line(), json.get_error_message()])
 		return
 	var data: Dictionary = json.data
 	_event_pool = Array(data.get("templates", []), TYPE_DICTIONARY, &"", null)
@@ -242,7 +276,7 @@ func _select_season_theme() -> void:
 
 func _generate_daily_schedule() -> void:
 	_daily_schedule.clear()
-	for slot: Dictionary in SLOT_CONFIG:
+	for slot: Dictionary in _slot_config:
 		if randf() > slot["probability"]:
 			continue
 		var tick: int = randi_range(slot["tick_min"], slot["tick_max"])
@@ -272,8 +306,8 @@ func _check_scheduled_slots(tick: int) -> void:
 			if _daily_event_count >= DAILY_HARD_CAP:
 				break
 
-	# Minimum guarantee: if at tick 190 (mid midday) and 0 events, force one
-	if tick == 190 and _daily_event_count == 0:
+	# Minimum guarantee: if at mid-day tick and 0 events, force one
+	if tick == GameClock.TICKS_PER_DAY / 2 and _daily_event_count == 0:
 		_fire_event_from_slot("MACRO", "SMALL", tick)
 		_daily_event_count += 1
 
@@ -287,7 +321,7 @@ func _fire_event_from_slot(scope: String, impact: String, tick: int) -> void:
 		_daily_mega_fired = true
 
 	# Clustering prevention: same scope as last → 50% weight penalty, re-pick once
-	if scope == _last_slot_scope and randf() < 0.5:
+	if scope == _last_slot_scope and randf() < CLUSTER_PENALTY_PROB:
 		scope = _pick_scope()
 
 	var template: Dictionary = _select_template(scope, impact)
@@ -339,7 +373,8 @@ func _fire_event_from_slot(scope: String, impact: String, tick: int) -> void:
 
 	# Build MarketEvent and push to PriceEngine
 	var event_type_str: String = template.get("event_type", "INSTANT_SHOCK")
-	var decay_ticks: int = int(template.get("decay_ticks", 0))
+	var decay_minutes: int = int(template.get("decay_minutes", 0))
+	var decay_ticks: int = _minutes_to_ticks(decay_minutes)
 	var decay_curve_str: String = template.get("decay_curve", "LINEAR")
 
 	var decay_curve: MarketEvent.DecayCurve = MarketEvent.DecayCurve.LINEAR
@@ -347,7 +382,7 @@ func _fire_event_from_slot(scope: String, impact: String, tick: int) -> void:
 		decay_curve = MarketEvent.DecayCurve.EXPONENTIAL
 
 	var market_event: MarketEvent
-	if event_type_str == "INSTANT_SHOCK" or decay_ticks == 0:
+	if event_type_str == "INSTANT_SHOCK" or decay_minutes == 0:
 		market_event = MarketEvent.instant_shock(
 			base_impact, direction,
 			_scope_str_to_enum(scope), target_stock_ids
@@ -365,7 +400,7 @@ func _fire_event_from_slot(scope: String, impact: String, tick: int) -> void:
 	var cooldown_key: String = template["template_id"]
 	if scope == "INDIVIDUAL" and selected_stock != null:
 		cooldown_key = template["template_id"] + "+" + selected_stock.stock_id
-	_cooldown_tracker[cooldown_key] = tick + GameClock.get_current_day() * 390
+	_cooldown_tracker[cooldown_key] = tick + GameClock.get_current_day() * GameClock.TICKS_PER_DAY
 
 	# Register mutex (GDD Rule 3-1)
 	_register_mutex(template, selected_stock)
@@ -376,8 +411,7 @@ func _fire_event_from_slot(scope: String, impact: String, tick: int) -> void:
 	var impact_hint: String = template.get("impact_hint", "")
 
 	# Build news entry
-	var skill_level: int = get_news_skill_level()
-	var delay_ticks: int = DELAY_BY_LEVEL.get(skill_level, 30)
+	var delay_ticks: int = get_news_delay()
 	var display_tick: int = tick + delay_ticks
 
 	var news_entry: Dictionary = {
@@ -408,7 +442,7 @@ func _fire_event_from_slot(scope: String, impact: String, tick: int) -> void:
 
 func _select_template(scope: String, impact: String) -> Dictionary:
 	var current_tick: int = GameClock.get_current_tick()
-	var abs_tick: int = current_tick + GameClock.get_current_day() * 390
+	var abs_tick: int = current_tick + GameClock.get_current_day() * GameClock.TICKS_PER_DAY
 	var theme_tags: Array = _season_theme.get("active_season_tags", [])
 
 	var candidates: Array[Dictionary] = []
@@ -425,7 +459,7 @@ func _select_template(scope: String, impact: String) -> Dictionary:
 		var cd_key: String = t["template_id"]
 		if _cooldown_tracker.has(cd_key):
 			var last_tick: int = _cooldown_tracker[cd_key]
-			if abs_tick - last_tick < int(t.get("cooldown_ticks", 0)):
+			if abs_tick - last_tick < _minutes_to_ticks(int(t.get("cooldown_minutes", 0))):
 				continue
 		# Season tag filter
 		var s_tags: Array = t.get("season_tags", [])
@@ -502,7 +536,7 @@ func _pick_impact() -> String:
 
 func _select_individual_stock(template: Dictionary, tick: int) -> StockData:
 	var tags: Array = template.get("event_tags", [])
-	var abs_tick: int = tick + GameClock.get_current_day() * 390
+	var abs_tick: int = tick + GameClock.get_current_day() * GameClock.TICKS_PER_DAY
 
 	# Find candidate stocks with matching tags
 	var candidates: Array[StockData] = []
@@ -519,10 +553,10 @@ func _select_individual_stock(template: Dictionary, tick: int) -> StockData:
 			if already:
 				continue
 
-			# Skip if recently targeted (90 tick protection)
+			# Skip if recently targeted (cooldown protection)
 			if _recent_individual_targets.has(stock.stock_id):
 				var last_t: int = _recent_individual_targets[stock.stock_id]
-				if abs_tick - last_t < 90:
+				if abs_tick - last_t < _minutes_to_ticks(INDIVIDUAL_TARGET_COOLDOWN_MIN):
 					continue
 
 			# Mutex check for INDIVIDUAL templates with {stock_id} placeholder
@@ -561,7 +595,7 @@ func _resolve_text(
 
 	# System variables
 	if stock != null:
-		text = text.replace("{company}", stock.name_ko)
+		text = text.replace("{company}", "%s(%s)" % [stock.name_ko, stock.stock_id])
 		text = text.replace("{ticker}", stock.stock_id)
 		text = text.replace("{sector_name}", stock.sector)
 
@@ -626,8 +660,8 @@ func _generate_overnight_events() -> void:
 
 	for _i: int in range(count):
 		# Overnight: MACRO or SECTOR only, SMALL/MEDIUM only, GRADUAL_SHIFT only
-		var scope: String = "MACRO" if randf() < 0.4 else "SECTOR"
-		var impact: String = "SMALL" if randf() < 0.6 else "MEDIUM"
+		var scope: String = "MACRO" if randf() < OVERNIGHT_MACRO_PROB else "SECTOR"
+		var impact: String = "SMALL" if randf() < OVERNIGHT_SMALL_PROB else "MEDIUM"
 
 		var template: Dictionary = _select_overnight_template(scope, impact)
 		if template.is_empty():
@@ -650,9 +684,10 @@ func _generate_overnight_events() -> void:
 			float(template.get("impact_min", 0.01)),
 			float(template.get("impact_max", 0.03))
 		)
-		var decay_ticks: int = int(template.get("decay_ticks", 60))
-		if decay_ticks < 30:
-			decay_ticks = 60
+		var decay_min: int = int(template.get("decay_minutes", DEFAULT_DECAY_MINUTES))
+		if decay_min < MIN_DECAY_MINUTES:
+			decay_min = DEFAULT_DECAY_MINUTES
+		var decay_ticks: int = _minutes_to_ticks(decay_min)
 
 		var decay_curve: MarketEvent.DecayCurve = MarketEvent.DecayCurve.LINEAR
 		if template.get("decay_curve", "LINEAR") == "EXPONENTIAL":
@@ -736,6 +771,8 @@ func _deliver_pre_market_news() -> void:
 			"impact_tier": entry["impact_tier"],
 			"direction": entry["direction"],
 			"target_stock_ids": entry["target_stock_ids"],
+			"display_tick": 0,
+			"day": GameClock.get_current_day(),
 			"is_pre_market": true,
 		}
 		news_bundle.append(news_entry)
@@ -836,17 +873,20 @@ func _reset_season_stats() -> void:
 
 func _on_vi_triggered(stock_id: String, is_upper: bool, halt_ticks: int) -> void:
 	var stock: StockData = StockDatabase.get_stock(stock_id)
-	var name: String = stock.name_ko if stock else stock_id
+	var display_name: String = "%s(%s)" % [stock.name_ko, stock.stock_id] if stock else stock_id
 	var direction_text: String = "상승" if is_upper else "하락"
-	var headline: String = "[VI발동] %s %s — %d틱 거래정지" % [name, direction_text, halt_ticks]
+	var halt_min: int = halt_ticks / GameClock.TICKS_PER_MINUTE
+	var headline: String = "⚠️ [VI발동] %s %s — %d분 거래정지" % [display_name, direction_text, halt_min]
 	var entry: Dictionary = {
 		"headline": headline,
-		"body": "%s 종목이 전일 대비 ±10%% 변동으로 변동성완화장치가 발동되었습니다." % name,
+		"body": "",
 		"impact_hint": "⚠️",
 		"scope": "INDIVIDUAL",
 		"impact_tier": "LARGE",
 		"direction": 1 if is_upper else -1,
 		"target_stock_ids": [stock_id],
+		"display_tick": GameClock.get_current_tick(),
+		"day": GameClock.get_current_day(),
 		"is_system_event": true,
 	}
 	on_news_display.emit(entry)
@@ -854,16 +894,18 @@ func _on_vi_triggered(stock_id: String, is_upper: bool, halt_ticks: int) -> void
 
 func _on_vi_released(stock_id: String) -> void:
 	var stock: StockData = StockDatabase.get_stock(stock_id)
-	var name: String = stock.name_ko if stock else stock_id
-	var headline: String = "[VI해제] %s 거래 재개" % name
+	var display_name: String = "%s(%s)" % [stock.name_ko, stock.stock_id] if stock else stock_id
+	var headline: String = "ℹ️ [VI해제] %s 거래 재개" % display_name
 	var entry: Dictionary = {
 		"headline": headline,
-		"body": "%s 종목의 변동성완화장치가 해제되어 거래가 재개됩니다." % name,
+		"body": "",
 		"impact_hint": "ℹ️",
 		"scope": "INDIVIDUAL",
 		"impact_tier": "MEDIUM",
 		"direction": 0,
 		"target_stock_ids": [stock_id],
+		"display_tick": GameClock.get_current_tick(),
+		"day": GameClock.get_current_day(),
 		"is_system_event": true,
 	}
 	on_news_display.emit(entry)
@@ -871,21 +913,21 @@ func _on_vi_released(stock_id: String) -> void:
 
 func _on_circuit_breaker(stage: int, halt_ticks: int) -> void:
 	var headline: String
-	var body: String
 	if stage == 1:
-		headline = "[서킷브레이커 1단계] 시장 지수 -8%% — %d틱 전종목 거래정지" % halt_ticks
-		body = "시장 지수가 전일 대비 8%% 이상 하락하여 서킷브레이커 1단계가 발동되었습니다. %d틱 동안 전 종목 거래가 정지됩니다." % halt_ticks
+		var halt_min: int = halt_ticks / GameClock.TICKS_PER_MINUTE
+		headline = "🚨 [CB 1단계] 시장 지수 -8%% — %d분 전종목 거래정지" % halt_min
 	else:
-		headline = "[서킷브레이커 2단계] 시장 지수 -15% — 당일 장 조기 마감"
-		body = "시장 지수가 전일 대비 15% 이상 하락하여 서킷브레이커 2단계가 발동되었습니다. 당일 거래가 즉시 종료됩니다."
+		headline = "🚨 [CB 2단계] 시장 지수 -15% — 당일 장 조기 마감"
 	var entry: Dictionary = {
 		"headline": headline,
-		"body": body,
+		"body": "",
 		"impact_hint": "🚨",
 		"scope": "MACRO",
 		"impact_tier": "MEGA",
 		"direction": -1,
 		"target_stock_ids": StockDatabase.get_all_stock_ids(),
+		"display_tick": GameClock.get_current_tick(),
+		"day": GameClock.get_current_day(),
 		"is_system_event": true,
 	}
 	on_news_display.emit(entry)

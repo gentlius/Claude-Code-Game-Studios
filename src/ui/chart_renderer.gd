@@ -3,11 +3,17 @@
 ## See: design/gdd/chart-renderer.md
 extends Control
 
+# ── Signals ──
+
+## Emitted when player clicks the chart area. Sends the snapped price at click Y.
+signal price_clicked(price: int)
+
 # ── Enums ──
 
 enum ChartState { UNLOADED, LOADING, LIVE, PAUSED, STATIC }
-## 1 tick = 15 game-seconds → 4 ticks = 1 min, 20 ticks = 5 min, 60 ticks = 15 min
-enum Timeframe { M1 = 4, M5 = 20, M15 = 60, D1 = 390 }
+## Ticks per candle. Derived from GameClock.TICKS_PER_MINUTE (4).
+## M1=4, M5=20, M15=60, D1=TICKS_PER_DAY (enum requires literal values).
+enum Timeframe { M1 = 4, M5 = 20, M15 = 60, D1 = 1560 }
 
 # ── Constants (Tuning Knobs from GDD) ──
 
@@ -18,11 +24,30 @@ const Y_AXIS_PADDING: float = 0.05
 const MIN_Y_RANGE_RATIO: float = 0.02
 const TARGET_GRID_LINES: int = 5
 const NICE_MULTIPLIERS: Array[int] = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]
-const CANDLE_UP_COLOR: Color = Color(0.906, 0.298, 0.235)    # #E74C3C red
-const CANDLE_DOWN_COLOR: Color = Color(0.204, 0.580, 0.859)  # #3498DB blue
-const CANDLE_NEUTRAL_COLOR: Color = Color(0.6, 0.6, 0.6)
+const CANDLE_UP_COLOR: Color = Color(0.92, 0.22, 0.20)       # #EB3833 red (Toss)
+const CANDLE_DOWN_COLOR: Color = Color(0.18, 0.42, 0.90)     # #2E6BE6 blue (Toss)
+const CANDLE_NEUTRAL_COLOR: Color = Color(0.65, 0.65, 0.68)  # #A6A6AE
 const HEADER_HEIGHT: float = 40.0
 const RENDER_SKIP_AT_SPEED: int = 2  ## Skip frames at 2x+ speed
+
+## Moving average periods (candle count) and colors — shown when skill A1 is unlocked.
+const MA_PERIODS: Array[int] = [5, 20, 60]
+const MA_COLORS: Array[Color] = [
+	Color(0.95, 0.60, 0.15),  # MA5: orange
+	Color(0.20, 0.70, 0.30),  # MA20: green
+	Color(0.55, 0.30, 0.85),  # MA60: purple
+]
+
+## RSI / MACD sub-panel constants — shown when skill A2 is unlocked.
+const RSI_PERIOD: int = 14
+const RSI_OVERBOUGHT: float = 70.0
+const RSI_OVERSOLD: float = 30.0
+const MACD_FAST: int = 12
+const MACD_SLOW: int = 26
+const MACD_SIGNAL: int = 9
+const RSI_COLOR: Color = Color(0.0, 0.75, 0.85)
+const MACD_LINE_COLOR: Color = Color(0.0, 0.60, 0.85)
+const MACD_SIGNAL_COLOR: Color = Color(0.90, 0.40, 0.15)
 
 # ── State ──
 
@@ -51,6 +76,8 @@ var _show_crosshair: bool = false
 
 var _chart_rect: Rect2 = Rect2()  ## Candle area
 var _volume_rect: Rect2 = Rect2()  ## Volume bar area
+var _rsi_rect: Rect2 = Rect2()
+var _macd_rect: Rect2 = Rect2()
 var _price_min: float = 0.0
 var _price_max: float = 0.0
 var _volume_max: float = 1.0
@@ -71,6 +98,7 @@ var _btn_go_latest: Button
 
 func _ready() -> void:
 	_build_header()
+	_update_tf_buttons()
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	GameClock.on_tick.connect(_on_tick)
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
@@ -180,12 +208,24 @@ func load_stock(stock_id: String) -> void:
 
 func set_timeframe(tf: Timeframe) -> void:
 	_timeframe = tf
+	_update_tf_buttons()
 	_aggregate_candles()
 	_scroll_offset = 0
 	_auto_scroll = true
 	_dirty = true
 	_btn_go_latest.visible = false
 	queue_redraw()
+
+
+## Update timeframe button styles — active button gets accent style.
+func _update_tf_buttons() -> void:
+	var buttons: Array[Button] = [_btn_tf_1t, _btn_tf_5t, _btn_tf_15t, _btn_tf_1d]
+	var timeframes: Array[Timeframe] = [Timeframe.M1, Timeframe.M5, Timeframe.M15, Timeframe.D1]
+	for i: int in range(buttons.size()):
+		if timeframes[i] == _timeframe:
+			ThemeSetup.apply_accent_button(buttons[i])
+		else:
+			ThemeSetup.apply_button_theme(buttons[i])
 
 
 # ── Signal Handlers ──
@@ -239,10 +279,26 @@ func _gui_input(event: InputEvent) -> void:
 				_zoom(-5)
 			elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 				_zoom(5)
+			elif mb.button_index == MOUSE_BUTTON_LEFT:
+				_handle_chart_click(mb.position)
 	elif event is InputEventMouseMotion:
 		_crosshair_pos = (event as InputEventMouseMotion).position
 		_show_crosshair = true
 		queue_redraw()
+
+
+func _handle_chart_click(pos: Vector2) -> void:
+	# Only emit price if clicking within the chart price area
+	if _chart_rect.size.x <= 0.0 or _chart_rect.size.y <= 0.0:
+		return
+	if pos.y < _chart_rect.position.y or pos.y > _chart_rect.position.y + _chart_rect.size.y:
+		return
+	if pos.x < _chart_rect.position.x or pos.x > _chart_rect.position.x + _chart_rect.size.x:
+		return
+	var raw_price: float = _price_min + (_price_max - _price_min) * (1.0 - (pos.y - _chart_rect.position.y) / _chart_rect.size.y)
+	var snapped: int = PriceEngine.round_to_tick(raw_price)
+	if snapped > 0:
+		price_clicked.emit(snapped)
 
 
 func _notification(what: int) -> void:
@@ -328,10 +384,13 @@ func _update_header() -> void:
 	_lbl_stock_name.text = "%s (%s)" % [stock.name_ko, _stock_id]
 	_lbl_current_price.text = "₩%s" % _format_number(price)
 
-	var base: int = stock.base_price
-	if base > 0:
-		var pct: float = float(price - base) / float(base) * 100.0
-		_lbl_change.text = "%+.1f%%" % pct
+	# 전일 종가 대비 등락률 (HTS 표준)
+	var limits: Dictionary = PriceEngine.get_daily_limits(_stock_id)
+	var prev_close: int = limits.get("prev_close", 0)
+	if prev_close > 0:
+		var diff: int = price - prev_close
+		var pct: float = float(diff) / float(prev_close) * 100.0
+		_lbl_change.text = "%+.1f%% (%s%s)" % [pct, "+" if diff >= 0 else "", _format_number(diff)]
 		if pct > 0.0:
 			_lbl_change.add_theme_color_override("font_color", CANDLE_UP_COLOR)
 		elif pct < 0.0:
@@ -352,6 +411,11 @@ func _draw() -> void:
 	_draw_background()
 	_draw_grid()
 	_draw_candles()
+	if SkillTree.is_skill_unlocked("A1"):
+		_draw_moving_averages()
+	if SkillTree.is_skill_unlocked("A2"):
+		_draw_rsi()
+		_draw_macd()
 	_draw_volume_bars()
 	_draw_axes()
 
@@ -369,17 +433,29 @@ func _draw_empty_chart() -> void:
 
 
 func _compute_layout() -> void:
-	# Chart area: from header to 70% height
-	# Volume area: 70% to 100% height
 	var chart_top: float = HEADER_HEIGHT + 4.0
 	var total_height: float = size.y - chart_top
-	var chart_height: float = total_height * 0.70
-	var volume_height: float = total_height * 0.30
 	var left: float = 0.0
 	var width: float = size.x - 60.0  # Right margin for Y-axis labels
 
-	_chart_rect = Rect2(left, chart_top, width, chart_height)
-	_volume_rect = Rect2(left, chart_top + chart_height, width, volume_height)
+	if SkillTree.is_skill_unlocked("A2"):
+		# 4-zone split: chart 55%, RSI 15%, MACD 15%, volume 15%
+		var chart_height: float = total_height * 0.55
+		var rsi_height: float = total_height * 0.15
+		var macd_height: float = total_height * 0.15
+		var volume_height: float = total_height * 0.15
+		_chart_rect = Rect2(left, chart_top, width, chart_height)
+		_rsi_rect = Rect2(left, chart_top + chart_height, width, rsi_height)
+		_macd_rect = Rect2(left, chart_top + chart_height + rsi_height, width, macd_height)
+		_volume_rect = Rect2(left, chart_top + chart_height + rsi_height + macd_height, width, volume_height)
+	else:
+		# 2-zone split: chart 70%, volume 30%
+		var chart_height: float = total_height * 0.70
+		var volume_height: float = total_height * 0.30
+		_chart_rect = Rect2(left, chart_top, width, chart_height)
+		_rsi_rect = Rect2()
+		_macd_rect = Rect2()
+		_volume_rect = Rect2(left, chart_top + chart_height, width, volume_height)
 
 
 func _compute_price_range() -> void:
@@ -444,8 +520,11 @@ func _volume_to_y(volume: float) -> float:
 
 
 func _draw_background() -> void:
-	draw_rect(_chart_rect, ThemeSetup.BG_DARKEST, true)
-	draw_rect(_volume_rect, Color(0.06, 0.06, 0.08), true)
+	draw_rect(_chart_rect, Color.WHITE, true)
+	if SkillTree.is_skill_unlocked("A2"):
+		draw_rect(_rsi_rect, Color(0.95, 0.97, 0.99), true)
+		draw_rect(_macd_rect, Color(0.95, 0.97, 0.99), true)
+	draw_rect(_volume_rect, Color(0.97, 0.97, 0.98), true)
 
 
 func _draw_grid() -> void:
@@ -470,7 +549,7 @@ func _draw_grid() -> void:
 			ThemeDB.fallback_font,
 			Vector2(_chart_rect.position.x + _chart_rect.size.x + 4, y + 4),
 			_format_number(line_price), HORIZONTAL_ALIGNMENT_LEFT,
-			-1, 10, Color(0.5, 0.5, 0.5)
+			-1, 10, ThemeSetup.TEXT_SECONDARY
 		)
 		line_price += nice_step
 
@@ -553,6 +632,57 @@ func _draw_candles() -> void:
 		)
 
 
+func _draw_moving_averages() -> void:
+	var visible: Array[Dictionary] = _get_visible_candles()
+	if visible.size() < 2:
+		return
+
+	# Determine the global start index of the visible window
+	var total: int = _candles.size()
+	var vis_start_idx: int
+	if _auto_scroll:
+		vis_start_idx = maxi(0, total - _visible_count)
+	else:
+		vis_start_idx = maxi(0, total - _visible_count - _scroll_offset)
+
+	var candle_width: float = _chart_rect.size.x / float(_visible_count)
+
+	for ma_idx: int in range(MA_PERIODS.size()):
+		var period: int = MA_PERIODS[ma_idx]
+		var color: Color = MA_COLORS[ma_idx]
+
+		# Build points for this MA line across visible candles
+		var points: PackedVector2Array = PackedVector2Array()
+		for i: int in range(visible.size()):
+			var global_i: int = vis_start_idx + i
+			# Need at least `period` candles ending at global_i
+			if global_i < period - 1:
+				continue
+			var ma_sum: float = 0.0
+			for j: int in range(period):
+				ma_sum += float(_candles[global_i - j]["close"])
+			var ma_val: float = ma_sum / float(period)
+			var x: float = _chart_rect.position.x + (float(i) + 0.5) * candle_width
+			var y: float = _price_to_y(ma_val)
+			points.append(Vector2(x, y))
+
+		if points.size() >= 2:
+			draw_polyline(points, color, 1.5, true)
+
+	# Legend in top-left corner of chart
+	var legend_x: float = _chart_rect.position.x + 8.0
+	var legend_y: float = _chart_rect.position.y + 14.0
+	for ma_idx2: int in range(MA_PERIODS.size()):
+		var label_text: String = "MA%d" % MA_PERIODS[ma_idx2]
+		draw_string(
+			ThemeDB.fallback_font,
+			Vector2(legend_x, legend_y),
+			label_text, HORIZONTAL_ALIGNMENT_LEFT,
+			-1, 10, MA_COLORS[ma_idx2]
+		)
+		legend_x += 50.0
+
+
 func _draw_volume_bars() -> void:
 	var visible: Array[Dictionary] = _get_visible_candles()
 	if visible.size() == 0:
@@ -585,18 +715,290 @@ func _draw_volume_bars() -> void:
 
 
 func _draw_axes() -> void:
-	var axis_color: Color = Color(0.3, 0.3, 0.35)
-	# Y-axis right border
+	var axis_color: Color = ThemeSetup.BORDER_DIM
+	# Y-axis right border — spans all zones
 	draw_line(
 		Vector2(_chart_rect.position.x + _chart_rect.size.x, _chart_rect.position.y),
 		Vector2(_chart_rect.position.x + _chart_rect.size.x, _volume_rect.position.y + _volume_rect.size.y),
 		axis_color
 	)
-	# Separator between chart and volume
+	# Separator between chart and next zone
 	draw_line(
 		Vector2(_chart_rect.position.x, _volume_rect.position.y),
 		Vector2(_chart_rect.position.x + _chart_rect.size.x, _volume_rect.position.y),
 		axis_color
+	)
+	if SkillTree.is_skill_unlocked("A2"):
+		# Separator between chart and RSI
+		draw_line(
+			Vector2(_rsi_rect.position.x, _rsi_rect.position.y),
+			Vector2(_rsi_rect.position.x + _rsi_rect.size.x, _rsi_rect.position.y),
+			axis_color
+		)
+		# Separator between RSI and MACD
+		draw_line(
+			Vector2(_macd_rect.position.x, _macd_rect.position.y),
+			Vector2(_macd_rect.position.x + _macd_rect.size.x, _macd_rect.position.y),
+			axis_color
+		)
+
+
+## Standard Exponential Moving Average over a float array.
+## Returns an array of the same length; indices before (period-1) are 0.0.
+func _calc_ema(data: Array[float], period: int) -> Array[float]:
+	var result: Array[float] = []
+	result.resize(data.size())
+	if data.size() == 0 or period <= 0:
+		return result
+	var k: float = 2.0 / float(period + 1)
+	var ema: float = 0.0
+	for i: int in range(data.size()):
+		if i < period - 1:
+			result[i] = 0.0
+		elif i == period - 1:
+			# Seed with simple average of first `period` values
+			var sum: float = 0.0
+			for j: int in range(period):
+				sum += data[j]
+			ema = sum / float(period)
+			result[i] = ema
+		else:
+			ema = data[i] * k + ema * (1.0 - k)
+			result[i] = ema
+	return result
+
+
+## Draw RSI(14) sub-panel in _rsi_rect.
+## Y range fixed 0–100; horizontal dashed lines at 70 (red) and 30 (blue).
+## Only draws the visible candle window (same vis_start_idx pattern as MAs).
+func _draw_rsi() -> void:
+	if _rsi_rect.size.y <= 0.0 or _candles.size() < RSI_PERIOD + 1:
+		return
+
+	# Build full close price array
+	var closes: Array[float] = []
+	closes.resize(_candles.size())
+	for i: int in range(_candles.size()):
+		closes[i] = float(_candles[i]["close"])
+
+	# Calculate RSI over entire candle array
+	var gains: Array[float] = []
+	var losses: Array[float] = []
+	gains.resize(_candles.size())
+	losses.resize(_candles.size())
+	gains[0] = 0.0
+	losses[0] = 0.0
+	for i: int in range(1, _candles.size()):
+		var diff: float = closes[i] - closes[i - 1]
+		gains[i] = maxf(diff, 0.0)
+		losses[i] = maxf(-diff, 0.0)
+
+	# Wilder smoothing (equivalent to EMA with alpha = 1/period)
+	var rsi_values: Array[float] = []
+	rsi_values.resize(_candles.size())
+	for i: int in range(_candles.size()):
+		rsi_values[i] = 0.0
+
+	# Seed: simple average of first RSI_PERIOD gains/losses
+	if _candles.size() < RSI_PERIOD:
+		return
+	var avg_gain: float = 0.0
+	var avg_loss: float = 0.0
+	for i: int in range(1, RSI_PERIOD + 1):
+		avg_gain += gains[i]
+		avg_loss += losses[i]
+	avg_gain /= float(RSI_PERIOD)
+	avg_loss /= float(RSI_PERIOD)
+	var rs: float = avg_gain / maxf(avg_loss, 0.0001)
+	rsi_values[RSI_PERIOD] = 100.0 - (100.0 / (1.0 + rs))
+
+	for i: int in range(RSI_PERIOD + 1, _candles.size()):
+		avg_gain = (avg_gain * float(RSI_PERIOD - 1) + gains[i]) / float(RSI_PERIOD)
+		avg_loss = (avg_loss * float(RSI_PERIOD - 1) + losses[i]) / float(RSI_PERIOD)
+		rs = avg_gain / maxf(avg_loss, 0.0001)
+		rsi_values[i] = 100.0 - (100.0 / (1.0 + rs))
+
+	# Visible window indices
+	var total: int = _candles.size()
+	var vis_start_idx: int
+	if _auto_scroll:
+		vis_start_idx = maxi(0, total - _visible_count)
+	else:
+		vis_start_idx = maxi(0, total - _visible_count - _scroll_offset)
+	var vis_end_idx: int = mini(total, vis_start_idx + _visible_count)
+
+	var candle_width: float = _rsi_rect.size.x / float(_visible_count)
+
+	# Helper: RSI value → pixel Y inside _rsi_rect (range 0–100)
+	var rsi_to_y: Callable = func(v: float) -> float:
+		return _rsi_rect.position.y + _rsi_rect.size.y * (1.0 - v / 100.0)
+
+	# Dashed horizontal line helper (draws short segments)
+	var draw_dashed: Callable = func(y: float, col: Color) -> void:
+		var dash_len: float = 6.0
+		var gap_len: float = 4.0
+		var x: float = _rsi_rect.position.x
+		var right: float = _rsi_rect.position.x + _rsi_rect.size.x
+		while x < right:
+			var x_end: float = minf(x + dash_len, right)
+			draw_line(Vector2(x, y), Vector2(x_end, y), col, 1.0)
+			x += dash_len + gap_len
+
+	# Overbought / oversold dashed lines
+	draw_dashed.call(rsi_to_y.call(RSI_OVERBOUGHT), Color(0.85, 0.25, 0.25, 0.7))
+	draw_dashed.call(rsi_to_y.call(RSI_OVERSOLD), Color(0.25, 0.45, 0.85, 0.7))
+
+	# RSI line for visible window
+	var points: PackedVector2Array = PackedVector2Array()
+	for i: int in range(vis_start_idx, vis_end_idx):
+		if i < RSI_PERIOD:
+			continue
+		var vis_i: int = i - vis_start_idx
+		var x: float = _rsi_rect.position.x + (float(vis_i) + 0.5) * candle_width
+		var y: float = rsi_to_y.call(rsi_values[i])
+		points.append(Vector2(x, y))
+
+	if points.size() >= 2:
+		draw_polyline(points, RSI_COLOR, 1.5, true)
+
+	# Label: "RSI(14)" + current value
+	var current_rsi: float = rsi_values[vis_end_idx - 1] if vis_end_idx > RSI_PERIOD else 0.0
+	var label: String = "RSI(%d)  %.1f" % [RSI_PERIOD, current_rsi]
+	draw_string(
+		ThemeDB.fallback_font,
+		Vector2(_rsi_rect.position.x + 6.0, _rsi_rect.position.y + 12.0),
+		label, HORIZONTAL_ALIGNMENT_LEFT,
+		-1, 10, RSI_COLOR
+	)
+
+
+## Draw MACD(12,26,9) sub-panel in _macd_rect.
+## MACD line (blue), Signal line (orange), Histogram bars (green/red), zero line (gray).
+## Y range auto-scaled to visible data.
+func _draw_macd() -> void:
+	if _macd_rect.size.y <= 0.0 or _candles.size() < MACD_SLOW + MACD_SIGNAL:
+		return
+
+	# Build full close price array
+	var closes: Array[float] = []
+	closes.resize(_candles.size())
+	for i: int in range(_candles.size()):
+		closes[i] = float(_candles[i]["close"])
+
+	# EMA arrays
+	var ema_fast: Array[float] = _calc_ema(closes, MACD_FAST)
+	var ema_slow: Array[float] = _calc_ema(closes, MACD_SLOW)
+
+	# MACD line = EMA_fast - EMA_slow (valid from index MACD_SLOW-1 onward)
+	var macd_line: Array[float] = []
+	macd_line.resize(_candles.size())
+	for i: int in range(_candles.size()):
+		if i < MACD_SLOW - 1:
+			macd_line[i] = 0.0
+		else:
+			macd_line[i] = ema_fast[i] - ema_slow[i]
+
+	# Signal line = EMA(MACD_line, MACD_SIGNAL) — seed from index MACD_SLOW-1
+	var signal_line: Array[float] = []
+	signal_line.resize(_candles.size())
+	for i: int in range(_candles.size()):
+		signal_line[i] = 0.0
+	var signal_start: int = MACD_SLOW - 1
+	var signal_seed_end: int = signal_start + MACD_SIGNAL - 1
+	if signal_seed_end >= _candles.size():
+		return
+	var seed_sum: float = 0.0
+	for i: int in range(signal_start, signal_seed_end + 1):
+		seed_sum += macd_line[i]
+	var sig_ema: float = seed_sum / float(MACD_SIGNAL)
+	signal_line[signal_seed_end] = sig_ema
+	var sig_k: float = 2.0 / float(MACD_SIGNAL + 1)
+	for i: int in range(signal_seed_end + 1, _candles.size()):
+		sig_ema = macd_line[i] * sig_k + sig_ema * (1.0 - sig_k)
+		signal_line[i] = sig_ema
+
+	# Visible window indices
+	var total: int = _candles.size()
+	var vis_start_idx: int
+	if _auto_scroll:
+		vis_start_idx = maxi(0, total - _visible_count)
+	else:
+		vis_start_idx = maxi(0, total - _visible_count - _scroll_offset)
+	var vis_end_idx: int = mini(total, vis_start_idx + _visible_count)
+
+	# Auto-scale Y to visible MACD/histogram values
+	var valid_start: int = signal_seed_end
+	var y_min: float = INF
+	var y_max: float = -INF
+	for i: int in range(vis_start_idx, vis_end_idx):
+		if i < valid_start:
+			continue
+		var hist: float = macd_line[i] - signal_line[i]
+		y_min = minf(y_min, minf(macd_line[i], minf(signal_line[i], hist)))
+		y_max = maxf(y_max, maxf(macd_line[i], maxf(signal_line[i], hist)))
+
+	if y_min == INF or y_max == -INF:
+		return
+	var y_range: float = maxf(y_max - y_min, 1.0)
+	var y_pad: float = y_range * 0.1
+	y_min -= y_pad
+	y_max += y_pad
+
+	var macd_to_y: Callable = func(v: float) -> float:
+		return _macd_rect.position.y + _macd_rect.size.y * (1.0 - (v - y_min) / (y_max - y_min))
+
+	var candle_width: float = _macd_rect.size.x / float(_visible_count)
+	var bar_width: float = maxf(candle_width * 0.6, 1.0)
+
+	# Zero line (thin gray)
+	var zero_y: float = macd_to_y.call(0.0)
+	draw_line(
+		Vector2(_macd_rect.position.x, zero_y),
+		Vector2(_macd_rect.position.x + _macd_rect.size.x, zero_y),
+		Color(0.60, 0.60, 0.62, 0.5), 1.0
+	)
+
+	# Histogram bars
+	for i: int in range(vis_start_idx, vis_end_idx):
+		if i < valid_start:
+			continue
+		var vis_i: int = i - vis_start_idx
+		var hist: float = macd_line[i] - signal_line[i]
+		var x_center: float = _macd_rect.position.x + (float(vis_i) + 0.5) * candle_width
+		var bar_top: float = minf(macd_to_y.call(hist), zero_y)
+		var bar_bot: float = maxf(macd_to_y.call(hist), zero_y)
+		var bar_h: float = maxf(bar_bot - bar_top, 1.0)
+		var hist_color: Color = Color(0.20, 0.70, 0.30, 0.6) if hist >= 0.0 else Color(0.85, 0.25, 0.25, 0.6)
+		draw_rect(Rect2(x_center - bar_width * 0.5, bar_top, bar_width, bar_h), hist_color, true)
+
+	# MACD line
+	var macd_points: PackedVector2Array = PackedVector2Array()
+	for i: int in range(vis_start_idx, vis_end_idx):
+		if i < valid_start:
+			continue
+		var vis_i: int = i - vis_start_idx
+		var x: float = _macd_rect.position.x + (float(vis_i) + 0.5) * candle_width
+		macd_points.append(Vector2(x, macd_to_y.call(macd_line[i])))
+	if macd_points.size() >= 2:
+		draw_polyline(macd_points, MACD_LINE_COLOR, 1.5, true)
+
+	# Signal line
+	var sig_points: PackedVector2Array = PackedVector2Array()
+	for i: int in range(vis_start_idx, vis_end_idx):
+		if i < valid_start:
+			continue
+		var vis_i: int = i - vis_start_idx
+		var x: float = _macd_rect.position.x + (float(vis_i) + 0.5) * candle_width
+		sig_points.append(Vector2(x, macd_to_y.call(signal_line[i])))
+	if sig_points.size() >= 2:
+		draw_polyline(sig_points, MACD_SIGNAL_COLOR, 1.5, true)
+
+	# Label "MACD" in top-left
+	draw_string(
+		ThemeDB.fallback_font,
+		Vector2(_macd_rect.position.x + 6.0, _macd_rect.position.y + 12.0),
+		"MACD", HORIZONTAL_ALIGNMENT_LEFT,
+		-1, 10, MACD_LINE_COLOR
 	)
 
 
@@ -606,7 +1008,7 @@ func _draw_crosshair() -> void:
 	if _crosshair_pos.y < _chart_rect.position.y or _crosshair_pos.y > _volume_rect.position.y + _volume_rect.size.y:
 		return
 
-	var ch_color: Color = Color(0.5, 0.5, 0.5, 0.5)
+	var ch_color: Color = Color(0.40, 0.40, 0.45, 0.5)
 
 	# Horizontal line
 	draw_line(
@@ -629,7 +1031,7 @@ func _draw_crosshair() -> void:
 			ThemeDB.fallback_font,
 			Vector2(_chart_rect.position.x + _chart_rect.size.x + 4, _crosshair_pos.y + 4),
 			"₩%s" % _format_number(snapped_price), HORIZONTAL_ALIGNMENT_LEFT,
-			-1, 10, Color(0.9, 0.9, 0.2)
+			-1, 10, ThemeSetup.TEXT_PRIMARY
 		)
 
 

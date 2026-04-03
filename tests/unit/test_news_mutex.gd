@@ -49,7 +49,7 @@ func test_mutex_null_does_not_block() -> void:
 	var template: Dictionary = _make_template("TPL_01", null)
 
 	# Act
-	var blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(template, "MG")
+	var blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(template, "MDG")
 
 	# Assert
 	assert_false(blocked, "null mutex_group should never block")
@@ -60,7 +60,7 @@ func test_mutex_empty_string_does_not_block() -> void:
 	var template: Dictionary = _make_template("TPL_02", "")
 
 	# Act
-	var blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(template, "MG")
+	var blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(template, "MDG")
 
 	# Assert
 	assert_false(blocked, "empty string mutex_group should never block")
@@ -73,7 +73,7 @@ func test_mutex_fixed_key_blocks_after_registration() -> void:
 
 	# Act — check if another template with same mutex is blocked
 	var template_b: Dictionary = _make_template("RATE_DOWN_01", "rate_direction")
-	var blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(template_b, "KB")
+	var blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(template_b, "KRB")
 
 	# Assert
 	assert_true(blocked, "same fixed mutex_group should block on same day")
@@ -86,58 +86,58 @@ func test_mutex_fixed_key_different_group_not_blocked() -> void:
 
 	# Act — check "foreign_flow" (different group)
 	var template_b: Dictionary = _make_template("FOREIGN_BUY_01", "foreign_flow")
-	var blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(template_b, "KB")
+	var blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(template_b, "KRB")
 
 	# Assert
 	assert_false(blocked, "different mutex_group should not block")
 
 
 func test_mutex_stock_placeholder_blocks_same_stock() -> void:
-	# Arrange — register bio_clinical for stock MG
+	# Arrange — register bio_clinical for stock MDG
 	var template_a: Dictionary = _make_template("BIO_SUCCESS_01", "bio_clinical_{stock_id}")
-	var stock_mg: StockData = _make_stock("MG")
+	var stock_mg: StockData = _make_stock("MDG")
 	NewsEventSystem._register_mutex(template_a, stock_mg)
 
-	# Act — check if same mutex group blocks for MG
+	# Act — check if same mutex group blocks for MDG
 	var template_b: Dictionary = _make_template("BIO_FAIL_01", "bio_clinical_{stock_id}")
-	var blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(template_b, "MG")
+	var blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(template_b, "MDG")
 
 	# Assert
 	assert_true(blocked, "{stock_id} mutex should block same stock on same day")
 
 
 func test_mutex_stock_placeholder_allows_different_stock() -> void:
-	# Arrange — register bio_clinical for stock MG
+	# Arrange — register bio_clinical for stock MDG
 	var template_a: Dictionary = _make_template("BIO_SUCCESS_01", "bio_clinical_{stock_id}")
-	var stock_mg: StockData = _make_stock("MG")
+	var stock_mg: StockData = _make_stock("MDG")
 	NewsEventSystem._register_mutex(template_a, stock_mg)
 
-	# Act — check if same mutex group blocks for BF (different stock)
+	# Act — check if same mutex group blocks for BPH (different stock)
 	var template_b: Dictionary = _make_template("BIO_FAIL_01", "bio_clinical_{stock_id}")
-	var blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(template_b, "BF")
+	var blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(template_b, "BPH")
 
 	# Assert
 	assert_false(blocked, "{stock_id} mutex should NOT block different stock")
 
 
 func test_mutex_stock_placeholder_independent_per_stock() -> void:
-	# Arrange — register earnings for stock SC, then also for KF
+	# Arrange — register earnings for stock STC, then also for KSF
 	var tpl_a: Dictionary = _make_template("EARN_GOOD_01", "earnings_{stock_id}")
-	var stock_sc: StockData = _make_stock("SC")
-	var stock_kf: StockData = _make_stock("KF")
+	var stock_sc: StockData = _make_stock("STC")
+	var stock_kf: StockData = _make_stock("KSF")
 	NewsEventSystem._register_mutex(tpl_a, stock_sc)
 	NewsEventSystem._register_mutex(tpl_a, stock_kf)
 
-	# Act — SC and KF should be blocked, but NE should not
+	# Act — STC and KSF should be blocked, but NXE should not
 	var tpl_b: Dictionary = _make_template("EARN_BAD_01", "earnings_{stock_id}")
-	var sc_blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(tpl_b, "SC")
-	var kf_blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(tpl_b, "KF")
-	var ne_blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(tpl_b, "NE")
+	var sc_blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(tpl_b, "STC")
+	var kf_blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(tpl_b, "KSF")
+	var ne_blocked: bool = NewsEventSystem._is_mutex_blocked_for_stock(tpl_b, "NXE")
 
 	# Assert
-	assert_true(sc_blocked, "SC should be mutex-blocked")
-	assert_true(kf_blocked, "KF should be mutex-blocked")
-	assert_false(ne_blocked, "NE should NOT be mutex-blocked")
+	assert_true(sc_blocked, "STC should be mutex-blocked")
+	assert_true(kf_blocked, "KSF should be mutex-blocked")
+	assert_false(ne_blocked, "NXE should NOT be mutex-blocked")
 
 
 # ── Tests: _register_mutex ──
@@ -157,7 +157,7 @@ func test_register_mutex_stores_template_id() -> void:
 func test_register_mutex_with_stock_resolves_placeholder() -> void:
 	# Arrange
 	var template: Dictionary = _make_template("BIO_SUCCESS_01", "bio_clinical_{stock_id}")
-	var stock: StockData = _make_stock("BF")
+	var stock: StockData = _make_stock("BPH")
 
 	# Act
 	NewsEventSystem._register_mutex(template, stock)
@@ -203,12 +203,12 @@ func test_mutex_blocked_then_cleared_then_unblocked() -> void:
 	NewsEventSystem._register_mutex(tpl_a, null)
 
 	var tpl_b: Dictionary = _make_template("RATE_DOWN_01", "rate_direction")
-	var blocked_before: bool = NewsEventSystem._is_mutex_blocked_for_stock(tpl_b, "KB")
+	var blocked_before: bool = NewsEventSystem._is_mutex_blocked_for_stock(tpl_b, "KRB")
 	assert_true(blocked_before, "precondition: should be blocked before clear")
 
 	# Act — simulate new day (clear mutex)
 	NewsEventSystem._daily_mutex.clear()
 
 	# Assert — should no longer be blocked
-	var blocked_after: bool = NewsEventSystem._is_mutex_blocked_for_stock(tpl_b, "KB")
+	var blocked_after: bool = NewsEventSystem._is_mutex_blocked_for_stock(tpl_b, "KRB")
 	assert_false(blocked_after, "should not be blocked after daily mutex clear")

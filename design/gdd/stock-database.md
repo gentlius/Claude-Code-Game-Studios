@@ -1,8 +1,8 @@
 # 종목 데이터베이스 (Stock Database)
 
-> **Status**: In Design
+> **Status**: Approved
 > **Author**: user + game-designer
-> **Last Updated**: 2026-04-01
+> **Last Updated**: 2026-04-03
 > **Implements Pillar**: 읽는 재미 (Read the Market)
 
 ## Overview
@@ -15,7 +15,8 @@
 각 섹터마다 고유한 변동성 프로필과 뉴스 반응 특성을 부여하여
 플레이어가 종목별 차이를 읽고 전략을 세우는 재미를 제공한다.
 
-MVP에서 기존 10종목(★)을 포함하고, V-Slice에서 전체 46종목으로 확장한다.
+MVP부터 전체 46종목을 사용한다. 초기 설계 시 10종목(★) MVP 구분이 있었으나,
+현재는 46종목 전체가 MVP에 포함된다.
 
 ## Player Fantasy
 
@@ -37,15 +38,15 @@ MVP에서 기존 10종목(★)을 포함하고, V-Slice에서 전체 46종목으
 3. **정적 속성**: 게임 시작 시 로드되며 시즌 중 변경되지 않는 기본 특성.
 4. **동적 데이터는 이 시스템에 없다**: 현재 가격, 거래량, 차트 데이터 등은
    가격 엔진이 관리. 종목 DB는 "이 종목이 어떤 종목인가"만 정의.
-5. **MVP/확장 구분**: 기존 10종목(★)은 MVP에 포함. 나머지 36종목은 V-Slice에서 추가.
+5. **MVP 범위**: 전체 46종목이 MVP에 포함. ★ 표시는 초기 설계 시 우선 구현 종목이었으나 현재는 구분 없이 전체 사용.
 
 ### 종목 데이터 스키마
 
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
-| `id` | string | 고유 식별자 | "SC" |
+| `id` | string | 고유 식별자 | "STC" |
 | `name` | string | 표시 이름 | "스타칩" |
-| `ticker` | string | 종목코드 (2-3자) | "SC" |
+| `ticker` | string | 종목코드 (3자) | "STC" |
 | `sector` | enum | 소속 섹터 | SEMICONDUCTOR |
 | `description` | string | 기업 설명 (1-2문장) | "글로벌 반도체 설계 및 제조 기업" |
 | `base_price` | int | 시즌 시작 시 기준가 (원) | 120000 |
@@ -71,27 +72,27 @@ MVP에서 기존 10종목(★)을 포함하고, V-Slice에서 전체 46종목으
 | FINANCE | 금융 | 저변동. 금리 민감 | interest_rate, regulation, finance |
 | ENTERTAINMENT | 엔터/미디어 | 이벤트 드리븐 | content_hit, kpop, media |
 | RETAIL | 유통/소비 | 방어주. 안정적 | consumption, season, retail |
-| CONSTRUCTION | 건설/조선 | 경기/정책 민감 | real_estate, policy, infrastructure |
+| CONSTRUCTION | 건설/조선 | 경기/정책 민감 | real_estate, policy, infrastructure, shipbuilding |
 | GAMING | 게임 | 고변동. 신작 이벤트 | game_release, esports, tech |
 | ENERGY | 에너지/화학 | 원자재 연동 | oil_price, raw_material, chemical |
 | TELECOM | 통신 | 안정/배당. 인프라 투자 민감 | telecom, 5g, infrastructure, policy |
 
 ### 종목 목록
 
-★ = MVP 포함 (기존 10종목). 나머지는 V-Slice에서 추가.
+★ = 초기 설계 시 우선 구현 대상. 현재는 전체 46종목이 MVP에 포함.
 
 #### SEMICONDUCTOR (5종목)
 
 | # | ID | Name | Base Price | Shares | 초기시총(억) | Vol | PER | SecS | MacS | Div% | Event Tags |
 |---|-----|------|-----------|--------|------------|-----|-----|------|------|------|------------|
-| 1 | SK★ | 스카이로직 | 210,000 | 2,500,000 | 5,250 | HIGH | 22.0 | 1.3 | 0.9 | 1.2 | semiconductor, memory, export, AI |
-| 2 | SC★ | 스타칩 | 120,000 | 1,500,000 | 1,800 | HIGH | 18.3 | 1.5 | 1.2 | 1.5 | semiconductor, export, tech, AI |
+| 1 | SKL★ | 스카이로직 | 210,000 | 2,500,000 | 5,250 | HIGH | 22.0 | 1.3 | 0.9 | 1.2 | semiconductor, memory, export, AI |
+| 2 | STC★ | 스타칩 | 120,000 | 1,500,000 | 1,800 | HIGH | 18.3 | 1.5 | 1.2 | 1.5 | semiconductor, export, tech, AI |
 | 3 | HNX | 하닉스반도체 | 135,000 | 1,200,000 | 1,620 | HIGH | 15.8 | 1.4 | 1.1 | 1.0 | semiconductor, memory, export |
 | 4 | SLW | 실리콘웨이브 | 45,000 | 800,000 | 360 | HIGH | 28.5 | 1.2 | 0.7 | 0.0 | semiconductor, fabless, AI |
 | 5 | DSE | 디에스이 | 22,000 | 600,000 | 132 | MEDIUM | 12.0 | 1.0 | 0.8 | 2.0 | semiconductor, equipment, display |
 
-> 반도체 섹터는 시총 비중이 가장 크다. SK(스카이로직)가 전체 지수에 최대 영향.
-> 메모리(SK, HNX) vs 팹리스(SC, SLW) vs 장비(DSE) 세분화.
+> 반도체 섹터는 시총 비중이 가장 크다. SKL(스카이로직)가 전체 지수에 최대 영향.
+> 메모리(SKL, HNX) vs 팹리스(STC, SLW) vs 장비(DSE) 세분화.
 
 #### BATTERY (4종목)
 
@@ -110,8 +111,8 @@ MVP에서 기존 10종목(★)을 포함하고, V-Slice에서 전체 46종목으
 | # | ID | Name | Base Price | Shares | 초기시총(억) | Vol | PER | SecS | MacS | Div% | Event Tags |
 |---|-----|------|-----------|--------|------------|-----|-----|------|------|------|------------|
 | 10 | CGP | 셀진파마 | 165,000 | 1,000,000 | 1,650 | HIGH | 32.0 | 1.3 | 0.7 | 0.5 | healthcare, biosimilar, export |
-| 11 | BF★ | 블루팜 | 320,000 | 150,000 | 480 | EXTREME | N/A | 2.0 | 0.7 | 0.0 | clinical_trial, fda, healthcare |
-| 12 | MG★ | 메디진 | 180,000 | 200,000 | 360 | EXTREME | N/A | 1.8 | 1.0 | 0.0 | clinical_trial, fda, healthcare |
+| 11 | BPH★ | 블루팜 | 320,000 | 150,000 | 480 | EXTREME | N/A | 2.0 | 0.7 | 0.0 | clinical_trial, fda, healthcare |
+| 12 | MDG★ | 메디진 | 180,000 | 200,000 | 360 | EXTREME | N/A | 1.8 | 1.0 | 0.0 | clinical_trial, fda, healthcare |
 | 13 | HLB | 한라바이오 | 48,000 | 500,000 | 240 | EXTREME | N/A | 1.7 | 0.6 | 0.0 | clinical_trial, fda, healthcare |
 | 14 | YBT | 유바이오텍 | 25,000 | 400,000 | 100 | HIGH | 22.0 | 1.2 | 0.8 | 0.0 | healthcare, diagnostic, tech |
 
@@ -134,7 +135,7 @@ MVP에서 기존 10종목(★)을 포함하고, V-Slice에서 전체 46종목으
 
 | # | ID | Name | Base Price | Shares | 초기시총(억) | Vol | PER | SecS | MacS | Div% | Event Tags |
 |---|-----|------|-----------|--------|------------|-----|-----|------|------|------|------------|
-| 19 | KB★ | 코리아뱅크 | 52,000 | 2,000,000 | 1,040 | LOW | 6.8 | 0.5 | 1.5 | 4.5 | interest_rate, regulation, finance |
+| 19 | KRB★ | 코리아뱅크 | 52,000 | 2,000,000 | 1,040 | LOW | 6.8 | 0.5 | 1.5 | 4.5 | interest_rate, regulation, finance |
 | 20 | SSL | 삼한생명 | 72,000 | 1,200,000 | 864 | LOW | 8.5 | 0.6 | 1.3 | 3.8 | interest_rate, finance, insurance |
 | 21 | HNF | 하나파이낸스 | 48,000 | 1,500,000 | 720 | LOW | 5.2 | 0.5 | 1.4 | 5.0 | interest_rate, finance, banking |
 | 22 | MSC | 메리츠증권 | 55,000 | 600,000 | 330 | MEDIUM | 7.8 | 0.8 | 1.2 | 3.0 | finance, securities, market |
@@ -148,7 +149,7 @@ MVP에서 기존 10종목(★)을 포함하고, V-Slice에서 전체 46종목으
 |---|-----|------|-----------|--------|------------|-----|-----|------|------|------|------------|
 | 23 | HBE | 하이브엔터 | 195,000 | 400,000 | 780 | HIGH | 38.0 | 1.5 | 0.5 | 0.3 | kpop, content_hit, media |
 | 24 | SMC | 에스엠컬처 | 82,000 | 500,000 | 410 | MEDIUM | 22.0 | 1.2 | 0.5 | 1.5 | kpop, content_hit, media |
-| 25 | NE★ | 넥스트엔터 | 42,000 | 600,000 | 252 | HIGH | 25.1 | 0.8 | 0.6 | 0.5 | content_hit, kpop, media |
+| 25 | NXE★ | 넥스트엔터 | 42,000 | 600,000 | 252 | HIGH | 25.1 | 0.8 | 0.6 | 0.5 | content_hit, kpop, media |
 | 26 | JYM | 제이와이뮤직 | 68,000 | 350,000 | 238 | HIGH | 28.5 | 1.3 | 0.4 | 0.8 | kpop, content_hit, media |
 
 > 엔터는 이벤트 드리븐. 컨텐츠 히트/실패에 극적 반응. 거시경제에는 둔감.
@@ -157,23 +158,24 @@ MVP에서 기존 10종목(★)을 포함하고, V-Slice에서 전체 46종목으
 
 | # | ID | Name | Base Price | Shares | 초기시총(억) | Vol | PER | SecS | MacS | Div% | Event Tags |
 |---|-----|------|-----------|--------|------------|-----|-----|------|------|------|------------|
-| 27 | KF★ | 코스모푸드 | 65,000 | 800,000 | 520 | MEDIUM | 12.5 | 1.0 | 0.8 | 1.8 | consumption, season, retail |
+| 27 | KSF★ | 코스모푸드 | 65,000 | 800,000 | 520 | MEDIUM | 12.5 | 1.0 | 0.8 | 1.8 | consumption, season, retail |
 | 28 | CPG | 쿠플러스 | 32,000 | 1,500,000 | 480 | MEDIUM | 120.0 | 1.1 | 0.7 | 0.0 | consumption, retail, platform |
 | 29 | EMT | 이마트레이드 | 85,000 | 500,000 | 425 | LOW | 15.0 | 0.8 | 0.9 | 2.5 | consumption, retail, real_estate |
 | 30 | BGF | 배달의국민 | 145,000 | 300,000 | 435 | HIGH | N/A | 1.3 | 0.6 | 0.0 | consumption, retail, platform |
 
-> 유통/소비는 방어적 섹터. 전통 유통(KF, EMT)은 안정적, 플랫폼(CPG, BGF)은 성장주 성격.
+> 유통/소비는 방어적 섹터. 전통 유통(KSF, EMT)은 안정적, 플랫폼(CPG, BGF)은 성장주 성격.
+> CPG는 성장주 성격이나 대형 플랫폼 지위로 MEDIUM 변동성 유지. BGF는 신규 플랫폼으로 HIGH 변동성.
 
 #### CONSTRUCTION (4종목)
 
 | # | ID | Name | Base Price | Shares | 초기시총(억) | Vol | PER | SecS | MacS | Div% | Event Tags |
 |---|-----|------|-----------|--------|------------|-----|-----|------|------|------|------------|
-| 31 | DH★ | 대한중공업 | 95,000 | 1,000,000 | 950 | LOW | 8.2 | 1.0 | 1.3 | 3.0 | shipbuilding, export, infrastructure |
+| 31 | DHI★ | 대한중공업 | 95,000 | 1,000,000 | 950 | LOW | 8.2 | 1.0 | 1.3 | 3.0 | shipbuilding, export, infrastructure |
 | 32 | HEC | 한라건설 | 38,000 | 1,200,000 | 456 | MEDIUM | 7.5 | 1.2 | 1.1 | 2.0 | real_estate, policy, infrastructure |
 | 33 | PSC | 포스코건설 | 28,000 | 800,000 | 224 | MEDIUM | 6.8 | 1.0 | 1.0 | 2.2 | infrastructure, construction, policy |
 | 34 | DWE | 대우이앤씨 | 5,200 | 3,000,000 | 156 | HIGH | 9.2 | 1.3 | 1.2 | 1.0 | real_estate, construction, policy |
 
-> 건설/조선은 경기순환 섹터. 부동산 정책과 수주에 민감. DH는 조선 특화.
+> 건설/조선은 경기순환 섹터. 부동산 정책과 수주에 민감. DHI는 조선 특화.
 > DWE는 저가주로 변동성 높음.
 
 #### GAMING (4종목)
@@ -193,21 +195,23 @@ MVP에서 기존 10종목(★)을 포함하고, V-Slice에서 전체 46종목으
 |---|-----|------|-----------|--------|------------|-----|-----|------|------|------|------------|
 | 39 | SKI | 에스케이에너지 | 125,000 | 800,000 | 1,000 | MEDIUM | 12.5 | 1.2 | 1.3 | 2.5 | oil_price, raw_material, chemical |
 | 40 | KEP | 한국전력 | 22,000 | 3,000,000 | 660 | LOW | N/A | 0.8 | 1.5 | 0.0 | energy, policy, infrastructure |
-| 41 | GC★ | 그린케미 | 38,000 | 1,200,000 | 456 | MEDIUM | 9.7 | 1.2 | 1.0 | 2.0 | chemical, raw_material, oil_price |
+| 41 | GRC★ | 그린케미 | 38,000 | 1,200,000 | 456 | MEDIUM | 9.7 | 1.2 | 1.0 | 2.0 | chemical, raw_material, oil_price |
 | 42 | HPC | 한화파워 | 32,000 | 600,000 | 192 | HIGH | N/A | 1.4 | 0.8 | 0.0 | green_energy, solar, policy |
 
 > 에너지는 원자재/유가에 연동. KEP(전력)은 정책 민감 저PER, HPC(태양광)는 성장주.
+> **참고**: KEP/HPC는 PER=N/A, Div=0.0으로 설정. 실제 한국전력은 배당주이나,
+> 게임에서는 MVP 단순화를 위해 배당 메카닉 미구현. 향후 배당 시스템 도입 시 조정.
 
 #### TELECOM (4종목)
 
 | # | ID | Name | Base Price | Shares | 초기시총(억) | Vol | PER | SecS | MacS | Div% | Event Tags |
 |---|-----|------|-----------|--------|------------|-----|-----|------|------|------|------------|
-| 43 | PT★ | 피플텔레콤 | 78,000 | 900,000 | 702 | MEDIUM | 11.0 | 1.0 | 1.0 | 4.0 | telecom, 5g, infrastructure, dividend |
+| 43 | PLT★ | 피플텔레콤 | 78,000 | 900,000 | 702 | MEDIUM | 11.0 | 1.0 | 1.0 | 4.0 | telecom, 5g, infrastructure |
 | 44 | KTN | 코리아넷 | 42,000 | 1,500,000 | 630 | LOW | 9.5 | 0.9 | 1.1 | 4.5 | telecom, 5g, infrastructure |
 | 45 | LPM | 엘피모바일 | 28,000 | 1,000,000 | 280 | MEDIUM | 14.2 | 1.0 | 0.9 | 3.5 | telecom, 5g, mobile |
 | 46 | DGT | 디지텔 | 8,500 | 500,000 | 42 | HIGH | 35.0 | 1.3 | 0.6 | 0.0 | telecom, digital, platform |
 
-> 통신은 고배당 방어 섹터. 대형 통신사(PT, KTN)는 안정적이고 배당 높음.
+> 통신은 고배당 방어 섹터. 대형 통신사(PLT, KTN)는 안정적이고 배당 높음.
 > DGT는 알뜰폰/디지털전환 플랫폼으로 성장주 성격.
 
 ### 종목 분포 요약
@@ -225,11 +229,11 @@ MVP에서 기존 10종목(★)을 포함하고, V-Slice에서 전체 46종목으
 
 | 순위 | ID | 초기시총(억) | 지수 영향 |
 |------|-----|-----------|----------|
-| 1 | SK | 5,250 | 최대 |
+| 1 | SKL | 5,250 | 최대 |
 | 2 | HMC | 3,510 | 매우 큼 |
 | 3 | SDC | 1,995 | 큼 |
 | 4 | LEB | 1,900 | 큼 |
-| 5 | SC | 1,800 | 큼 |
+| 5 | STC | 1,800 | 큼 |
 | 6 | MBP | 1,720 | 큼 |
 | 7 | CGP | 1,650 | 큼 |
 | 8 | HNX | 1,620 | 큼 |
@@ -261,14 +265,14 @@ MVP에서 기존 10종목(★)을 포함하고, V-Slice에서 전체 46종목으
 
 ## Formulas
 
-### 종목 데이터베이스 자체에는 계산 공식이 없다
-
-이 시스템은 정적 데이터 제공자이다. 공식은 이 데이터를 소비하는 시스템에 존재:
+이 시스템은 정적 데이터 저장소이며, 동적 가격/손익 계산은 소비 시스템에서 수행된다:
 - 가격 변동 공식 → 가격 엔진 GDD
 - 뉴스 영향 공식 → 뉴스/이벤트 시스템 GDD
 - 손익 계산 공식 → 포트폴리오 관리 GDD
 
-### 시즌별 기준가 조정 (향후 확장)
+다만 시즌 시작 시 기준가 조정 공식은 이 시스템이 소유한다:
+
+### F1. 시즌별 기준가 조정 (향후 확장)
 
 ```
 season_base_price = original_base_price * season_theme_modifier
@@ -285,13 +289,12 @@ season_base_price = original_base_price * season_theme_modifier
 
 | Scenario | Expected Behavior | Rationale |
 |----------|------------------|-----------|
-| 존재하지 않는 종목 ID 조회 | null 반환 + 에러 로그. 크래시하지 않음 | 방어적 프로그래밍 |
+| 존재하지 않는 종목 ID 조회 | null 반환 + 에러 로그. 호출자가 null 체크 필수 | 방어적 프로그래밍 |
 | 동일 섹터 내 다중 종목 섹터 뉴스 반응 | 섹터 뉴스에 모두 반응하되, sector_sensitivity로 개별 강도 차등 | 같은 업종이어도 기업마다 반응 다름 |
 | 적자 기업의 PER 표시 | PER null → UI에 "N/A" 표시 | 바이오주, 성장주 등 흑자 전환 전 |
 | 시즌 시작 시 기준가 0 이하 | 최소 기준가 1,000원으로 클램핑 | 비정상 데이터 방지 |
 | event_tags가 비어있는 종목 | 섹터 뉴스에만 반응, 개별 이벤트 반응 없음 | 기본 동작으로 충분 |
 | 배당 수익률 높은 종목 장기 보유 | MVP에서는 배당 이벤트 없음. dividend_yield는 참고 정보로만 표시 | 향후 확장으로 배당 메카닉 도입 예정 |
-| MVP에서 V-Slice 종목 ID 참조 | null 반환. MVP 모드에서는 ★ 종목만 로드 | 단계적 확장 지원 |
 | 동일 섹터 종목 간 시총 격차 큼 | 정상 동작. 시총 격차는 지수 영향도 차이로 반영됨 | 현실 시장 반영 |
 
 ---
@@ -333,12 +336,11 @@ season_base_price = original_base_price * season_theme_modifier
 - [ ] `get_stocks_by_event_tag(tag)` 호출 시 해당 태그를 가진 종목만 반환
 - [ ] 적자 기업(PER null)의 PER이 UI에 "N/A"로 표시됨
 - [ ] 모든 종목 데이터가 외부 config 파일에서 로드됨 (하드코딩 금지)
-- [ ] MVP 빌드에서 10종목(★) 로드됨
-- [ ] V-Slice 빌드에서 46종목 전체 로드됨
+- [ ] MVP 빌드에서 46종목 전체 로드됨
 - [ ] 존재하지 않는 종목 ID 조회 시 크래시 없이 null 반환
 - [ ] `stock_exists(id)` 호출 시 정확한 bool 반환 (1ms 이내)
 - [ ] `get_stocks_by_sector(sector_id)` 호출 시 해당 섹터 종목만 반환 (1ms 이내)
-- [ ] 시총가중지수 계산 시 46종목 전체가 정확히 반영됨
+- [ ] 모든 46종목의 listed_shares 값이 정확히 로드되어 가격 엔진의 시총가중지수 계산에 제공됨
 
 ---
 

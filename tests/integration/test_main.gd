@@ -4,7 +4,7 @@
 extends Node
 
 var _ticks_processed: int = 0
-var _test_stock_id: String = "KF"
+var _test_stock_id: String = "KSF"
 var _buy_placed: bool = false
 var _sell_placed: bool = false
 
@@ -26,7 +26,7 @@ func _verify_autoloads() -> void:
 	print("[OK] All 6 autoloads loaded")
 
 	var stock_count: int = StockDatabase.get_stock_count()
-	assert(stock_count == 10, "Expected 10 stocks, got %d" % stock_count)
+	assert(stock_count == 46, "Expected 46 stocks, got %d" % stock_count)
 	print("[OK] StockDatabase: %d stocks loaded" % stock_count)
 
 
@@ -153,7 +153,7 @@ func _print_status(tick: int) -> void:
 		summary["total_assets"], summary["return_rate"]
 	])
 	# Print a few stock prices
-	for sid: String in ["KF", "SC", "MG"]:
+	for sid: String in ["KSF", "STC", "MDG"]:
 		var price: int = PriceEngine.get_current_price(sid)
 		var stock: StockData = StockDatabase.get_stock(sid)
 		var pct: float = (float(price) - float(stock.base_price)) / float(stock.base_price) * 100.0

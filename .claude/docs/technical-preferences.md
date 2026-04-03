@@ -46,3 +46,5 @@
 
 <!-- Quick reference linking to full ADRs in docs/architecture/ -->
 - [ADR-001](../../docs/architecture/001-system-communication-pattern.md) — 시그널 + 직접 호출 하이브리드 통신 패턴
+- [ADR-002](../../docs/architecture/002-tick-size-krx-table.md) — KRX 기반 호가 단위 테이블 (static 함수 단일 소스)
+- [ADR-003](../../docs/architecture/003-energy-volume-correlation.md) — 에너지-거래량 상관관계 (tick energy 모델)

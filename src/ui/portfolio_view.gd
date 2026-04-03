@@ -86,7 +86,7 @@ func _build_ui() -> void:
 
 	var tx_title: Label = Label.new()
 	tx_title.text = "최근 거래"
-	tx_title.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+	tx_title.add_theme_color_override("font_color", ThemeSetup.TEXT_DIM)
 	scroll_vbox.add_child(tx_title)
 
 	_tx_container = VBoxContainer.new()
@@ -156,19 +156,22 @@ func _refresh_holdings() -> void:
 		var lbl_stock: Label = Label.new()
 		lbl_stock.text = sid
 		lbl_stock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ThemeSetup.style_label_primary(lbl_stock)
 		row.add_child(lbl_stock)
 
 		# Quantity
 		var lbl_qty: Label = Label.new()
 		lbl_qty.text = "%d주" % h["quantity"]
 		lbl_qty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ThemeSetup.style_label_secondary(lbl_qty)
 		row.add_child(lbl_qty)
 
-		# Current price
-		var current_price: int = PriceEngine.get_current_price(sid)
+		# Current price (derived from cached valuation, no direct PriceEngine call)
+		var current_price: int = h.get("current_value", 0) / maxi(h.get("quantity", 1), 1)
 		var lbl_price: Label = Label.new()
 		lbl_price.text = "₩%s" % _format_number(current_price)
 		lbl_price.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ThemeSetup.style_label_primary(lbl_price)
 		row.add_child(lbl_price)
 
 		# Return rate
@@ -189,6 +192,7 @@ func _refresh_holdings() -> void:
 		var lbl_value: Label = Label.new()
 		lbl_value.text = "₩%s" % _format_number(value)
 		lbl_value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ThemeSetup.style_label_primary(lbl_value)
 		row.add_child(lbl_value)
 
 		# Click to select stock

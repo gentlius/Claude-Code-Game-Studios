@@ -417,16 +417,16 @@ def summarize_day_ohlcv(stock: StockState, day_start_idx: int):
 # ── Stock Definitions (from GDD / Stock DB) ──
 
 STOCKS = [
-    StockConfig("KF", "코스모푸드", 65000, VolatilityProfile.MEDIUM, 0.8, 1.0),
-    StockConfig("SC", "스타칩", 120000, VolatilityProfile.HIGH, 1.2, 1.5),
-    StockConfig("KB", "코리아뱅크", 52000, VolatilityProfile.LOW, 1.5, 0.5),
-    StockConfig("NE", "넥스트엔터", 42000, VolatilityProfile.HIGH, 0.6, 0.8),
-    StockConfig("MG", "메디진", 180000, VolatilityProfile.EXTREME, 1.0, 1.8),
-    StockConfig("GC", "그린케미", 38000, VolatilityProfile.MEDIUM, 1.0, 1.2),
-    StockConfig("DH", "대한중공업", 95000, VolatilityProfile.LOW, 1.3, 1.0),
-    StockConfig("PT", "피플텔레콤", 78000, VolatilityProfile.MEDIUM, 1.0, 1.0),
-    StockConfig("SK", "스카이로직", 210000, VolatilityProfile.HIGH, 0.9, 1.3),
-    StockConfig("BF", "블루팜", 320000, VolatilityProfile.EXTREME, 0.7, 2.0),
+    StockConfig("KSF", "코스모푸드", 65000, VolatilityProfile.MEDIUM, 0.8, 1.0),
+    StockConfig("STC", "스타칩", 120000, VolatilityProfile.HIGH, 1.2, 1.5),
+    StockConfig("KRB", "코리아뱅크", 52000, VolatilityProfile.LOW, 1.5, 0.5),
+    StockConfig("NXE", "넥스트엔터", 42000, VolatilityProfile.HIGH, 0.6, 0.8),
+    StockConfig("MDG", "메디진", 180000, VolatilityProfile.EXTREME, 1.0, 1.8),
+    StockConfig("GRC", "그린케미", 38000, VolatilityProfile.MEDIUM, 1.0, 1.2),
+    StockConfig("DHI", "대한중공업", 95000, VolatilityProfile.LOW, 1.3, 1.0),
+    StockConfig("PLT", "피플텔레콤", 78000, VolatilityProfile.MEDIUM, 1.0, 1.0),
+    StockConfig("SKL", "스카이로직", 210000, VolatilityProfile.HIGH, 0.9, 1.3),
+    StockConfig("BPH", "블루팜", 320000, VolatilityProfile.EXTREME, 0.7, 2.0),
 ]
 
 # ── Pre-defined Events for Testing ──
@@ -437,11 +437,11 @@ TEST_EVENTS = [
                   [s.stock_id for s in STOCKS])),
     # Day 7, tick 100: Sector good news (semiconductor boom) for SC, SK
     (7, 100, Event("INSTANT_SHOCK", 0.08, +1, "SECTOR",
-                   ["SC", "SK"])),
+                   ["STC", "SKL"])),
     # Day 10, tick 200: Individual mega event for MG (+15%)
-    (10, 200, Event("INSTANT_SHOCK", 0.15, +1, "INDIVIDUAL", ["MG"])),
+    (10, 200, Event("INSTANT_SHOCK", 0.15, +1, "INDIVIDUAL", ["MDG"])),
     # Day 12, tick 0: Gradual sector decline for NE, MG (regulatory concern)
-    (12, 0, Event("GRADUAL_SHIFT", 0.10, -1, "SECTOR", ["NE", "MG"],
+    (12, 0, Event("GRADUAL_SHIFT", 0.10, -1, "SECTOR", ["NXE", "MDG"],
                   decay_ticks=200, decay_curve="EXPONENTIAL")),
     # Day 16, tick 150: Macro good news (stimulus) - gradual
     (16, 150, Event("GRADUAL_SHIFT", 0.05, +1, "MACRO",

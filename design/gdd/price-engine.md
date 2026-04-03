@@ -1,13 +1,13 @@
 # 가격 엔진 (Price Engine)
 
-> **Status**: Approved
+> **Status**: In Review
 > **Author**: user + game-designer
-> **Last Updated**: 2026-03-31
+> **Last Updated**: 2026-04-03
 > **Implements Pillar**: 판단이 곧 실력 (Judgment is King), 읽는 재미 (Read the Market)
 
 ## Overview
 
-가격 엔진은 시드머니의 10개 가상 종목 가격을 실시간으로 생성하는 Core 시스템이다.
+가격 엔진은 시드머니의 46개 가상 종목 가격을 실시간으로 생성하는 Core 시스템이다.
 게임 시계의 매 틱마다 `on_tick` 시그널을 수신하여 모든 종목의 현재가를 갱신한다.
 
 가격 생성은 3개 레이어로 구성된다: (1) **패턴 레이어** — 실제 주식 차트에서
@@ -78,7 +78,7 @@ MVP에서 플레이어의 매매는 가격에 영향을 주지 않는다(가격 
 변동성 프로필별 스케일링(1-4)으로 실제 지속 시간이 변한다.
 
 `min_duration` 경과 후, 매 틱마다 **전환 체크**를 수행한다. 전환 체크 확률은
-각 상태별 고정값이며, 변동성 프로필에 따라 스케일된다(1-3 규칙 참조).
+각 상태별 고정값이며, 변동성 프로필에 따라 스케일된다(1-4 규칙 참조).
 
 ##### 1-3. 기준 전환 확률 행렬 (MEDIUM 기준)
 
@@ -143,8 +143,15 @@ function adjust_row(row[], self_scale, breakout_scale):
     non_self_non_breakout = remaining - breakout_adjusted
     others_indices = {j for j in range(7) if j != state_index and j not in [5,6]}
     others_original_sum = sum(row[j] for j in others_indices)
-    for j in others_indices:
-        row[j] = row[j] / others_original_sum × non_self_non_breakout
+    # Step 5: Guard against zero division
+    if others_original_sum == 0:
+        # 모든 non-self, non-breakout 확률이 0인 극단 케이스
+        # 균등 분배로 fallback
+        for j in others_indices:
+            row[j] = non_self_non_breakout / len(others_indices)
+    else:
+        for j in others_indices:
+            row[j] = row[j] / others_original_sum × non_self_non_breakout
 
     # 5. 자기 유지 확률 설정
     row[state_index] = adjusted_self
@@ -155,6 +162,8 @@ function adjust_row(row[], self_scale, breakout_scale):
 EXTREME 프로필에서도 SIDEWAYS 상태는 유지한다. ×0.75 자기 유지 스케일로 인해
 EXTREME 종목의 SIDEWAYS는 매우 짧아지며, BREAKOUT ×4.0으로 박스권에서 급등/급락이
 빈번하게 발생하여 자연스럽게 "불안정한 박스권" 느낌을 연출한다.
+
+> **의도된 설계**: LOW 종목의 BREAKOUT은 더 오래 지속되고 (self_prob×1.15=0.575), EXTREME 종목의 BREAKOUT은 더 짧게 끝난다 (self_prob×0.75=0.375). 근거: LOW 종목은 평소 움직임이 적으므로 한번 BREAKOUT이 발생하면 관성이 크다. EXTREME 종목은 변동이 잦아 BREAKOUT 상태에서도 빠르게 다른 상태로 전환된다.
 
 ##### 1-5. 시즌 내 드리프트 편향 (장기 추세)
 
@@ -208,13 +217,13 @@ pattern_delta = (bias + uniform(mag_min, mag_max) + normal(0, noise_std)) × vol
 
 #### 규칙 2. 드리프트 레이어 — 평균 회귀
 
-##### 2-1. 평균 회귀 개요
+##### 평균 회귀 개요
 
 패턴 레이어의 누적 결과로 가격이 `base_price`로부터 멀어질수록, 드리프트
 레이어가 반대 방향으로 힘을 가한다. 이는 가격이 극단값으로 발산하는 것을
 방지하고, 시즌 내 가격 범위를 플레이 가능한 수준으로 유지한다.
 
-##### 2-2. 드리프트 공식
+##### 드리프트 공식
 
 ```
 deviation_ratio = (current_price - base_price) / base_price
@@ -230,7 +239,7 @@ drift_force = -k_drift × deviation_ratio × drift_intensity(deviation_ratio)
 | `k_drift` | float | 0.0005~0.003 | config | 회귀 강도 계수 (기본 0.001) |
 | `drift_force` | float | — | calculated | 이번 틱 드리프트 기여 변동률 |
 
-##### 2-3. 드리프트 강도 함수 (비선형)
+##### 드리프트 강도 함수 (비선형)
 
 편차가 클수록 드리프트 힘이 급격히 커지는 비선형 함수를 사용한다. 소폭
 편차에서는 드리프트가 거의 느껴지지 않고, 극단적 편차에서만 강하게 작동한다.
@@ -261,7 +270,7 @@ drift_intensity(r) = 1.0                                                        
 > k_drift=0.001 + threshold_soft=0.20으로 상향하여 회귀가 추세와 균형을 이루게
 > 조정. (prototypes/price-engine/REPORT.md 참조)
 
-##### 2-4. 최대 편차 하드 클램프
+##### 2-1. 최대 편차 하드 클램프
 
 드리프트가 회귀 압력을 가하더라도 패턴+이벤트 레이어가 이를 상쇄할 경우를
 대비하여, 절대적 상한/하한을 설정한다.
@@ -301,27 +310,38 @@ index = (현재 전 종목 총 시가총액 / 기준 시가총액) × 1000
 - **기준값**: 시즌 시작 시 = 1000
 - **갱신**: 매 틱, 전 종목 가격 갱신 후 재계산
 - **전일 지수 종가**: 매일 장 마감 시 저장 → 서킷브레이커 기준
-- SK(스카이로직)이 최대 시총으로 지수에 가장 큰 영향
+- SKL(스카이로직)이 최대 시총으로 지수에 가장 큰 영향
 
-API:
+Public API:
+- `get_current_price(stock_id) → int`: 현재 체결가 (주문 엔진이 호출)
+- `get_tick_buffer(stock_id) → Array[{tick, price, volume, state}]`: 현재 시즌 전체 틱 히스토리 (차트 렌더러가 호출). 일봉/분봉은 차트 렌더러가 on-the-fly 계산
 - `get_market_index() → float`: 현재 지수값
 - `get_prev_day_index() → float`: 전일 지수 종가
 - `get_index_change_pct() → float`: 전일 대비 등락률(%)
 - `get_market_cap(stock_id) → int`: 개별 종목 시가총액
 - `get_daily_limits(stock_id) → {upper, lower, prev_close}`: 상/하한가 조회
+- `push_event(event: Event)`: 이벤트 큐에 추가 (뉴스/이벤트 시스템이 호출)
 
 ##### 2-4. VI (변동성완화장치, Volatility Interruption)
 
-개별 종목의 가격이 전일 종가 대비 ±10% 이상 변동하면 해당 종목의 거래를 일시 정지한다.
+개별 종목의 가격이 전일 종가 대비 ±15% 이상 변동하면 해당 종목의 거래를 일시 정지한다.
+
+> **현실 참고**: KRX 정적 VI는 ±10%이지만, 게임은 390틱/일로 시간이 극도로 압축되어
+> 있고 BREAKOUT 상태 등 변동성이 현실보다 크다. 현실적 빈도(시즌 3~5회)를 달성하기
+> 위해 임계값을 15%로 상향 조정한다. 현실 KRX에서도 VI는 개별 종목 기준 연 수회
+> 수준의 드문 이벤트이다.
 
 ```
-vi_threshold = 0.10  (±10%)
+vi_threshold = 0.15  (±15%)
 vi_halt_ticks = 8    (8틱 = 2분)
-vi_max_per_day = 2   (종목당 일 2회 제한)
+vi_max_per_day = 1   (종목당 일 1회 제한)
+vi_cooldown_ticks = 20  (해제 후 20틱 재발동 방지)
 
 change_pct = |current_price - prev_day_close| / prev_day_close
 
-if change_pct >= vi_threshold and vi_count_today < vi_max_per_day:
+if change_pct >= vi_threshold
+   and vi_count_today < vi_max_per_day
+   and vi_cooldown_remaining == 0:
     trigger VI for this stock
     vi_count_today += 1
 ```
@@ -335,30 +355,40 @@ if change_pct >= vi_threshold and vi_count_today < vi_max_per_day:
 - 8틱 후 자동 해제, `on_vi_released(stock_id)` 시그널 발신
 
 **VI 해제 후**:
+- 20틱 쿨다운 시작 (쿨다운 중 동일 종목 VI 재발동 불가)
 - 가격 갱신 즉시 재개. 이벤트 큐에 쌓인 이벤트도 재개 시 처리
-- 동일 종목이 다시 ±10% 도달하면 2차 VI 발동 가능 (일 2회까지)
-- 3회째부터는 VI 없이 가격 정상 변동 (상/하한가가 최종 안전장치)
+- 종목당 일 1회 제한이므로, 1회 발동 후 당일 추가 VI 없음
+- 상/하한가(±30%)가 최종 안전장치
+
+> **쿨다운 도입 이유**: VI 해제 직후 가격이 여전히 임계값 위에 있을 경우 즉시
+> 재발동되는 문제 방지. 20틱(5분) 동안 시장이 자연스럽게 반응할 시간을 부여한다.
 
 | Parameter | Value | Safe Range | Description |
 |-----------|-------|------------|-------------|
-| `VI_THRESHOLD` | 0.10 | 0.05~0.15 | VI 발동 기준 등락률 |
+| `VI_THRESHOLD` | 0.15 | 0.10~0.20 | VI 발동 기준 등락률 |
 | `VI_HALT_TICKS` | 8 | 4~20 | 거래 정지 틱 수 |
-| `VI_MAX_PER_DAY` | 2 | 1~5 | 종목당 일일 최대 VI 횟수 |
+| `VI_MAX_PER_DAY` | 1 | 1~3 | 종목당 일일 최대 VI 횟수 |
+| `VI_COOLDOWN_TICKS` | 20 | 10~40 | VI 해제 후 재발동 방지 틱 수 |
 
 ##### 2-5. 서킷브레이커 (Circuit Breaker)
 
 종합지수가 전일 종가 대비 급락하면 **전 종목** 거래를 중단한다. 2단계.
 
+> **현실 참고**: KRX 서킷브레이커는 역사상 손에 꼽힐 정도로 드문 이벤트이다
+> (2001, 2006, 2008, 2011, 2020 등). 게임에서도 시즌당 0~1회로, 발동 자체가
+> 드라마틱한 시즌 이벤트여야 한다. Stage 1 임계값을 -12%로, Stage 2를 -20%로
+> 상향하여 현실적 희소성을 반영한다.
+
 ```
 index_change_pct = (current_index - prev_day_index) / prev_day_index
 
-# Stage 1: 지수 -8%
-if index_change_pct <= -0.08 and cb_stage < 1:
+# Stage 1: 지수 -12%
+if index_change_pct <= -0.12 and cb_stage < 1:
     cb_stage = 1
     halt all stocks for CB_STAGE1_TICKS (20 ticks = 5분)
 
-# Stage 2: 지수 -15%
-if index_change_pct <= -0.15 and cb_stage < 2:
+# Stage 2: 지수 -20%
+if index_change_pct <= -0.20 and cb_stage < 2:
     cb_stage = 2
     early close (남은 거래일 중단, 장 마감 처리)
 ```
@@ -371,13 +401,13 @@ if index_change_pct <= -0.15 and cb_stage < 2:
 - cb_stage는 일일 리셋 (다음 거래일 시작 시 0으로)
 
 **Stage 1 해제 후**:
-- 거래 재개. 지수가 다시 하락하여 -15% 도달 시 Stage 2 발동
+- 거래 재개. 지수가 다시 하락하여 -20% 도달 시 Stage 2 발동
 - Stage 1 재발동은 없음 (하루 1회)
 
 | Parameter | Value | Safe Range | Description |
 |-----------|-------|------------|-------------|
-| `CB_STAGE1_PCT` | -0.08 | -0.05~-0.12 | Stage 1 발동 기준 (지수 하락률) |
-| `CB_STAGE2_PCT` | -0.15 | -0.10~-0.20 | Stage 2 발동 기준 (조기 마감) |
+| `CB_STAGE1_PCT` | -0.12 | -0.08~-0.15 | Stage 1 발동 기준 (지수 하락률) |
+| `CB_STAGE2_PCT` | -0.20 | -0.15~-0.25 | Stage 2 발동 기준 (조기 마감) |
 | `CB_STAGE1_TICKS` | 20 | 10~40 | Stage 1 정지 틱 수 |
 
 > **상향 서킷브레이커**: 실제 KRX에도 상승 서킷브레이커는 없음. 게임에서도 하락만 적용.
@@ -423,12 +453,15 @@ raw_impact = base_impact × direction × sensitivity × volatility_amplifier
 actual_impact = clamp(raw_impact, -max_single_impact, +max_single_impact)
 ```
 
-`max_single_impact` 기본값: **0.25 (25%)**. EXTREME 종목이 메가 이벤트를 받아도
-단일 틱에서 최대 ±25% 변동으로 제한하여 플레이어 대응 시간을 보장한다.
+`max_single_impact` 기본값: **0.15 (15%)**. EXTREME 종목이 메가 이벤트를 받아도
+단일 틱에서 최대 ±15% 변동으로 제한한다. MEGA+EXTREME 조합에서만 VI 임계값(15%)에
+도달 가능하며, LARGE 이하 등급은 단독으로 VI를 유발하지 않는다.
+
+> **참고**: `max_single_impact`(0.15)는 event_delta만 클램프한다. `pattern_delta`는 별도이므로 `total_delta = event_delta + pattern_delta`가 15%를 초과할 수 있다. 이 경우 VI가 정상 발동하여 가격 안정화를 수행한다.
 
 | Variable | Type | Range | Source | Description |
 |----------|------|-------|--------|-------------|
-| `base_impact` | float | 0.01~0.20 | 이벤트 시스템 | 기준 충격률. 소형 이벤트 1%, 메가 이벤트 20% |
+| `base_impact` | float | 0.005~0.10 | 이벤트 시스템 | 기준 충격률 (증폭 전). SMALL 0.5~1.5%, MEGA 6~10% |
 | `sensitivity` | float | 0.0~2.0 | 종목 DB | 종목의 이벤트 유형별 감도 |
 | `volatility_amplifier` | float | 아래 참조 | 종목 DB | 변동성 프로필별 이벤트 반응 배율 |
 | `actual_impact` | float | — | calculated | 이 종목의 실제 임팩트 변동률 |
@@ -583,10 +616,14 @@ else:
 ##### 4-5. 장 시작/종료 거래량 보정
 
 ```
-opening_multiplier = 2.5   (틱 0~9, 장 시작 10분)
-closing_multiplier = 2.0   (틱 380~389, 장 마감 10분)
-normal_multiplier  = 1.0   (틱 10~379)
+opening_multiplier = 2.5   (틱 0~39, 장 시작 10분 = 40틱)
+closing_multiplier = 2.0   (틱 1520~1559, 장 마감 10분 = 40틱)
+normal_multiplier  = 1.0   (틱 40~1519)
 ```
+
+> **주의**: 1거래일 = 1560틱 (4틱/분 × 390분). 틱 인덱스는 분 단위가 아닌
+> 틱 단위로 지정한다.
+> 슬롯 구조(규칙 2-1)의 390 구간 번호는 게임 분 단위이며, 여기서의 1,560틱은 절대 틱 인덱스다 (4틱/분 × 390분).
 
 실제 주식시장의 "동시호가" 구간 거래량 집중을 모사.
 
@@ -677,11 +714,17 @@ total_delta_ratio = pattern_delta + drift_delta + event_delta
 ```
 raw_new_price = current_price × (1 + total_delta_ratio)
 
-clamped_price = clamp(raw_new_price, min_price, max_price)
+# 1) 일일 가격 제한 클램프 (규칙 2-2, 상한가/하한가 ±30%)
+upper_limit = prev_day_close × (1 + DAILY_LIMIT_PCT)   # DAILY_LIMIT_PCT = 0.30
+lower_limit = prev_day_close × (1 - DAILY_LIMIT_PCT)
+daily_clamped = clamp(raw_new_price, lower_limit, upper_limit)
+
+# 2) 하드 클램프 (규칙 2-1, 기준가 대비 절대 범위)
+clamped_price = clamp(daily_clamped, min_price, max_price)
              where min_price = max(base_price × 0.15, 1000)
                    max_price = base_price × 3.0
 
-# 호가 단위(tick size) 반올림 — KRX 규정 기반 (규칙 5-3 참조)
+# 3) 호가 단위(tick size) 반올림 — KRX 규정 기반 (규칙 5-3 참조)
 tick_size = get_tick_size(clamped_price)
 final_price = round(clamped_price / tick_size) × tick_size
 ```
@@ -753,26 +796,27 @@ get_tick_size(price: int) -> int:
 ```
 
 > **현재 종목 가격대와 적용되는 호가 단위**:
-> - 넥스트엔터(NE) 42,000원 → 50원 단위
-> - 코리아뱅크(KB) 52,000원 → 100원 단위
-> - 코리아푸드(KF) 65,000원 → 100원 단위
-> - 다함테크(DH) 95,000원 → 100원 단위
-> - 스타칩(SC) 120,000원 → 500원 단위
-> - 메디진(MG) 180,000원 → 500원 단위
-> - 에스카이(SK) 210,000원 → 500원 단위
-> - 그린케미(GC) 38,000원 → 50원 단위
-> - 파이로텍(PT) 78,000원 → 100원 단위
-> - 바이오팜(BF) 320,000원 → 500원 단위
+> - 넥스트엔터(NXE) 42,000원 → 50원 단위
+> - 코리아뱅크(KRB) 52,000원 → 100원 단위
+> - 코스모푸드(KSF) 65,000원 → 100원 단위
+> - 대한중공업(DHI) 95,000원 → 100원 단위
+> - 스타칩(STC) 120,000원 → 500원 단위
+> - 메디진(MDG) 180,000원 → 500원 단위
+> - 스카이로직(SKL) 210,000원 → 500원 단위
+> - 그린케미(GRC) 38,000원 → 50원 단위
+> - 피플텔레콤(PLT) 78,000원 → 100원 단위
+> - 블루팜(BPH) 320,000원 → 500원 단위
 >
-> **참고**: 가격 변동에 따라 호가 단위가 동적으로 변한다. 예를 들어 NE가 50,000원을
+> **참고**: 가격 변동에 따라 호가 단위가 동적으로 변한다. 예를 들어 NXE(넥스트엔터)가 50,000원을
 > 넘기면 호가 단위가 50원 → 100원으로 바뀐다.
 
 **Step 9 — 기록**
 
 `{tick, price, volume, state}`를 종목별 시계열 버퍼에 추가한다. 차트 UI 및
-지표 계산 시스템이 이 버퍼를 읽는다. 버퍼 크기: 1 거래일 = 390 레코드.
-다음 거래일 시작 시 버퍼를 새로 시작하되, 전일 버퍼는 OHLCV(Open/High/Low/
-Close/Volume) 요약만 보존한다.
+지표 계산 시스템이 이 버퍼를 읽는다. 버퍼는 **시즌 전체 틱을 누적 보존**한다
+(1시즌 = 1,560틱/일 × 20거래일 = 31,200틱, ~500KB/종목, 46종목 합계 ~23MB).
+OHLCV 별도 저장 없음 — 일봉/분봉은 차트 렌더러가 틱에서 on-the-fly 계산.
+플레이어가 과거 거래일 차트를 1분봉/5분봉 단위로 스크롤할 수 있다.
 
 ### States and Transitions
 
@@ -784,9 +828,9 @@ Close/Volume) 요약만 보존한다.
 |-------|-------------|------------|
 | **UNINITIALIZED** | 시즌 시작 전. 종목 데이터 미로드 | → READY (시즌 초기화 시) |
 | **READY** | 종목별 초기 상태 설정 완료. 첫 틱 대기 | → RUNNING (MARKET_OPEN 진입 시) |
-| **RUNNING** | 매 틱마다 10개 종목 가격 갱신 중 | → PAUSED (일시정지 시) / → END_OF_DAY (틱 389 처리 후) |
+| **RUNNING** | 매 틱마다 46개 종목 가격 갱신 중 | → PAUSED (일시정지 시) / → END_OF_DAY (틱 1559 처리 후) |
 | **PAUSED** | 플레이어 일시정지. 틱 수신 중단 | → RUNNING (재개 시) |
-| **END_OF_DAY** | 거래일 종료. OHLCV 요약 저장, 버퍼 리셋 | → READY (다음 거래일 PRE_MARKET 시) |
+| **END_OF_DAY** | 거래일 종료. 틱 버퍼 유지 (누적) | → READY (다음 거래일 PRE_MARKET 시) |
 | **SEASON_END** | 시즌 종료. 최종 가격 확정 | → UNINITIALIZED (다음 시즌 대기) |
 
 #### 게임 시계 상태 매핑
@@ -798,7 +842,7 @@ Close/Volume) 요약만 보존한다.
 | MARKET_OPEN | RUNNING | `on_market_open` 시그널 |
 | MARKET_OPEN (일시정지) | PAUSED | `on_market_state_changed(PAUSED, MARKET_OPEN)` |
 | 일시정지 해제 | PAUSED → RUNNING | `on_market_state_changed(MARKET_OPEN, PAUSED)` |
-| MARKET_CLOSE (틱 390) | END_OF_DAY | `on_market_close` 시그널 |
+| MARKET_CLOSE (틱 1559 처리 후) | END_OF_DAY | `on_market_close` 시그널 |
 | DAY_TRANSITION → PRE_MARKET | END_OF_DAY → READY | `on_market_state_changed(PRE_MARKET, DAY_TRANSITION)` |
 | 시즌 종료 | SEASON_END → UNINITIALIZED | `on_season_end` 시그널 |
 
@@ -814,9 +858,8 @@ Close/Volume) 요약만 보존한다.
 
 #### 거래일 종료 (RUNNING → END_OF_DAY)
 
-- 당일 시계열 버퍼에서 OHLCV 요약 생성 (Open/High/Low/Close/Volume)
-- OHLCV 요약을 일봉 히스토리에 추가 (최대 20거래일 = 1시즌)
-- 틱 버퍼는 다음 거래일 시작 시 새로 시작
+- 틱 버퍼는 시즌 전체 누적 (폐기하지 않음). 다음 거래일 틱이 기존 버퍼에 이어서 추가됨
+- OHLCV 별도 저장 없음 — 일봉은 차트 렌더러가 틱 데이터에서 on-the-fly 계산
 - 마르코프 상태와 `current_state_duration`은 거래일을 넘겨 유지
 - 진행 중인 GRADUAL_SHIFT 이벤트의 잔여 틱도 유지
 
@@ -827,7 +870,7 @@ Close/Volume) 요약만 보존한다.
 | **게임 시계** | 가격 엔진이 의존 | `on_tick` 시그널 수신. `get_current_tick()` → 장 시작/종료 거래량 보정용 |
 | **종목 DB** | 가격 엔진이 의존 | `get_stock(id)` → base_price, volatility_profile, sector_sensitivity, macro_sensitivity |
 | **뉴스/이벤트** | 이벤트가 가격 엔진에 입력 | `push_event(Event)` → 이벤트 큐에 추가. 가격 엔진은 이벤트를 소비만 함 |
-| **차트 렌더러** | 차트가 가격 엔진에 의존 | `get_tick_buffer(stock_id)` → 틱별 {price, volume} 시계열. `get_ohlcv_history(stock_id)` → 일봉 |
+| **차트 렌더러** | 차트가 가격 엔진에 의존 | `get_tick_buffer(stock_id)` → 시즌 전체 틱 시계열. 일봉은 차트 렌더러가 틱에서 on-the-fly 계산 |
 | **주문 처리 엔진** | 주문이 가격 엔진에 의존 | `get_current_price(stock_id)` → 체결가 결정용 |
 | **트레이딩 스크린** | UI가 가격 엔진에 의존 | `on_price_updated` 시그널 → 실시간 가격 표시 |
 
@@ -844,6 +887,7 @@ total_delta_ratio = pattern_delta + drift_delta + event_delta
 clamped = clamp(current_price × (1 + total_delta_ratio), min_price, max_price)
 tick_size = get_tick_size(clamped)
 new_price = round(clamped / tick_size) × tick_size
+# 주의: 일일 가격 제한(±30%) 클램프가 하드 클램프보다 먼저 적용됨. 상세 순서는 규칙 5-2 Step 6 참조.
 ```
 
 #### F2. 패턴 레이어
@@ -877,12 +921,21 @@ event_delta = sum(actual_impact_i)  for all active events this tick
 #### F5. 거래량
 
 ```
+# 에너지 기반 거래량 (Rules 4-2 ~ 4-6 곱셈 모델)
 base_vol = uniform(vol_min, vol_max)
-state_vol = base_vol × state_multiplier
-event_spike = 0 if actual_impact == 0
-             else base_vol × clamp(|actual_impact| × 30.0, 1.0, 10.0)
-tick_volume = (state_vol + event_spike) × time_of_day_multiplier
+tick_energy = |pattern_delta| + |event_delta|
+energy_multiplier = 1.0 + clamp(tick_energy / ENERGY_THRESHOLD, 0.0, ENERGY_MAX_BOOST)
+proximity_ratio = |current_price - prev_day_close| / (prev_day_close × DAILY_LIMIT_PCT)
+limit_dampen = lerp(1.0, LIMIT_DAMPEN_MIN, t)  if proximity ≥ LIMIT_DAMPEN_START, else 1.0
+tick_volume = base_vol × state_multiplier × energy_multiplier × limit_dampen × tod_multiplier
 ```
+
+| 요소 | 역할 | 범위 |
+|------|------|------|
+| `ENERGY_THRESHOLD` | 에너지→승수 변환 기준 | config |
+| `ENERGY_MAX_BOOST` | 에너지 승수 상한 | 4.0 |
+| `LIMIT_DAMPEN_START` | 감쇠 시작 지점 | 0.7 |
+| `LIMIT_DAMPEN_MIN` | 상/하한가 도달 시 최소 비율 | 0.15 |
 
 #### F6. 가격 클램프
 
@@ -899,8 +952,8 @@ max_price = base_price × 3.0
 | `threshold_soft` | 0.20 | 0.10~0.40 | config | 드리프트 비선형 구간 시작 |
 | `threshold_hard` | 0.50 | 0.30~0.70 | config | 드리프트 강한 회귀 구간 시작 |
 | `vol_pattern_scale` | 0.6/1.0/1.3/1.8 | 0.3~2.5 | config | LOW/MED/HIGH/EXTREME 패턴 크기 배율 |
-| `max_single_impact` | 0.25 | 0.10~0.50 | config | 단일 이벤트 최대 임팩트 클램프 |
-| `base_impact` | — | 0.01~0.20 | 이벤트 시스템 | 이벤트 기준 충격률 |
+| `max_single_impact` | 0.15 | 0.10~0.25 | config | 단일 이벤트 최대 임팩트 클램프 |
+| `base_impact` | — | 0.005~0.10 | 이벤트 시스템 | 이벤트 기준 충격률 (증폭 전) |
 | `volatility_amplifier` | 0.6/1.0/1.4/2.0 | — | 종목 DB | LOW/MED/HIGH/EXTREME |
 | `opening_multiplier` | 2.5 | 1.5~4.0 | config | 장 시작 거래량 보정 |
 | `closing_multiplier` | 2.0 | 1.5~3.0 | config | 장 마감 거래량 보정 |
@@ -938,7 +991,7 @@ EXTREME 변동성(메디진, base_price=180,000원) + 대형 이벤트 1회, vol
 | 시점 | 예상 가격 범위 | 근거 |
 |------|---------------|------|
 | 이벤트 전 5일차 | 130,000 ~ 240,000 | BREAKOUT 빈번(×4.0). 1.8배 진폭 |
-| 이벤트 직후 (+10% INSTANT_SHOCK) | +18,000~+36,000 점프 | actual_impact = 0.10 × 2.0 = 20%. BREAKOUT_UP 강제 |
+| 이벤트 직후 (+10% INSTANT_SHOCK) | +18,000~+36,000 점프 | raw = 0.10 × 2.0 = 0.20 → clamp(±0.15) = **15%**. BREAKOUT_UP 강제 |
 | 이벤트 후 3일 | 안정화 시작 | 강화된 드리프트 회귀 + BREAKOUT→UPTREND→SIDEWAYS 자연 전환 |
 
 ## Edge Cases
@@ -957,7 +1010,8 @@ EXTREME 변동성(메디진, base_price=180,000원) + 대형 이벤트 1회, vol
 | 가격이 전일 종가 근처 (proximity_ratio ≈ 0) | limit_dampen = 1.0. 거래량에 감쇠 없음 | 정상 거래 구간 |
 | tick_energy가 0에 가까운 경우 (pattern·event 모두 미미) | energy_multiplier ≈ 1.0. base_vol × state_mult 수준의 최소 거래량 | 시장 조용할 때 자연스러운 저거래량 |
 | VI 발동 중 이벤트 도착 | 이벤트 큐에 쌓임. VI 해제 틱에 일괄 처리 | 정지 중에도 뉴스는 쌓인다 |
-| VI 2회 소진 후 ±10% 재도달 | VI 미발동. 가격 정상 변동 (상/하한가가 안전장치) | 과도한 정지 방지 |
+| VI 1회 소진 후 ±15% 재도달 | VI 미발동. 가격 정상 변동 (상/하한가가 안전장치) | 종목당 일 1회 제한 |
+| VI 해제 직후 가격이 여전히 ±15% 이상 | 쿨다운 20틱 동안 재발동 불가. 시장이 자연 반응할 시간 확보 | 즉시 재트리거 방지 |
 | VI 중 GRADUAL_SHIFT remaining_ticks | remaining_ticks 카운트 계속 감소 (시간은 흐름). 가격 반영은 VI 해제 후 | decay는 시간 기반이므로 정지와 무관하게 진행 |
 | 서킷브레이커 Stage 1 정지 중 개별 종목 VI | CB가 우선. CB 해제 후 VI 조건 재평가 | 중복 정지 방지 |
 | 서킷브레이커 Stage 2 (조기 마감) 발동 | 즉시 _end_trading_day() 호출. 잔여 틱 무시. prev_day_close 갱신 | 다음 거래일 정상 시작 |
@@ -967,8 +1021,9 @@ EXTREME 변동성(메디진, base_price=180,000원) + 대형 이벤트 1회, vol
 | deviation_ratio가 음수 (가격 < base_price) | drift_force 양수 → 상승 회귀 압력 | 대칭 회귀 설계 |
 | BREAKOUT 상태에서 또 다른 대형 이벤트 | min_duration 리셋. BREAKOUT 연장 | 연쇄 급등/급락 허용 |
 | 이벤트 없이 시즌 전체 진행 | 패턴+드리프트만으로 정상 가격 생성. 지표도 의미 유지 | 이벤트 시스템 미완성 시에도 독립 작동 |
+| MEGA+EXTREME+BREAKOUT 삼중 조합 시 단일 틱 VI 발동 | event_delta(15% clamped) + pattern_delta(BREAKOUT bias)로 total_delta > 15% 가능. 이 경우 해당 틱에서 VI 발동. 의도된 동작 — MEGA 이벤트와 BREAKOUT 상태의 극단적 조합에서만 발생 | 극히 드문 시나리오이지만 VI가 정상 작동하여 가격 안정화 |
 | GRADUAL_SHIFT 진행 중 거래일 종료 | 잔여 틱 보존. 다음 거래일에 이어서 적용 | 이벤트 효과가 거래일 경계에서 소실되지 않음 |
-| 10개 종목 모두 같은 MACRO 이벤트 수신 | 종목별 macro_sensitivity × volatility_amplifier로 차등 반영 | 동일 뉴스, 다른 반응 |
+| 46개 종목 모두 같은 MACRO 이벤트 수신 | 종목별 macro_sensitivity × volatility_amplifier로 차등 반영 | 동일 뉴스, 다른 반응 |
 
 ## Dependencies
 
@@ -977,7 +1032,7 @@ EXTREME 변동성(메디진, base_price=180,000원) + 대형 이벤트 1회, vol
 | 게임 시계 | 가격 엔진이 의존 | `on_tick` 시그널로 구동. 틱 번호로 장 시작/종료 판별. **Hard** |
 | 종목 DB | 가격 엔진이 의존 | base_price, volatility_profile, sector/macro_sensitivity 조회. **Hard** |
 | 뉴스/이벤트 시스템 | 이벤트가 가격 엔진에 입력 | Event 오브젝트 수신. 없어도 패턴+드리프트로 작동. **Soft** |
-| 차트 렌더러 | 차트가 가격 엔진에 의존 | 틱 버퍼, OHLCV 히스토리 읽기. **Hard** |
+| 차트 렌더러 | 차트가 가격 엔진에 의존 | `get_tick_buffer()` — 시즌 전체 틱 시계열 읽기. **Hard** |
 | 주문 처리 엔진 | 주문이 가격 엔진에 의존 | `get_current_price()` 체결가 조회. **Hard** |
 | 트레이딩 스크린 | UI가 가격 엔진에 의존 | `on_price_updated` 시그널 구독. **Soft** |
 | AI 경쟁자 시스템 | 양방향 | MVP: AI가 가격 데이터 읽기만 함 (단방향, **Soft**). 향후: AI 매매 주문량 + 주문 잔량(매수/매도 대기) 비율이 가격에 영향 → 오더북 레이어 추가 시 **Hard** 양방향 의존. 가격 엔진이 AI 주문 풀을 입력으로 받아 수급 기반 가격 보정 |
@@ -995,24 +1050,25 @@ EXTREME 변동성(메디진, base_price=180,000원) + 대형 이벤트 1회, vol
 | `opening_multiplier` | 2.5 | 1.5~4.0 | 장 시작 거래량 집중 | 장 시작 평탄화 |
 | `closing_multiplier` | 2.0 | 1.5~3.0 | 장 마감 거래량 집중 | 장 마감 평탄화 |
 | `season_bias 배정 확률` | BULL 40/NEU 30/BEAR 30 | 각 10~60% | 상승장 종목 비율 변동 | — |
-| `max_single_impact` | 0.25 (25%) | 0.10~0.50 | 단일 이벤트 변동 상한 완화 | 단일 이벤트 변동 제한 강화 |
+| `max_single_impact` | 0.15 (15%) | 0.10~0.25 | 단일 이벤트 변동 상한 완화 | 단일 이벤트 변동 제한 강화 |
 | `BREAKOUT 강제 전환 임계값` | 0.05 (5%) | 0.03~0.10 | 큰 이벤트만 BREAKOUT 유발 | 작은 이벤트도 BREAKOUT |
 | `DAILY_LIMIT_PCT` | 0.30 (±30%) | 0.15~0.50 | 일일 변동 허용폭 확대. 극단 이벤트 시 가격 반영 완전 | 변동 제한 강화. 상/하한가 빈번 발생 |
-| `INDEX_BASE` | 1000.0 | 100~10000 | 지수 기준값 변경 (표시 단위). 게임플레이 영향 없음 | 동일 |
+| `INDEX_BASE` | 1000.0 | 100~10000 | 지수 기준값 변경 (표시 단위만 영향). 서킷브레이커 임계값은 비율 기준이므로 영향 없음 | 동일 |
 | `ENERGY_THRESHOLD` | 0.01 | 0.005~0.03 | 에너지→거래량 변환 둔감. 큰 변동만 거래량 증가 | 작은 변동에도 거래량 민감 반응 |
 | `ENERGY_MAX_BOOST` | 4.0 | 2.0~8.0 | 에너지 기반 최대 거래량 배수 증가. 극단 거래량 허용 | 거래량 상한 제한. 균일한 거래량 |
 | `LIMIT_DAMPEN_START` | 0.7 | 0.5~0.9 | 감쇠 시작 늦춤. 상/하한가 직전까지 거래 활발 | 일찍 감쇠 시작. 점진적 호가 고갈 |
 | `LIMIT_DAMPEN_MIN` | 0.15 | 0.05~0.30 | 상/하한가에서도 거래 약간 유지 | 상/하한가 거래량 거의 0. 극단적 호가 고갈 |
-| `VI_THRESHOLD` | 0.10 (±10%) | 0.05~0.15 | VI 발동 기준 완화. 덜 빈번한 정지 | VI 빈번. 잦은 거래 중단 |
+| `VI_THRESHOLD` | 0.15 (±15%) | 0.10~0.20 | VI 발동 기준 완화. 덜 빈번한 정지 | VI 빈번. 잦은 거래 중단 |
 | `VI_HALT_TICKS` | 8 | 4~20 | 긴 정지. 냉각 효과 강화 | 짧은 정지. 빠른 재개 |
-| `VI_MAX_PER_DAY` | 2 | 1~5 | 더 많은 VI 허용 | 1회 제한. 빠른 소진 |
-| `CB_STAGE1_PCT` | -0.08 | -0.05~-0.12 | 덜 민감한 CB. 큰 폭락만 반응 | 민감한 CB. 작은 하락에도 발동 |
-| `CB_STAGE2_PCT` | -0.15 | -0.10~-0.20 | 조기 마감 기준 완화 | 조기 마감 빈번 |
+| `VI_MAX_PER_DAY` | 1 | 1~3 | 더 많은 VI 허용 | — |
+| `VI_COOLDOWN_TICKS` | 20 | 10~40 | 긴 쿨다운. 재발동 여유 확보 | 짧은 쿨다운. 빠른 재발동 가능 |
+| `CB_STAGE1_PCT` | -0.12 | -0.08~-0.15 | 덜 민감한 CB. 큰 폭락만 반응 | 민감한 CB. 작은 하락에도 발동 |
+| `CB_STAGE2_PCT` | -0.20 | -0.15~-0.25 | 조기 마감 기준 완화 | 조기 마감 빈번 |
 | `CB_STAGE1_TICKS` | 20 | 10~40 | 긴 정지. 시장 안정화 | 짧은 정지 |
 
 ## Acceptance Criteria
 
-- [ ] 10개 종목이 매 틱마다 독립적으로 가격 갱신됨
+- [ ] 46개 종목이 매 틱마다 독립적으로 가격 갱신됨
 - [ ] 마르코프 상태 전환이 전환 확률 행렬에 따라 정확히 작동함
 - [ ] 변동성 프로필(LOW/MEDIUM/HIGH/EXTREME)별로 가격 변동폭이 유의미하게 차이남
 - [ ] 드리프트 레이어가 soft/hard 임계값에서 비선형 회귀력을 정확히 적용함
@@ -1029,7 +1085,7 @@ EXTREME 변동성(메디진, base_price=180,000원) + 대형 이벤트 1회, vol
 - [ ] 상/하한가 도달(proximity = 1.0) 시 거래량이 기본의 15%로 감소함
 - [ ] 시즌 초기화 시 모든 종목이 SIDEWAYS, base_price로 리셋됨
 - [ ] 이벤트 없이도 패턴+드리프트만으로 의미있는 차트가 생성됨
-- [ ] 성능: 10개 종목 1틱 처리가 1ms 이내
+- [ ] 성능: 46개 종목 1틱 처리가 4ms 이내
 - [ ] 전일 종가 대비 ±30% 초과 가격이 절대 발생하지 않음
 - [ ] 상한가/하한가 도달 시 `on_price_limit_hit` 시그널이 정확히 발생함
 - [ ] 시가총액가중지수가 `(현재 총시총 / 기준 총시총) × 1000`으로 계산됨
@@ -1037,11 +1093,14 @@ EXTREME 변동성(메디진, base_price=180,000원) + 대형 이벤트 1회, vol
 - [ ] `get_market_index()`, `get_index_change_pct()`, `get_market_cap()` API가 정확한 값을 반환함
 - [ ] 시즌 초기화 시 기준 시가총액이 재계산되고 지수가 1000.0으로 리셋됨
 - [ ] 장 마감 시 `prev_day_close`가 갱신되어 다음 날 상/하한가 기준이 됨
-- [ ] 종목 가격이 전일 종가 ±10% 도달 시 VI 발동, 8틱 동안 해당 종목 가격 동결
-- [ ] VI는 종목당 일 2회까지만 발동
+- [ ] 종목 가격이 전일 종가 ±15% 도달 시 VI 발동, 8틱 동안 해당 종목 가격 동결
+- [ ] VI는 종목당 일 1회까지만 발동
+- [ ] VI 해제 후 20틱 쿨다운 동안 동일 종목 재발동 불가
 - [ ] VI 발동/해제 시 `on_vi_triggered` / `on_vi_released` 시그널 정상 발신
-- [ ] 종합지수가 전일 대비 -8% 도달 시 서킷브레이커 Stage 1 발동, 20틱 전종목 정지
-- [ ] 종합지수가 -15% 도달 시 Stage 2 발동, 즉시 장 마감 처리
+- [ ] 시즌(20일) 동안 총 VI 발생 횟수가 3~5회 수준 (현실적 희소성)
+- [ ] 종합지수가 전일 대비 -12% 도달 시 서킷브레이커 Stage 1 발동, 20틱 전종목 정지
+- [ ] 종합지수가 -20% 도달 시 Stage 2 발동, 즉시 장 마감 처리
+- [ ] 서킷브레이커는 시즌당 0~1회 수준 (발동 자체가 드라마틱 이벤트)
 - [ ] 서킷브레이커 발동 시 `on_circuit_breaker` 시그널 정상 발신
 
 ## Open Questions
@@ -1049,9 +1108,10 @@ EXTREME 변동성(메디진, base_price=180,000원) + 대형 이벤트 1회, vol
 | Question | Owner | Deadline | Resolution |
 |----------|-------|----------|------------|
 | 오더북 레이어 설계 — AI/플레이어 주문량·주문 잔량이 가격에 반영되는 메커니즘 | game-designer | V-Slice | 향후. MVP는 가격 관찰자 모델 |
+| 슬리피지 모델 — 종목별 유동성 등급, 슬리피지 곡선 설계. 가격 관찰자 모델에서 피드백 모델로 전환 시 Price Engine + Order Engine 양쪽 수정 필요. 스킬 해금(TR3+) 연동 권고 | game-designer + systems-designer | Post-MVP | MVP=없음. 외부 감사 권고 (2026-04-03) |
 | 수수료가 체결가에 포함되는지, 별도 차감인지 | systems-designer | 주문 엔진 GDD 시 | 미정 |
 | 이동평균선/볼린저밴드 등 지표 계산의 소유 시스템 (가격 엔진 vs 차트 렌더러) | lead-programmer | 차트 렌더러 GDD 시 | 미정 |
 | ~~PRICE_CLAMPED 발생 시 서킷 브레이커 연출~~ | — | **해결됨** | 상/하한가(±30%) + VI + 서킷브레이커로 구체화. 규칙 2-2 참조 |
-| ~~VI(변동성완화장치) 발동 조건 및 거래 정지 시간~~ | — | **해결됨** | 규칙 2-4 참조. ±10% → 8틱 정지, 일 2회 |
-| ~~서킷브레이커(시장 전체 거래 중단) 발동 조건~~ | — | **해결됨** | 규칙 2-5 참조. 지수 -8% → 20틱 정지, -15% → 조기 마감 |
+| ~~VI(변동성완화장치) 발동 조건 및 거래 정지 시간~~ | — | **해결됨** | 규칙 2-4 참조. ±15% → 8틱 정지, 종목당 일 1회 |
+| ~~서킷브레이커(시장 전체 거래 중단) 발동 조건~~ | — | **해결됨** | 규칙 2-5 참조. 지수 -12% → Stage 1 (20틱 정지), -20% → Stage 2 (조기 마감) |
 | ~~전일 종가 대비 등락률 제한(가격제한폭) 도입 여부~~ | — | **해결됨** | ±30% 일일 가격제한폭 구현 완료. 규칙 2-2 참조 |

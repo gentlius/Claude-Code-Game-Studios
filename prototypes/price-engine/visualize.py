@@ -214,7 +214,7 @@ if __name__ == "__main__":
     plot_drift_test("d:/Github/ta/prototypes/price-engine/drift_analysis.png")
 
     # Individual stock details (pick representative ones)
-    for sid in ["KF", "SC", "MG", "KB"]:
+    for sid in ["KSF", "STC", "MDG", "KRB"]:
         plot_stock_detail(
             sid, data,
             f"d:/Github/ta/prototypes/price-engine/detail_{sid}.png"

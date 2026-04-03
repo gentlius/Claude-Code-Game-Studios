@@ -10,8 +10,8 @@ MVP 보강(VI/서킷브레이커, 지수 HUD, 테스트 환경)을 완료하고,
 - Total sessions: 10
 - Buffer (20%): 2 sessions (버그 수정, 예기치 않은 작업)
 - Available: 8 sessions
-- **Unplanned 소요**: 3 sessions (섹터/종목 확장, mutex_group)
-- **실질 잔여**: 5 sessions
+- **Unplanned 소요**: 5.35 sessions (섹터/종목 확장, mutex_group, 뉴스 버그/UI, QA)
+- **실질 잔여**: 1.40 sessions
 
 ## Tasks
 
@@ -21,25 +21,25 @@ MVP 보강(VI/서킷브레이커, 지수 HUD, 테스트 환경)을 완료하고,
 |----|------|----------|------|-------------|--------|
 | S1-01 | VI(변동성완화장치) 구현 | Gameplay | 1 sess | GDD 완료 | ✅ Done (pre-sprint `d66fa74`) |
 | S1-02 | 서킷브레이커 구현 | Gameplay | 0.5 sess | S1-01 | ✅ Done (pre-sprint `d66fa74`) |
-| S1-03 | 시장 지수 HUD 표시 | UI | 0.5 sess | — | ⬜ UI 연결만 남음 |
-| S1-06 | 경험치 시스템 GDD 작성 | Design | 0.5 sess | — | ⬜ |
-| S1-07 | 경험치 시스템 구현 | Gameplay | 1 sess | S1-06 | ⬜ |
-| S1-13 | 스킬 트리 시스템 구현 | Gameplay | 2 sess | S1-07, GDD Approved | ⬜ (GDD 이미 Approved) |
+| S1-03 | 시장 지수 HUD 표시 | UI | 0.5 sess | — | ✅ Done (pre-sprint, trading_screen.gd) |
+| S1-06 | 경험치 시스템 GDD 작성 | Design | 0.5 sess | — | ✅ Done (pre-sprint, xp-system.md Approved) |
+| S1-07 | 경험치 시스템 구현 | Gameplay | 1 sess | S1-06 | ✅ Done (pre-sprint, xp_system.gd + 23 tests) |
+| S1-13 | 스킬 트리 시스템 구현 | Gameplay | 2 sess | S1-07, GDD Approved | ✅ Done (pre-sprint, skill_tree.gd + 25 tests) |
 
 ### Should Have
 
 | ID | Task | Category | Est. | Dependencies | Status |
 |----|------|----------|------|-------------|--------|
 | S1-08 | GUT 테스트 프레임워크 설치 | Infra | 0.5 sess | — | ✅ Done (pre-sprint `84000a3`) |
-| S1-09 | VI/CB 유닛 테스트 | Test | 0.5 sess | S1-01, S1-02 | ⬜ |
+| S1-09 | VI/CB 유닛 테스트 | Test | 0.5 sess | S1-01, S1-02 | ✅ Done (test_vi_cb.gd, 22 tests) |
 | S1-10 | 호가 단위 유닛 테스트 | Test | 0.5 sess | — | ✅ Done (test_order_engine.gd) |
 
 ### Nice to Have
 
 | ID | Task | Category | Est. | Dependencies | Status |
 |----|------|----------|------|-------------|--------|
-| S1-11 | ADR 추가 (호가 단위, 에너지-거래량) | Docs | 0.5 sess | — | ⬜ |
-| S1-12 | 프로토타입 README 작성 | Docs | 0.25 sess | — | ⬜ |
+| S1-11 | ADR 추가 (호가 단위, 에너지-거래량) | Docs | 0.5 sess | — | ✅ Done (ADR-002, ADR-003) |
+| S1-12 | 프로토타입 README 작성 | Docs | 0.25 sess | — | ✅ Done (REPORT.md 이미 존재) |
 
 ### Moved to Sprint 2
 
@@ -58,15 +58,24 @@ MVP 보강(VI/서킷브레이커, 지수 HUD, 테스트 환경)을 완료하고,
 | S1-U4 | 섹터명 마이그레이션 (season_themes.json, stock_database.gd) | Code | 0.25 sess | S1-U1 | ✅ Done |
 | S1-U5 | mutex_group 구현 (news_event_system.gd) + 유닛 테스트 13건 | Gameplay/Test | 0.5 sess | S1-U2 | ✅ Done |
 | S1-U6 | 외부 리뷰 반영 — order-engine.md CB 엣지 케이스, news-feed-ui.md Open Questions | Design | 0.25 sess | — | ✅ Done |
+| S1-U7 | event_pool.json 파싱 버그 수정 (VARIABLE 미인용) + 뉴스 시스템 디버깅 | Bugfix | 0.5 sess | — | ✅ Done |
+| S1-U8 | 토스트 알림 시스템 구현 (하단 중앙, 페이드 애니메이션) | UI | 0.5 sess | S1-U7 | ✅ Done |
+| S1-U9 | 하단 3탭 안읽음 뱃지 (뉴스/VI·CB/포트폴리오) + 탭 상태 버그 수정 | UI | 0.25 sess | — | ✅ Done |
+| S1-U10 | 주문 패널 축소 (stretch 0.18→0.13, min 160px) | UI | 0.1 sess | — | ✅ Done |
+| S1-U11 | 뉴스 카드 본문 확장 기능 구현 (클릭 시 body+관련종목 토글) | UI | 0.25 sess | — | ✅ Done |
+| S1-U12 | SECTOR 템플릿 10개 추가 (50→60, 바이오/금융/엔터/반도체/건설/유통/2차전지) | Data | 0.25 sess | — | ✅ Done |
+| S1-U13 | GDD vs 구현 QA 검증 (3시스템) + GDD 불일치 수정 (딜레이/토스트/비율/숫자키) | QA/Design | 0.5 sess | — | ✅ Done |
 
 ## Capacity Check (조정 후)
 
 | Category | Sessions |
 |----------|----------|
 | 잔여 Available | 5 |
-| Must Have 잔여 (S1-03 + S1-06 + S1-07 + S1-13) | 4 |
+| Must Have 잔여 | 0 (전부 완료) |
 | Should Have 잔여 (S1-09) | 0.5 |
-| **여유** | **0.5** |
+| Nice to Have (S1-11, S1-12) | 0.75 |
+| Unplanned 소요 (U7~U13) | 2.35 |
+| **여유** | **1.40** |
 
 ## Carryover from Previous Sprint
 
@@ -86,10 +95,9 @@ MVP 보강(VI/서킷브레이커, 지수 HUD, 테스트 환경)을 완료하고,
 
 ## Definition of Done for this Sprint
 
-- [ ] Must Have 7개 태스크 전부 완료
-- [ ] VI/CB 발동 시 뉴스 생성 확인
-- [ ] AI 경쟁자가 시즌 동안 매매하고 포트폴리오 변동 확인
-- [ ] 경험치가 거래 시 증가하는 것 확인
+- [x] Must Have 6개 태스크 전부 완료 (S1-01,02,03,06,07,13 모두 pre-sprint)
+- [x] VI/CB 발동 시 뉴스 생성 확인 (VI/CB alerts → trading_screen alerts tab)
+- [x] 경험치가 장 마감 시 수익률 기반으로 부여되는 것 확인 (xp_system.gd + 23 tests)
 - [ ] 헤드리스 테스트 통과 (기존 + 신규)
-- [ ] GDD 업데이트 완료 (변경사항 반영)
+- [x] GDD 업데이트 완료 (trading-screen, news-feed-ui, news-events 3건 QA 후 수정)
 - [ ] 코드 커밋 완료

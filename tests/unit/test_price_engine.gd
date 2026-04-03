@@ -357,46 +357,46 @@ func test_round_to_tick_very_high() -> void:
 # ── Test: VI (Volatility Interruption, GDD Rule 2-4) ──
 
 func test_vi_not_halted_initially() -> void:
-	assert_false(PriceEngine.is_vi_halted("KF"), "No VI halt initially")
+	assert_false(PriceEngine.is_vi_halted("KSF"), "No VI halt initially")
 
 
 func test_vi_halted_after_state_injection() -> void:
 	# Directly inject VI state to test the query
-	PriceEngine._vi_states["KF"] = {"halt_remaining": 5, "count_today": 1}
-	assert_true(PriceEngine.is_vi_halted("KF"), "Should be halted with remaining > 0")
+	PriceEngine._vi_states["KSF"] = {"halt_remaining": 5, "count_today": 1}
+	assert_true(PriceEngine.is_vi_halted("KSF"), "Should be halted with remaining > 0")
 	# Cleanup
-	PriceEngine._vi_states.erase("KF")
+	PriceEngine._vi_states.erase("KSF")
 
 
 func test_vi_not_halted_when_remaining_zero() -> void:
-	PriceEngine._vi_states["KF"] = {"halt_remaining": 0, "count_today": 1}
-	assert_false(PriceEngine.is_vi_halted("KF"), "Not halted when remaining = 0")
-	PriceEngine._vi_states.erase("KF")
+	PriceEngine._vi_states["KSF"] = {"halt_remaining": 0, "count_today": 1}
+	assert_false(PriceEngine.is_vi_halted("KSF"), "Not halted when remaining = 0")
+	PriceEngine._vi_states.erase("KSF")
 
 
 func test_vi_max_per_day_blocks_third_trigger() -> void:
 	# Simulate 2 VI triggers already exhausted
-	PriceEngine._vi_states["KF"] = {"halt_remaining": 0, "count_today": 2}
+	PriceEngine._vi_states["KSF"] = {"halt_remaining": 0, "count_today": 2}
 	# _check_vi should not trigger a 3rd time even with large price change
 	# We need a stock state to exist
-	if PriceEngine._stock_states.has("KF"):
-		var s: Dictionary = PriceEngine._stock_states["KF"]
+	if PriceEngine._stock_states.has("KSF"):
+		var s: Dictionary = PriceEngine._stock_states["KSF"]
 		var original_price: int = s["current_price"]
 		var original_prev: int = s["prev_day_close"]
 		# Set price to 15% above prev close (exceeds VI_THRESHOLD of 10%)
 		s["prev_day_close"] = 50000
 		s["current_price"] = 58000
-		PriceEngine._check_vi("KF")
-		assert_eq(PriceEngine._vi_states["KF"]["count_today"], 2,
+		PriceEngine._check_vi("KSF")
+		assert_eq(PriceEngine._vi_states["KSF"]["count_today"], 2,
 			"Should not increment past max per day")
-		assert_eq(PriceEngine._vi_states["KF"]["halt_remaining"], 0,
+		assert_eq(PriceEngine._vi_states["KSF"]["halt_remaining"], 0,
 			"Should not trigger halt after max per day")
 		# Restore
 		s["current_price"] = original_price
 		s["prev_day_close"] = original_prev
 	else:
 		pass_test("KF stock state not available in test environment (skipped)")
-	PriceEngine._vi_states.erase("KF")
+	PriceEngine._vi_states.erase("KSF")
 
 
 # ── Test: Circuit Breaker (GDD Rule 2-5) ──

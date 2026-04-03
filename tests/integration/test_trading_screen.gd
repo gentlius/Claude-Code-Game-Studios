@@ -40,26 +40,26 @@ func _on_tick(tick: int, day: int, _week: int) -> void:
 
 	# Buy at tick 10
 	if tick == 10 and not _bought:
-		var price: int = PriceEngine.get_current_price("KF")
-		print("[TICK %d] Buying KF 5주 @ ₩%d" % [tick, price])
-		var result: Dictionary = OrderEngine.submit_market_order("BUY", "KF", 5)
+		var price: int = PriceEngine.get_current_price("KSF")
+		print("[TICK %d] Buying KSF 5주 @ ₩%d" % [tick, price])
+		var result: Dictionary = OrderEngine.submit_market_order("BUY", "KSF", 5)
 		print("  → %s" % result["status"])
 		_bought = true
 
 	# Buy another stock at tick 30
 	if tick == 30:
-		var price: int = PriceEngine.get_current_price("SC")
-		print("[TICK %d] Buying SC 3주 @ ₩%d" % [tick, price])
-		var result: Dictionary = OrderEngine.submit_market_order("BUY", "SC", 3)
+		var price: int = PriceEngine.get_current_price("STC")
+		print("[TICK %d] Buying STC 3주 @ ₩%d" % [tick, price])
+		var result: Dictionary = OrderEngine.submit_market_order("BUY", "STC", 3)
 		print("  → %s" % result["status"])
 
 	# Sell at tick 80
 	if tick == 80 and not _sold:
-		var holding: Variant = PortfolioManager.get_holding("KF")
+		var holding: Variant = PortfolioManager.get_holding("KSF")
 		if holding != null:
-			var price: int = PriceEngine.get_current_price("KF")
-			print("[TICK %d] Selling KF 3주 @ ₩%d (avg_buy: %d)" % [tick, price, holding["avg_buy_price"]])
-			var result: Dictionary = OrderEngine.submit_market_order("SELL", "KF", 3)
+			var price: int = PriceEngine.get_current_price("KSF")
+			print("[TICK %d] Selling KSF 3주 @ ₩%d (avg_buy: %d)" % [tick, price, holding["avg_buy_price"]])
+			var result: Dictionary = OrderEngine.submit_market_order("SELL", "KSF", 3)
 			print("  → %s" % result["status"])
 			_sold = true
 

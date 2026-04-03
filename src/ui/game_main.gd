@@ -4,6 +4,9 @@ extends Node
 
 
 func _ready() -> void:
+	# Apply white-base theme defaults (font colors, panel styles)
+	ThemeSetup.apply_base_theme(get_tree())
+
 	# Initialize season systems
 	CurrencySystem.init_season_seed()
 	GameClock.start_season()

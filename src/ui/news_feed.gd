@@ -12,9 +12,9 @@ signal stock_clicked(stock_id: String)
 
 const MAX_VISIBLE_NEWS: int = 30
 const SCOPE_COLORS: Dictionary = {
-	"MACRO": Color(0.9, 0.2, 0.2),
-	"SECTOR": Color(0.9, 0.5, 0.1),
-	"INDIVIDUAL": Color(0.2, 0.4, 0.9),
+	"MACRO": ThemeSetup.PROFIT_RED,
+	"SECTOR": Color(0.85, 0.55, 0.05),
+	"INDIVIDUAL": ThemeSetup.LOSS_BLUE,
 }
 const SCOPE_LABELS: Dictionary = {
 	"MACRO": "시장 전체",
@@ -46,6 +46,7 @@ func _ready() -> void:
 	NewsEventSystem.on_pre_market_news.connect(_on_pre_market_news)
 	NewsEventSystem.on_theme_hint.connect(_on_theme_hint)
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
+	SkillTree.on_skill_unlocked.connect(func(_id: String) -> void: _update_title_with_skill())
 
 
 func _build_ui() -> void:
@@ -55,10 +56,12 @@ func _build_ui() -> void:
 	add_child(_header_bar)
 
 	_lbl_title = Label.new()
-	_lbl_title.text = "뉴스 피드"
 	_lbl_title.add_theme_font_size_override("font_size", 14)
 	ThemeSetup.style_label_primary(_lbl_title)
 	_header_bar.add_child(_lbl_title)
+
+	# Skill feedback: show news speed status
+	_update_title_with_skill()
 
 	_lbl_unread_badge = Label.new()
 	_lbl_unread_badge.text = ""
@@ -84,6 +87,10 @@ func _build_ui() -> void:
 # ── Signal Handlers ──
 
 func _on_news_display(entry: Dictionary) -> void:
+	# VI/CB system events go to alerts tab, not news feed
+	if entry.get("is_system_event", false):
+		return
+
 	_news_entries.insert(0, entry)
 	entry["is_read"] = false
 
@@ -173,6 +180,7 @@ func _show_pre_market_bundle() -> void:
 			var item: Label = Label.new()
 			item.text = "• %s" % entry.get("headline", "")
 			item.autowrap_mode = TextServer.AUTOWRAP_WORD
+			ThemeSetup.style_label_primary(item)
 			_pre_market_panel.add_child(item)
 
 
@@ -204,11 +212,13 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 
 	var vbox: VBoxContainer = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 2)
+	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(vbox)
 
 	# Row 1: [unread marker] [scope badge] [headline]
 	var row1: HBoxContainer = HBoxContainer.new()
 	row1.add_theme_constant_override("separation", 6)
+	row1.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(row1)
 
 	# Unread marker
@@ -216,6 +226,7 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 	marker.text = "●" if not is_read else ""
 	marker.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
 	marker.custom_minimum_size.x = 14
+	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row1.add_child(marker)
 
 	# Scope badge
@@ -228,6 +239,7 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 		scope_label = str(target_sector)
 	badge.text = "[%s]" % scope_label
 	badge.add_theme_color_override("font_color", SCOPE_COLORS.get(scope, Color.WHITE))
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row1.add_child(badge)
 
 	# Headline
@@ -235,48 +247,117 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 	headline.text = str(entry.get("headline", ""))
 	headline.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	headline.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	headline.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ThemeSetup.style_label_primary(headline)
 	row1.add_child(headline)
 
 	# Row 2: [impact hint] | [timestamp]
 	var row2: HBoxContainer = HBoxContainer.new()
 	row2.add_theme_constant_override("separation", 8)
+	row2.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(row2)
 
 	var spacer: Control = Control.new()
 	spacer.custom_minimum_size.x = 14
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row2.add_child(spacer)
 
 	var impact: Label = Label.new()
+	impact.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	impact.text = str(entry.get("impact_hint", ""))
 	var impact_tier: String = str(entry.get("impact_tier", "SMALL"))
 	match impact_tier:
 		"MEGA":
-			impact.add_theme_color_override("font_color", Color(0.9, 0.2, 0.2))
+			impact.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
 		"LARGE":
-			impact.add_theme_color_override("font_color", Color(0.9, 0.6, 0.1))
+			impact.add_theme_color_override("font_color", Color(0.85, 0.55, 0.05))
 		"MEDIUM":
-			impact.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+			impact.add_theme_color_override("font_color", ThemeSetup.TEXT_SECONDARY)
 		_:
-			impact.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+			impact.add_theme_color_override("font_color", ThemeSetup.TEXT_DIM)
 	row2.add_child(impact)
 
 	var tick_lbl: Label = Label.new()
-	var display_tick: int = int(entry.get("display_tick", 0))
-	var period: String = _tick_to_period(display_tick)
-	tick_lbl.text = "틱 %d (%s)" % [display_tick, period]
+	tick_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if entry.get("is_pre_market", false):
+		tick_lbl.text = "장전"
+	else:
+		var display_tick: int = int(entry.get("display_tick", 0))
+		var period: String = _tick_to_period(display_tick)
+		tick_lbl.text = "틱 %d (%s)" % [display_tick, period]
 	ThemeSetup.style_label_dim(tick_lbl)
 	row2.add_child(tick_lbl)
 
-	# Click to mark as read
+	# Body (expandable — NOT added to tree until clicked)
+	var body_text: String = str(entry.get("body", ""))
+	var body_margin: MarginContainer = null
+	if not body_text.is_empty():
+		var body_lbl: Label = Label.new()
+		body_lbl.text = "▸ " + body_text
+		body_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+		body_lbl.add_theme_font_size_override("font_size", 17)
+		body_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ThemeSetup.style_label_secondary(body_lbl)
+		body_margin = MarginContainer.new()
+		body_margin.add_theme_constant_override("margin_left", 20)
+		body_margin.add_theme_constant_override("margin_top", 4)
+		body_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		body_margin.add_child(body_lbl)
+
+	# Affected stocks (expandable — NOT added to tree until clicked)
+	var target_stocks: Variant = entry.get("target_stock_ids")
+	var stocks_margin: MarginContainer = null
+	if target_stocks is Array and (target_stocks as Array).size() > 0:
+		var names: PackedStringArray = PackedStringArray()
+		for sid: Variant in (target_stocks as Array):
+			var stock: StockData = StockDatabase.get_stock(str(sid))
+			if stock:
+				names.append("%s(%s)" % [stock.name_ko, stock.stock_id])
+			else:
+				names.append(str(sid))
+		var stocks_lbl: Label = Label.new()
+		stocks_lbl.text = "관련 종목: %s" % ", ".join(names)
+		stocks_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+		stocks_lbl.add_theme_font_size_override("font_size", 15)
+		stocks_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ThemeSetup.style_label_dim(stocks_lbl)
+		stocks_margin = MarginContainer.new()
+		stocks_margin.add_theme_constant_override("margin_left", 20)
+		stocks_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		stocks_margin.add_child(stocks_lbl)
+
+	# Click to mark as read + toggle body (add/remove from tree)
+	var _body_ref: MarginContainer = body_margin
+	var _stocks_ref: MarginContainer = stocks_margin
+	var _vbox_ref: VBoxContainer = vbox
 	card.gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventMouseButton:
 			var mb: InputEventMouseButton = event as InputEventMouseButton
 			if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
 				_mark_read(entry, card, marker)
+				_toggle_body(_vbox_ref, _body_ref, _stocks_ref)
 	)
 
 	return card
+
+
+func _toggle_body(vbox: VBoxContainer, body_ctrl: MarginContainer, stocks_ctrl: MarginContainer) -> void:
+	if body_ctrl == null and stocks_ctrl == null:
+		return
+	# Toggle: if body is in tree, remove it; otherwise add it
+	var is_expanded: bool = body_ctrl != null and body_ctrl.get_parent() != null
+	if is_expanded:
+		# Collapse
+		if body_ctrl and body_ctrl.get_parent():
+			vbox.remove_child(body_ctrl)
+		if stocks_ctrl and stocks_ctrl.get_parent():
+			vbox.remove_child(stocks_ctrl)
+	else:
+		# Expand — add at end of vbox
+		if body_ctrl:
+			vbox.add_child(body_ctrl)
+		if stocks_ctrl:
+			vbox.add_child(stocks_ctrl)
 
 
 func _mark_read(entry: Dictionary, card: PanelContainer, marker: Label) -> void:
@@ -289,8 +370,10 @@ func _mark_read(entry: Dictionary, card: PanelContainer, marker: Label) -> void:
 
 	# Update card background
 	var style: StyleBoxFlat = StyleBoxFlat.new()
-	style.bg_color = Color(0.12, 0.12, 0.15)
-	style.set_corner_radius_all(4)
+	style.bg_color = ThemeSetup.BG_PANEL
+	style.set_corner_radius_all(8)
+	style.border_color = ThemeSetup.BORDER_DIM
+	style.set_border_width_all(1)
 	card.add_theme_stylebox_override("panel", style)
 
 	# Check for stock link
@@ -319,9 +402,21 @@ func _update_unread_badge() -> void:
 
 
 func _tick_to_period(tick: int) -> String:
-	if tick < 130:
+	var third: int = GameClock.TICKS_PER_DAY / 3
+	if tick < third:
 		return "장 초반"
-	elif tick < 260:
+	elif tick < third * 2:
 		return "장 중반"
 	else:
 		return "장 후반"
+
+
+func _update_title_with_skill() -> void:
+	if SkillTree.is_skill_unlocked("S2"):
+		_lbl_title.text = "뉴스 피드 ⚡실시간"
+		_lbl_title.add_theme_color_override("font_color", Color(0.20, 0.80, 0.40))
+	elif SkillTree.is_skill_unlocked("S1"):
+		_lbl_title.text = "뉴스 피드 ⏱빠른뉴스"
+		_lbl_title.add_theme_color_override("font_color", Color(0.85, 0.70, 0.20))
+	else:
+		_lbl_title.text = "뉴스 피드"

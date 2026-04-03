@@ -64,6 +64,11 @@ func get_current_level() -> int:
 	return _current_level
 
 
+## Cumulative XP required to reach a given level (public, for UI display).
+func get_cumulative_xp_for_level(level: int) -> int:
+	return _cumulative_xp_for_level(level)
+
+
 ## XP progress toward next level as fraction [0.0, 1.0)
 func get_xp_progress() -> float:
 	var current_threshold: int = _cumulative_xp_for_level(_current_level)
@@ -176,16 +181,30 @@ func _on_market_close() -> void:
 
 
 func _on_season_end() -> void:
-	# Season bonus XP — provisional: hardcoded rank until Season Manager exists
-	var final_rank: int = 3  # TODO: Get from Season Manager when designed
 	var season_return_pct: float = PortfolioManager.get_return_rate()
+	var final_rank: int = _estimate_season_rank(season_return_pct)
 
 	var season_xp: int = _calculate_season_xp(final_rank, season_return_pct)
 	_grant_xp(season_xp, "season_bonus")
 
 
+## Estimate player rank from return rate until Season Manager is implemented.
+## Rank 1 = top tier (>20%), Rank 5 = bottom tier (<-10%).
+static func _estimate_season_rank(return_pct: float) -> int:
+	if return_pct >= 20.0:
+		return 1
+	if return_pct >= 10.0:
+		return 2
+	if return_pct >= 0.0:
+		return 3
+	if return_pct >= -10.0:
+		return 4
+	return 5
+
+
 # ── Serialization ──
 
+## Returns serializable state for save system.
 func get_save_data() -> Dictionary:
 	return {
 		"total_xp": _total_xp,
@@ -194,6 +213,7 @@ func get_save_data() -> Dictionary:
 	}
 
 
+## Restores state from save data, clamping to prevent invalid values.
 func load_save_data(data: Dictionary) -> void:
 	_total_xp = data.get("total_xp", 0)
 	_current_level = data.get("current_level", 1)

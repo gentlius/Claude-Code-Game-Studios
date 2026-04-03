@@ -1,4 +1,4 @@
-## Autoload — Generates real-time prices for all 10 stocks using a 3-layer algorithm.
+## Autoload — Generates real-time prices for all stocks using a 3-layer algorithm.
 ## Layer 1: Pattern (Markov chain) | Layer 2: Drift (mean reversion) | Layer 3: Event (news impact)
 ## See: design/gdd/price-engine.md, prototypes/price-engine/REPORT.md
 extends Node
@@ -42,16 +42,19 @@ enum SeasonBias { BULL, NEUTRAL, BEAR }
 enum EngineState { UNINITIALIZED, READY, RUNNING, PAUSED, END_OF_DAY, SEASON_END }
 
 # ── Constants: State Parameters (GDD Rule 1-1) ──
-# [bias, mag_min, mag_max, noise_std, min_duration]
+# [bias, mag_min, mag_max, noise_std, min_duration_minutes]
+# min_duration_minutes is converted to ticks via GameClock.TICKS_PER_MINUTE at runtime.
 
 const STATE_PARAMS: Dictionary = {
-	MarkovState.STRONG_UP:     [+0.0012, +0.0003, +0.0020, 0.0008, 20],
-	MarkovState.UPTREND:       [+0.0005, +0.0001, +0.0010, 0.0006, 30],
-	MarkovState.SIDEWAYS:      [ 0.0000, -0.0005, +0.0005, 0.0004, 40],
-	MarkovState.DOWNTREND:     [-0.0005, -0.0010, -0.0001, 0.0006, 30],
-	MarkovState.STRONG_DOWN:   [-0.0012, -0.0020, -0.0003, 0.0008, 20],
-	MarkovState.BREAKOUT_UP:   [+0.0030, +0.0010, +0.0050, 0.0015, 5],
-	MarkovState.BREAKOUT_DOWN: [-0.0030, -0.0050, -0.0010, 0.0015, 5],
+	#                           bias      mag_min   mag_max   noise_std  min_dur(분)
+	# bias/mag: per-minute ÷ TICKS_PER_MINUTE(4), noise: per-minute ÷ √4(2)
+	MarkovState.STRONG_UP:     [+0.00030, +0.000075, +0.00050, 0.0004, 5],   ## 5분
+	MarkovState.UPTREND:       [+0.000125, +0.000025, +0.00025, 0.0003, 8],  ## 8분
+	MarkovState.SIDEWAYS:      [ 0.0000, -0.000125, +0.000125, 0.0002, 10],  ## 10분
+	MarkovState.DOWNTREND:     [-0.000125, -0.00025, -0.000025, 0.0003, 8],  ## 8분
+	MarkovState.STRONG_DOWN:   [-0.00030, -0.00050, -0.000075, 0.0004, 5],   ## 5분
+	MarkovState.BREAKOUT_UP:   [+0.00075, +0.00025, +0.00125, 0.00075, 1],   ## 1분
+	MarkovState.BREAKOUT_DOWN: [-0.00075, -0.00125, -0.00025, 0.00075, 1],   ## 1분
 }
 
 # ── Constants: Transition Matrix (GDD Rule 1-3, MEDIUM baseline) ──
@@ -100,26 +103,42 @@ const LIMIT_DAMPEN_MIN: float = 0.15
 const SEASON_BIAS_UP: Array[float]   = [+0.01, 0.00, -0.01]  # BULL, NEUTRAL, BEAR
 const SEASON_BIAS_DOWN: Array[float] = [-0.01, 0.00, +0.01]
 
+# ── Constants: Season Bias Probabilities (GDD Rule 1-5) ──
+
+const BIAS_BULL_PROB: float = 0.4     ## BULL 40%, NEUTRAL 30%, BEAR 30%
+const BIAS_NEUTRAL_CUTOFF: float = 0.7  ## cumulative: BULL + NEUTRAL
+
+# ── Constants: Hard Clamp Bounds (GDD Rule 2-3) ──
+
+const HARD_CLAMP_MIN_RATIO: float = 0.15  ## Lifetime min = base_price × 0.15
+const HARD_CLAMP_MAX_RATIO: float = 3.0   ## Lifetime max = base_price × 3.0
+
 # ── Tuning Knobs (GDD updated values after prototype) ──
 
 @export var k_drift: float = 0.001
 @export var threshold_soft: float = 0.20
 @export var threshold_hard: float = 0.50
-@export var max_single_impact: float = 0.25
+@export var max_single_impact: float = 0.15
 @export var breakout_force_threshold: float = 0.05
 
 ## Korean stock market daily price limit (±30% from previous day close)
 const DAILY_LIMIT_PCT: float = 0.30
 
 # ── VI / Circuit Breaker Constants (GDD Rules 2-4, 2-5) ──
+# Duration values in game-minutes; converted via _minutes_to_ticks() at usage site.
 
-const VI_THRESHOLD: float = 0.10
-const VI_HALT_TICKS: int = 8
-const VI_MAX_PER_DAY: int = 2
+const VI_THRESHOLD: float = 0.15
+const VI_HALT_MINUTES: int = 2     ## 2분 거래정지
+const VI_MAX_PER_DAY: int = 1
+const VI_COOLDOWN_MINUTES: int = 5  ## 5분 쿨다운
 
-const CB_STAGE1_PCT: float = -0.08
-const CB_STAGE2_PCT: float = -0.15
-const CB_STAGE1_TICKS: int = 20
+const CB_STAGE1_PCT: float = -0.12
+const CB_STAGE2_PCT: float = -0.20
+const CB_STAGE1_MINUTES: int = 5    ## 5분 거래정지
+
+## Converts game-minutes to ticks using GameClock constant.
+static func _minutes_to_ticks(minutes: int) -> int:
+	return minutes * GameClock.TICKS_PER_MINUTE
 
 # ── Tick Size Table (KRX-based, GDD Rule 5-3) ──
 
@@ -162,7 +181,7 @@ var _index_history: Array[float] = []  ## 틱별 지수 기록
 
 # ── VI / Circuit Breaker Runtime State ──
 
-var _vi_states: Dictionary = {}  ## stock_id -> {halt_remaining: int, count_today: int}
+var _vi_states: Dictionary = {}  ## stock_id -> {halt_remaining: int, count_today: int, cooldown: int}
 var _cb_stage: int = 0  ## 0=none, 1=stage1 active, 2=stage2 (early close)
 var _cb_halt_remaining: int = 0  ## Stage 1 remaining halt ticks
 
@@ -258,9 +277,9 @@ func _initialize_season() -> void:
 		# Assign random season bias (BULL 40%, NEUTRAL 30%, BEAR 30%)
 		var r: float = randf()
 		var bias: SeasonBias
-		if r < 0.4:
+		if r < BIAS_BULL_PROB:
 			bias = SeasonBias.BULL
-		elif r < 0.7:
+		elif r < BIAS_NEUTRAL_CUTOFF:
 			bias = SeasonBias.NEUTRAL
 		else:
 			bias = SeasonBias.BEAR
@@ -290,7 +309,7 @@ func _initialize_season() -> void:
 	# Initialize VI states for each stock (GDD Rule 2-4)
 	_vi_states.clear()
 	for stock_id: String in _stock_states:
-		_vi_states[stock_id] = {"halt_remaining": 0, "count_today": 0}
+		_vi_states[stock_id] = {"halt_remaining": 0, "count_today": 0, "cooldown": 0}
 
 	# Reset circuit breaker (GDD Rule 2-5)
 	_cb_stage = 0
@@ -326,14 +345,21 @@ func _on_tick(tick_number: int, _day: int, _week: int) -> void:
 		if vi.get("halt_remaining", 0) > 0:
 			vi["halt_remaining"] -= 1
 			if vi["halt_remaining"] == 0:
+				vi["cooldown"] = _minutes_to_ticks(VI_COOLDOWN_MINUTES)
 				on_vi_released.emit(stock_id)
 			# Record frozen price/volume to keep buffers aligned
 			var s: Dictionary = _stock_states[stock_id]
 			s["tick_prices"].append(s["current_price"])
 			s["tick_volumes"].append(0.0)
 			continue
+		# VI cooldown decrement
+		if vi.get("cooldown", 0) > 0:
+			vi["cooldown"] -= 1
 		_process_stock_tick(stock_id, tick_number)
-		_check_vi(stock_id)
+		# Skip VI check on tick 0: prev_day_close == base_price at season/day
+		# start, so the first random delta can falsely exceed VI_THRESHOLD.
+		if tick_number > 0:
+			_check_vi(stock_id)
 
 	_update_index()
 	_check_circuit_breaker()
@@ -371,8 +397,8 @@ func _process_stock_tick(stock_id: String, tick_in_day: int) -> void:
 
 	# Hard clamp: lifetime bounds (base_price * 0.15 ~ 3.0)
 	var base: int = s["base_price"]
-	var min_price: float = maxf(float(base) * 0.15, 1000.0)
-	var max_price: float = float(base) * 3.0
+	var min_price: float = maxf(float(base) * HARD_CLAMP_MIN_RATIO, 1000.0)
+	var max_price: float = float(base) * HARD_CLAMP_MAX_RATIO
 	var clamped: float = clampf(raw_price, min_price, max_price)
 	if clamped != raw_price:
 		on_price_clamped.emit(stock_id, roundi(clamped), raw_price)
@@ -399,7 +425,7 @@ func _process_stock_tick(stock_id: String, tick_in_day: int) -> void:
 		s["state_duration"] = 0
 	else:
 		var params: Array = STATE_PARAMS[s["markov_state"]]
-		var min_dur: int = params[4]
+		var min_dur: int = _minutes_to_ticks(params[4])
 		if s["state_duration"] >= min_dur:
 			var matrix: Array = _transition_matrices[stock_id]
 			var row: Array = matrix[s["markov_state"]]
@@ -572,11 +598,13 @@ func _compute_volume(
 			var t: float = (proximity - LIMIT_DAMPEN_START) / (1.0 - LIMIT_DAMPEN_START)
 			limit_dampen = lerpf(1.0, LIMIT_DAMPEN_MIN, clampf(t, 0.0, 1.0))
 
-	# 4-5: Time-of-day multiplier
+	# 4-5: Time-of-day multiplier (GDD Rule 4-5)
+	# 1 day = 1560 ticks (4 ticks/min × 390 min)
+	# Opening 10 min = ticks 0-39, Closing 10 min = ticks 1520-1559
 	var tod_mult: float = 1.0
-	if tick_in_day < 10:
+	if tick_in_day < 40:
 		tod_mult = 2.5
-	elif tick_in_day >= 380:
+	elif tick_in_day >= 1520:
 		tod_mult = 2.0
 
 	# 4-6: Final volume
@@ -587,12 +615,14 @@ func _compute_volume(
 ## Check if a stock should trigger VI after its price update.
 func _check_vi(stock_id: String) -> void:
 	var s: Dictionary = _stock_states[stock_id]
-	var vi: Dictionary = _vi_states.get(stock_id, {"halt_remaining": 0, "count_today": 0})
+	var vi: Dictionary = _vi_states.get(stock_id, {"halt_remaining": 0, "count_today": 0, "cooldown": 0})
 
-	# Already halted or daily limit reached
+	# Already halted, daily limit reached, or in cooldown
 	if vi["halt_remaining"] > 0:
 		return
 	if vi["count_today"] >= VI_MAX_PER_DAY:
+		return
+	if vi.get("cooldown", 0) > 0:
 		return
 
 	var prev_close: float = float(s["prev_day_close"])
@@ -602,10 +632,11 @@ func _check_vi(stock_id: String) -> void:
 	var change_pct: float = absf(float(s["current_price"]) - prev_close) / prev_close
 	if change_pct >= VI_THRESHOLD:
 		var is_upper: bool = s["current_price"] > roundi(prev_close)
-		vi["halt_remaining"] = VI_HALT_TICKS
+		var halt_ticks: int = _minutes_to_ticks(VI_HALT_MINUTES)
+		vi["halt_remaining"] = halt_ticks
 		vi["count_today"] += 1
 		_vi_states[stock_id] = vi
-		on_vi_triggered.emit(stock_id, is_upper, VI_HALT_TICKS)
+		on_vi_triggered.emit(stock_id, is_upper, halt_ticks)
 
 
 ## Check if circuit breaker should trigger based on market index.
@@ -623,8 +654,9 @@ func _check_circuit_breaker() -> void:
 
 	if index_change <= CB_STAGE1_PCT and _cb_stage < 1:
 		_cb_stage = 1
-		_cb_halt_remaining = CB_STAGE1_TICKS
-		on_circuit_breaker.emit(1, CB_STAGE1_TICKS)
+		var cb_halt: int = _minutes_to_ticks(CB_STAGE1_MINUTES)
+		_cb_halt_remaining = cb_halt
+		on_circuit_breaker.emit(1, cb_halt)
 
 
 ## Returns whether a stock is currently halted by VI.
@@ -683,10 +715,11 @@ func _end_trading_day() -> void:
 		# Update prev_day_close for next day's daily limit calculation
 		s["prev_day_close"] = close_price
 
-	# Reset VI daily counters (GDD Rule 2-4: max 2 per day resets each day)
+	# Reset VI daily counters (GDD Rule 2-4: max 1 per day resets each day)
 	for stock_id: String in _vi_states:
 		_vi_states[stock_id]["count_today"] = 0
 		_vi_states[stock_id]["halt_remaining"] = 0
+		_vi_states[stock_id]["cooldown"] = 0
 
 	# Reset circuit breaker for next day (GDD Rule 2-5)
 	_cb_stage = 0

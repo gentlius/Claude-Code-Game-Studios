@@ -33,10 +33,12 @@ signal on_season_end()
 
 # ── Constants ──
 
-const TICKS_PER_DAY: int = 390
+const TICKS_PER_MINUTE: int = 4    ## 기본 단위: 1 game-minute = 4 ticks
+const MINUTES_PER_DAY: int = 390    ## 09:00–15:30 KST = 390 game-minutes
+const TICKS_PER_DAY: int = TICKS_PER_MINUTE * MINUTES_PER_DAY  ## = 1560
 const DAYS_PER_WEEK: int = 5
 const WEEKS_PER_SEASON: int = 4
-const BASE_TICK_INTERVAL: float = 0.77  ## real seconds per tick at 1x speed
+const BASE_TICK_INTERVAL: float = 0.192  ## real seconds per tick at 1x speed (~5min/day)
 const SECONDS_PER_TICK: int = 15  ## game-world seconds each tick represents (4 ticks = 1 minute)
 
 # ── State ──
@@ -51,32 +53,39 @@ var _season_active: bool = false
 
 # ── Public API ──
 
+## Returns the current market state (PRE_MARKET, MARKET_OPEN, etc.).
 func get_market_state() -> MarketState:
 	return _market_state
 
 
+## Returns the current tick within the trading day (0 to TICKS_PER_DAY-1).
 func get_current_tick() -> int:
 	return _current_tick
 
 
+## Returns the current day within the season (0-indexed).
 func get_current_day() -> int:
 	return _current_day
 
 
+## Returns the current week within the season (0-indexed).
 func get_current_week() -> int:
 	return _current_week
 
 
+## Returns intraday progress as a fraction [0.0, 1.0].
 func get_day_progress() -> float:
 	if TICKS_PER_DAY == 0:
 		return 0.0
 	return float(_current_tick) / float(TICKS_PER_DAY)
 
 
+## Returns the current game speed multiplier (1.0 to 4.0).
 func get_speed_multiplier() -> float:
 	return _speed_multiplier
 
 
+## Sets game speed multiplier, clamped to [1.0, 4.0].
 func set_speed(multiplier: float) -> void:
 	_speed_multiplier = clampf(multiplier, 1.0, 4.0)
 

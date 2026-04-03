@@ -16,10 +16,10 @@ signal on_skill_unlocked(skill_id: String)
 # ── Config (Tuning Knobs) ──
 
 @export var SKILL_COST: int = 1
-@export var NEWS_DELAY_T0: int = 40   ## ticks (~30 seconds)
-@export var NEWS_DELAY_T1: int = 20   ## ticks (~15 seconds)
+@export var NEWS_DELAY_T0_MIN: int = 10  ## 10 game-minutes delay (no skill)
+@export var NEWS_DELAY_T1_MIN: int = 5   ## 5 game-minutes delay (S1 unlocked)
 @export var RUMOR_BASE_ACCURACY: float = 0.7
-@export var RUMOR_LEAD_TICKS: int = 60
+@export var RUMOR_LEAD_MINUTES: int = 15  ## 15 game-minutes rumor lead time
 @export var LEVERAGE_RATIO: float = 2.0
 @export var MAX_HOLDINGS_T0: int = 3
 @export var MAX_HOLDINGS_T1: int = 5
@@ -78,13 +78,13 @@ func get_branch_skills(branch: String) -> Array[Dictionary]:
 	return result
 
 
-## Get the current news delay in ticks based on unlocked sense skills
+## Get the current news delay in ticks based on unlocked sense skills.
 func get_news_delay_ticks() -> int:
 	if is_skill_unlocked("S2"):
 		return 0
 	if is_skill_unlocked("S1"):
-		return NEWS_DELAY_T1
-	return NEWS_DELAY_T0
+		return NEWS_DELAY_T1_MIN * GameClock.TICKS_PER_MINUTE
+	return NEWS_DELAY_T0_MIN * GameClock.TICKS_PER_MINUTE
 
 
 ## Get the maximum number of holdings based on unlocked portfolio skills
@@ -211,12 +211,14 @@ func _register_skill(id: String, branch: String, tier: int,
 
 # ── Serialization ──
 
+## Returns serializable state for save system.
 func get_save_data() -> Dictionary:
 	return {
 		"unlocked_skills": _unlocked_skills.keys(),
 	}
 
 
+## Restores state from save data. Ignores skill IDs no longer in definitions.
 func load_save_data(data: Dictionary) -> void:
 	_unlocked_skills.clear()
 	var skill_ids: Array = data.get("unlocked_skills", [])

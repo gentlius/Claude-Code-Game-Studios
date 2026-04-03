@@ -13,7 +13,7 @@ signal on_order_expired(order: Dictionary)
 # ── Constants ──
 
 const MAX_PENDING_LIMIT_ORDERS: int = 10
-const PRE_MARKET_BUFFER_PCT: float = 0.10
+const PRE_MARKET_BUFFER_PCT: float = 0.15
 
 # ── State ──
 
@@ -217,7 +217,10 @@ func _on_tick(tick_number: int, _day: int, _week: int) -> void:
 		_fill_market_order(order)
 
 	# Check limit orders (skip halted stocks)
+	# Collect fills first, then update _pending_limit_orders BEFORE emitting
+	# signals — otherwise UI reads stale pending list via get_pending_orders().
 	var still_pending: Array[Dictionary] = []
+	var to_fill: Array[Array] = []  # [[order, price], ...]
 	for order: Dictionary in _pending_limit_orders:
 		# Skip fill check if stock is halted by VI or CB
 		if PriceEngine.get_cb_stage() > 0 or PriceEngine.is_vi_halted(order["stock_id"]):
@@ -233,10 +236,16 @@ func _on_tick(tick_number: int, _day: int, _week: int) -> void:
 			should_fill = true
 
 		if should_fill:
-			_fill_limit_order(order, current_price)
+			to_fill.append([order, current_price])
 		else:
 			still_pending.append(order)
+
+	# Update pending list BEFORE filling — fill emits on_order_filled, and
+	# signal handlers (UI) call get_pending_orders() which reads this array.
 	_pending_limit_orders = still_pending
+
+	for entry: Array in to_fill:
+		_fill_limit_order(entry[0] as Dictionary, entry[1] as int)
 
 	# Update portfolio valuation after order processing
 	var reserved: int = get_total_reserved_cash()
@@ -379,7 +388,7 @@ func _validate_order(order: Dictionary) -> String:
 
 	# 2.5. VI/CB halt check (GDD Rules 2-4, 2-5)
 	if PriceEngine.get_cb_stage() > 0:
-		return "서킷브레이커 발동 중입니다"
+		return "CB 발동 중 — 전종목 거래정지"
 	if PriceEngine.is_vi_halted(order["stock_id"]):
 		return "변동성완화장치(VI) 발동 중입니다"
 
@@ -387,7 +396,9 @@ func _validate_order(order: Dictionary) -> String:
 	if order["quantity"] <= 0:
 		return "수량은 1 이상이어야 합니다"
 
-	# 4. Skill unlock (skip in MVP — limit orders always available)
+	# 4. Skill unlock — TR1 required for limit orders
+	if order["order_type"] == "LIMIT" and not SkillTree.is_skill_unlocked("TR1"):
+		return "지정가 주문 스킬을 해금하세요 (TR1: 지정가 주문)"
 
 	# 4.5. Pending limit order count
 	if order["order_type"] == "LIMIT":
@@ -400,7 +411,7 @@ func _validate_order(order: Dictionary) -> String:
 		if holding == null:
 			# New stock — check slot
 			var effective_count: int = _get_effective_holding_count(order["stock_id"])
-			if effective_count >= PortfolioManager.DEFAULT_MAX_HOLDINGS:
+			if effective_count >= SkillTree.get_max_holdings():
 				return "보유 종목 한도 초과"
 
 	# 6. Balance (BUY) — actual deduction happens in submit
@@ -430,6 +441,13 @@ func _validate_order(order: Dictionary) -> String:
 	if order["order_type"] == "LIMIT":
 		if order["limit_price"] <= 0:
 			return "지정가는 0보다 커야 합니다"
+		# 8-1. Daily limit (상/하한가) validation
+		var limits: Dictionary = PriceEngine.get_daily_limits(order["stock_id"])
+		if limits.size() > 0:
+			if order["limit_price"] > limits["upper"]:
+				return "상한가(%d원) 초과" % limits["upper"]
+			if order["limit_price"] < limits["lower"]:
+				return "하한가(%d원) 미만" % limits["lower"]
 		# 9. Tick size validation (GDD Rule 5-3)
 		var tick_size: int = PriceEngine.get_tick_size(order["limit_price"])
 		if order["limit_price"] % tick_size != 0:

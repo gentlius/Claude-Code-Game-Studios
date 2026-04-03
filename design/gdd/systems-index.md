@@ -2,7 +2,7 @@
 
 > **Status**: Draft
 > **Created**: 2026-03-25
-> **Last Updated**: 2026-03-25
+> **Last Updated**: 2026-04-03
 > **Source Concept**: design/gdd/game-concept.md
 
 ---
@@ -22,29 +22,29 @@
 
 ## Systems Enumeration
 
-| # | System Name | Category | Priority | Status | Design Doc | Depends On |
-|---|-------------|----------|----------|--------|------------|------------|
-| 1 | 게임 시계 (Game Clock) | Core | MVP | Approved | [game-clock.md](game-clock.md) | — |
-| 2 | 종목 데이터베이스 (Stock Database) | Core | MVP | Approved | [stock-database.md](stock-database.md) | — |
-| 3 | 가격 엔진 (Price Engine) | Gameplay | MVP | Approved | [price-engine.md](price-engine.md) | 게임 시계, 종목 DB |
-| 4 | 뉴스/이벤트 시스템 (News & Events) | Gameplay | MVP | Approved | [news-events.md](news-events.md) | 게임 시계, 종목 DB |
-| 5 | 주문 처리 엔진 (Order Engine) | Gameplay | MVP | Approved | [order-engine.md](order-engine.md) | 종목 DB, 재화 시스템, 가격 엔진, 게임 시계, 포트폴리오 |
-| 6 | 포트폴리오 관리 (Portfolio Manager) | Gameplay | MVP | Approved | [portfolio-manager.md](portfolio-manager.md) | 종목 DB, 재화 시스템 |
-| 7 | AI 경쟁자 시스템 (AI Competitors) | Gameplay | V-Slice | Not Started | — | 가격 엔진, 주문 엔진, 포트폴리오 |
-| 8 | 스킬 트리 시스템 (Skill Tree) | Progression | V-Slice | Approved | [skill-tree.md](skill-tree.md) | 경험치 시스템 |
-| 9 | 경험치 시스템 (XP System) | Progression | V-Slice | Approved | [xp-system.md](xp-system.md) | 주문 엔진, 포트폴리오, 게임 시계 |
-| 10 | 시즌/대회 관리 (Season Manager) | Progression | V-Slice | Not Started | — | 가격 엔진, 포트폴리오, AI 경쟁자, 재화 |
-| 11 | 재화 시스템 (Currency System) | Economy | MVP | Approved | [currency-system.md](currency-system.md) | — |
-| 12 | 트레이딩 스크린 (Main HUD) | UI | MVP | Approved | [trading-screen.md](trading-screen.md) | 가격 엔진, 주문 엔진, 포트폴리오, 게임 시계 |
-| 13 | 차트 렌더러 (Chart Renderer) | UI | MVP | Approved | [chart-renderer.md](chart-renderer.md) | 가격 엔진, 게임 시계 |
-| 14 | 뉴스 피드 UI (News Feed UI) | UI | MVP | Approved | [news-feed-ui.md](news-feed-ui.md) | 뉴스/이벤트 시스템, 게임 시계 |
-| 15 | 포트폴리오 UI (Portfolio UI) | UI | MVP | Approved | [portfolio-ui.md](portfolio-ui.md) | 포트폴리오 관리, 게임 시계 |
-| 16 | 리더보드 UI (Leaderboard UI) | UI | V-Slice | Not Started | — | 시즌/대회 관리 |
-| 17 | 스킬 트리 UI (Skill Tree UI) | UI | V-Slice | Not Started | — | 스킬 트리 시스템 |
-| 18 | 세이브/로드 (Save/Load) | Persistence | Alpha | Not Started | — | 포트폴리오, 스킬 트리, 시즌, 경험치 |
-| 19 | 오디오 시스템 (Audio) | Audio | Alpha | Not Started | — | 주문 엔진, 뉴스 시스템 |
-| 20 | 튜토리얼 (Tutorial) | Meta | Full | Not Started | — | 전체 게임플레이 시스템 |
-| 21 | 설정 (Settings) | Meta | Full | Not Started | — | — |
+| # | System Name | Category | Priority | GDD | Impl | Design Doc | Depends On |
+|---|-------------|----------|----------|-----|------|------------|------------|
+| 1 | 게임 시계 (Game Clock) | Core | MVP | In Review | ✅ Done | [game-clock.md](game-clock.md) | — |
+| 2 | 종목 데이터베이스 (Stock Database) | Core | MVP | Approved | ✅ Done | [stock-database.md](stock-database.md) | — |
+| 3 | 가격 엔진 (Price Engine) | Gameplay | MVP | In Review | ✅ Done | [price-engine.md](price-engine.md) | 게임 시계, 종목 DB |
+| 4 | 뉴스/이벤트 시스템 (News & Events) | Gameplay | MVP | In Review | ✅ Done | [news-events.md](news-events.md) | 게임 시계, 종목 DB |
+| 5 | 주문 처리 엔진 (Order Engine) | Gameplay | MVP | In Review | ✅ Done | [order-engine.md](order-engine.md) | 종목 DB, 재화 시스템, 가격 엔진, 게임 시계, 포트폴리오 |
+| 6 | 포트폴리오 관리 (Portfolio Manager) | Gameplay | MVP | Approved | ✅ Done | [portfolio-manager.md](portfolio-manager.md) | 종목 DB, 재화 시스템 |
+| 7 | AI 경쟁자 시스템 (AI Competitors) | Gameplay | V-Slice | Not Started | — | — | 가격 엔진, 주문 엔진, 포트폴리오 |
+| 8 | 스킬 트리 시스템 (Skill Tree) | Progression | V-Slice | In Review | ✅ Done | [skill-tree.md](skill-tree.md) | 경험치 시스템 |
+| 9 | 경험치 시스템 (XP System) | Progression | V-Slice | Approved | ✅ Done | [xp-system.md](xp-system.md) | 주문 엔진, 포트폴리오, 게임 시계 |
+| 10 | 시즌/대회 관리 (Season Manager) | Progression | V-Slice | Not Started | — | — | 가격 엔진, 포트폴리오, AI 경쟁자, 재화 |
+| 11 | 재화 시스템 (Currency System) | Economy | MVP | In Review | ✅ Done | [currency-system.md](currency-system.md) | — |
+| 12 | 트레이딩 스크린 (Main HUD) | UI | MVP | In Review | ✅ Done | [trading-screen.md](trading-screen.md) | 가격 엔진, 주문 엔진, 포트폴리오, 게임 시계 |
+| 13 | 차트 렌더러 (Chart Renderer) | UI | MVP | In Review | ✅ Done | [chart-renderer.md](chart-renderer.md) | 가격 엔진, 게임 시계 |
+| 14 | 뉴스 피드 UI (News Feed UI) | UI | MVP | In Review | ✅ Done | [news-feed-ui.md](news-feed-ui.md) | 뉴스/이벤트 시스템, 게임 시계 |
+| 15 | 포트폴리오 UI (Portfolio UI) | UI | MVP | In Review | ✅ Done | [portfolio-ui.md](portfolio-ui.md) | 포트폴리오 관리, 게임 시계 |
+| 16 | 리더보드 UI (Leaderboard UI) | UI | V-Slice | Not Started | — | — | 시즌/대회 관리 |
+| 17 | 프로그레션 UI (Progression UI) | UI | V-Slice | In Review | ✅ Done | [progression-ui.md](progression-ui.md) | 경험치 시스템, 스킬 트리, 게임 시계, 트레이딩 스크린 |
+| 18 | 세이브/로드 (Save/Load) | Persistence | Alpha | Not Started | — | — | 포트폴리오, 스킬 트리, 시즌, 경험치 |
+| 19 | 오디오 시스템 (Audio) | Audio | Alpha | Not Started | — | — | 주문 엔진, 뉴스 시스템 |
+| 20 | 튜토리얼 (Tutorial) | Meta | Full | Not Started | — | — | 전체 게임플레이 시스템 |
+| 21 | 설정 (Settings) | Meta | Full | Not Started | — | — | — |
 
 ---
 
@@ -80,14 +80,14 @@
 
 1. **게임 시계** — 거래일/주/시즌의 시간 흐름을 제어. 실시간 시뮬레이션의 기반
 2. **종목 데이터베이스** — 가상 종목의 정의 (이름, 섹터, 기본가치, 특성). 모든 게임플레이의 데이터 원천
-3. **재화 시스템** — 예수금/모의투자 시드 관리. 매매와 보상의 기반
+3. **재화 시스템** — 예수금(단일 계좌) 관리. 매매와 보상의 기반. 수익/손실 직접 반영, 복리 성장 구조
 
 ### Core Layer (depends on Foundation)
 
 1. **가격 엔진** — depends on: 게임 시계, 종목 DB. 가격 변동 알고리즘의 심장
 2. **뉴스/이벤트 시스템** — depends on: 게임 시계, 종목 DB. 시장 이벤트 생성 및 가격 엔진에 입력
 3. **주문 처리 엔진** — depends on: 종목 DB, 재화 시스템. 매수/매도 주문 접수 및 체결
-4. **포트폴리오 관리** — depends on: 종목 DB, 재화 시스템. 보유 종목 추적 및 손익 계산. BasePortfolio(공통) + SimPortfolio(모의투자) / RealPortfolio(현물 시장, 향후 확장) 구조
+4. **포트폴리오 관리** — depends on: 종목 DB, 재화 시스템. 보유 종목 추적 및 손익 계산. 시즌 종료 시 강제 청산, 예수금 이월
 
 ### Feature Layer (depends on Core)
 
@@ -165,19 +165,30 @@
 | Metric | Count |
 |--------|-------|
 | Total systems identified | 21 |
-| Design docs started | 13 |
-| Design docs reviewed | 13 |
-| Design docs approved | 13 |
+| Design docs started | 15 |
+| Design docs reviewed (2차 리뷰 완료) | 15 |
+| Design docs approved | 3 (종목 DB, 포트폴리오, XP) |
+| Design docs in review | 12 (2차 리뷰 수정 반영, 재승인 필요) |
+| **Implemented** | **15** (MVP 11/11 + V-Slice 4: XP, Skill Tree, Progression UI) |
 | MVP systems designed | 11/11 |
-| Vertical Slice systems designed | 2/6 |
+| MVP systems implemented | 11/11 |
+| Vertical Slice systems designed | 3/6 (XP, Skill Tree, Progression UI — GDD 완료) |
+| Vertical Slice systems implemented | 3/6 (XP, Skill Tree, Progression UI) |
+| GDD vs 구현 QA 완료 | **15/15** ✅ (전체 구현 시스템 검증 완료, GDD 갱신 완료) |
+| 컨셉 변경 | 모의투자→실전투자 (단일 계좌, 복리 구조) 반영 완료 |
 
 ---
 
 ## Next Steps
 
-- [ ] Design MVP-tier systems first (use `/design-system [system-name]`)
-- [ ] Start with Foundation: 게임 시계 → 종목 DB → 재화 시스템
-- [ ] Then Core (highest risk first): 가격 엔진 → 뉴스/이벤트 → 주문 엔진 → 포트폴리오
-- [ ] Prototype the price engine early (`/prototype price-engine`)
-- [ ] Run `/design-review` on each completed GDD
-- [ ] Run `/gate-check pre-production` when MVP systems are designed
+- [x] Design MVP-tier systems (11/11 complete — all Approved)
+- [x] Foundation: 게임 시계 → 종목 DB → 재화 시스템 (complete)
+- [x] Core: 가격 엔진 → 뉴스/이벤트 → 주문 엔진 → 포트폴리오 (complete)
+- [x] Prototype price engine (`prototypes/price-engine/`)
+- [x] V-Slice progression: XP 시스템, 스킬 트리, 프로그레션 UI (3/6 complete)
+- [x] **GDD vs 구현 QA**: 15/15 전체 완료 (2026-04-02). game-clock.md 대폭 갱신, price-engine/chart-renderer/stock-database 소폭 갱신
+- [x] **2차 전체 GDD 리뷰** (2026-04-03): 47개 이슈 발견 → 수정 완료. Lv→스킬ID 표기 통일, 수치 오류 수정, API 일관성 확보
+- [x] **컨셉 변경** (2026-04-03): 모의투자→실전투자. 단일 계좌(예수금 직접 투자), 복리 성장 구조. currency-system.md 전면 재작성
+- [ ] Design remaining V-Slice systems: AI 경쟁자, 시즌/대회 관리, 리더보드 UI
+- [ ] Run `/gate-check pre-production` when ready
+- [ ] Run `/design-review` on each new GDD

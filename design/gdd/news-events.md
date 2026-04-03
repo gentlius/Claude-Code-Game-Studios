@@ -1,8 +1,8 @@
 # 뉴스/이벤트 시스템 (News & Events)
 
-> **Status**: In Design
+> **Status**: In Review
 > **Author**: user + game-designer
-> **Last Updated**: 2026-04-01
+> **Last Updated**: 2026-04-03
 > **Implements Pillar**: 읽는 재미 (Read the Market), 판단이 곧 실력 (Judgment is King)
 
 ## Overview
@@ -63,15 +63,21 @@ MVP 풀 규모: **템플릿 50개 이상** (MACRO 10+, SECTOR 30+, INDIVIDUAL 10
 
 **Impact 축 (4등급)**
 
-| 등급 | base_impact 범위 | 설명 | 가격 엔진 BREAKOUT 유발 |
-|------|-----------------|------|------------------------|
-| `SMALL` | 0.01~0.03 (1~3%) | 소규모 재료. 차트에 흔적만 남김 | 없음 (5% 미만) |
-| `MEDIUM` | 0.03~0.07 (3~7%) | 중간 재료. 차트에서 식별 가능 | 없음~경계 |
-| `LARGE` | 0.07~0.15 (7~15%) | 큰 재료. BREAKOUT 확실히 유발 | 유발 |
-| `MEGA` | 0.15~0.20 (15~20%) | 시장 충격. 다수 종목 동시 영향 | 강하게 유발 |
+| 등급 | base_impact 범위 | 최종 영향 범위 (LOW~EXTREME 전체) | 설명 | BREAKOUT 유발 |
+|------|-----------------|----------------------------------|------|--------------|
+| `SMALL` | 0.005~0.015 | 0.3~3% | 소규모 재료. 차트에 흔적만 남김 | 없음 |
+| `MEDIUM` | 0.015~0.035 | 1.5~7% | 중간 재료. 차트에서 식별 가능 | 없음~경계 |
+| `LARGE` | 0.03~0.06 | 3~12% | 큰 재료. BREAKOUT 유발 | 유발 |
+| `MEGA` | 0.06~0.10 | 6~15% | 시장 충격. VI 유발 가능 | 강하게 유발 |
 
-BREAKOUT 유발 기준: `actual_impact ≥ 5%`. LARGE 등급부터 MEDIUM 이상 민감도의
-종목에서 BREAKOUT이 보장된다.
+\* 범위는 VOL_AMPLIFIER 최소(0.6, LOW)~최대(2.0, EXTREME) 기준.
+
+base_impact는 **증폭 전 기준값**이다. 최종 영향 = `base_impact × sensitivity × VOL_AMPLIFIER`.
+VOL_AMPLIFIER: LOW=0.6, MEDIUM=1.0, HIGH=1.4, EXTREME=2.0.
+`max_single_impact = 0.15`로 상한 제한.
+
+BREAKOUT 유발 기준: `actual_impact ≥ 5%`. LARGE 등급 + MEDIUM 이상 변동성 종목에서
+BREAKOUT이 보장된다. MEGA는 EXTREME 종목에서 VI(15%) 임계값에 도달 가능.
 
 ##### 1-3. 이벤트 템플릿 스키마
 
@@ -130,7 +136,7 @@ scope: INDIVIDUAL
 event_tags: ["clinical_trial"]
 event_type: INSTANT_SHOCK
 impact_tier: LARGE
-impact_min: 0.10, impact_max: 0.15
+impact_min: 0.04, impact_max: 0.06
 direction: +1
 decay_ticks: 0
 headline_template: "{company}, {phase}상 임상시험 최종 성공 발표"
@@ -151,7 +157,7 @@ target_sector: SEMICONDUCTOR
 event_tags: ["semiconductor", "export"]
 event_type: GRADUAL_SHIFT
 impact_tier: MEDIUM
-impact_min: 0.04, impact_max: 0.07
+impact_min: 0.02, impact_max: 0.035
 direction: -1
 decay_ticks: 60, decay_curve: EXPONENTIAL
 headline_template: "정부, {country} 반도체 수출 물량 {percent}% 한시 제한"
@@ -172,7 +178,7 @@ scope: MACRO
 event_tags: ["interest_rate"]
 event_type: INSTANT_SHOCK
 impact_tier: LARGE
-impact_min: 0.07, impact_max: 0.12
+impact_min: 0.03, impact_max: 0.05
 direction: VARIABLE
 decay_ticks: 0
 headline_positive: "한국은행, 기준금리 {rate_delta}%p 인하 결정"
@@ -300,9 +306,9 @@ func _register_mutex(template: EventTemplate, stock_id: String) -> void:
 **`{stock_id}` 플레이스홀더 규칙**:
 - INDIVIDUAL scope 이벤트에서 사용
 - 대상 종목별로 독립된 mutex 키 생성
-- 예: `"bio_clinical_{stock_id}"` → MG에 적용 시 `"bio_clinical_MG"`
-- MG의 임상 성공과 MG의 임상 실패는 같은 날 불가
-- MG의 임상 성공과 BF의 임상 실패는 같은 날 **가능** (다른 종목)
+- 예: `"bio_clinical_{stock_id}"` → MDG에 적용 시 `"bio_clinical_MDG"`
+- MDG의 임상 성공과 MDG의 임상 실패는 같은 날 불가
+- MDG의 임상 성공과 BPH의 임상 실패는 같은 날 **가능** (다른 종목)
 - SECTOR/MACRO scope에서는 `{stock_id}` 미사용 (고정 문자열)
 
 **mutex_group 매핑 테이블** (현재 확인된 모순 쌍):
@@ -476,6 +482,7 @@ NewsQueueEntry {
     impact_hint: string
     created_tick: int          # 이벤트가 발생한 틱
     display_tick: int          # = created_tick + player_delay_ticks
+    is_system_event: bool      # true면 시스템 알림 (VI/CB). 뉴스 피드가 아닌 알림 탭으로 라우팅
 }
 ```
 
@@ -484,12 +491,12 @@ NewsQueueEntry {
 
 ##### 5-2. 스킬 레벨별 딜레이
 
-| 스킬 레벨 | player_delay_ticks | 실시간 환산 | 설명 |
-|----------|-------------------|-----------|------|
-| Lv1 (기본) | 30틱 | 약 23초 | 가격 움직임 보고 이유 모르는 구간 |
-| Lv2 | 15틱 | 약 11초 | 반응 시간 2배 향상 |
-| Lv3 | 0틱 | 즉시 | 이벤트와 동시에 뉴스 표시 |
-| Lv4 | -20틱 (선행) | 약 15초 전 | 루머 채널 (4-4 참조). `rumor_advance_ticks`와 동일 값 |
+| 스킬 레벨 | player_delay_ticks | 실시간 환산 (1x) | 설명 |
+|----------|-------------------|----------------|------|
+| T0 (기본) | 40틱 (10분×4TPM) | 약 7.7초 (40×0.192) | 가격 움직임 보고 이유 모르는 구간 |
+| T1 (S1 해금) | 20틱 (5분×4TPM) | 약 3.8초 (20×0.192) | 반응 시간 2배 향상 |
+| T2 (S2 해금) | 0틱 | 즉시 | 이벤트와 동시에 뉴스 표시 |
+| T3 (S3 해금) | -60틱 (선행) | 약 11.5초 전 (60×0.192) | 루머 채널 (5-4 참조). `rumor_advance_ticks`와 동일 값. (선행, 개념적 표현 — 실제 구현 시 rumor_advance_ticks(양수 60)로 처리. 규칙 5-4 참조) |
 
 ##### 5-3. 장 마감 시 딜레이 큐 처리
 
@@ -498,15 +505,15 @@ NewsQueueEntry {
   — 정보 손실이 게임플레이의 일부
 - **MACRO**: 마감 후 "오늘의 시장 요약"에 통합 표시. 거시경제 뉴스는 결국 알려짐
 
-Lv1~Lv2에서는 "오늘 왜 이 종목이 이렇게 움직였지?"를 때때로 모른다.
-Lv3 해금이 정보 완전성에 큰 가치를 가지는 이유.
+S0~S1에서는 "오늘 왜 이 종목이 이렇게 움직였지?"를 때때로 모른다.
+S2 해금이 정보 완전성에 큰 가치를 가지는 이유.
 
-##### 5-4. Lv4 루머 채널 — 선행 정보
+##### 5-4. S3 루머 채널 — 선행 정보
 
-Lv4 해금 시 일부 이벤트 발생 전에 불확실한 힌트를 표시한다.
+S3 해금 시 일부 이벤트 발생 전에 불확실한 힌트를 표시한다.
 
 **루머 생성 조건**:
-- LARGE/MEGA 등급: 발생 20틱 전 루머 100% 발생
+- LARGE/MEGA 등급: 발생 60틱 전 루머 100% 발생
 - MEDIUM 등급: 30% 확률로 루머 발생
 - SMALL 등급: 루머 없음
 
@@ -517,7 +524,8 @@ body: "복수의 관계자에 따르면 {company} 관련 중요 발표가 임박
        알려졌다. 사실 여부 미확인."
 ```
 
-방향(호재/악재)은 숨기고 대상만 암시.
+방향(호재/악재)을 포함하되, 정확도 70% — 30% 확률로 방향이 반전된 잘못된 힌트.
+(skill-tree.md F3 참조. 대상 + 방향 모두 제공하되 불확실성은 정확도로 표현.)
 
 **페이크 루머**: 하루 2회, 실제 이벤트와 무관한 페이크 루머 발생.
 플레이어가 루머를 무조건 신뢰할 수 없도록 불확실성 유지.
@@ -605,9 +613,10 @@ adjusted_individual = 0.55 × theme.individual_weight_scale
 total = adjusted_macro + adjusted_sector + adjusted_individual
 scope_weights = {MACRO: adjusted_macro/total, ...}
 
-// 섹터별 템플릿 가중치
+// 섹터별 템플릿 가중치 (F3)
 effective_weight = template.weight_base
                  × theme.sector_bias.get(template.target_sector, 1.0)
+                 × narrative_boost_factor  // 규칙 3-2 narrative_weight_boosts. 미설정 시 1.0
 ```
 
 ##### 6-5. 테마 힌트 공개
@@ -633,7 +642,19 @@ effective_weight = template.weight_base
 **야간 이벤트 제약**:
 - Scope: MACRO 또는 SECTOR만 (INDIVIDUAL은 개별 공시로 별도 처리)
 - Impact: SMALL 또는 MEDIUM만 (LARGE 이상은 다음날 장중 이벤트로)
-- event_type: GRADUAL_SHIFT 전용 (장 시작 후 서서히 반영)
+- event_type: GRADUAL_SHIFT 전용 (장 시작 후 서서히 반영). **INSTANT_SHOCK 불가**
+
+```
+# 야간 이벤트 생성 의사코드
+eligible_templates = filter(scope in [MACRO, SECTOR],
+                            impact_tier in [SMALL, MEDIUM])
+
+# 야간 이벤트 풀 필터: GRADUAL_SHIFT만 허용
+overnight_pool = [t for t in eligible_templates if t.event_type == "GRADUAL_SHIFT"]
+# INSTANT_SHOCK 템플릿은 야간 풀에서 제외 — 장중 이벤트로만 사용
+
+selected = weighted_random_choice(overnight_pool, count=overnight_count)
+```
 
 ##### 7-2. 야간 버퍼
 
@@ -647,6 +668,20 @@ OvernightBuffer {
 `on_day_transition` 시 각 종목에 대해 5% 확률로 INDIVIDUAL 야간 공시 생성
 (SMALL~MEDIUM, **GRADUAL_SHIFT 전용** — 장중 이벤트와 달리 INSTANT_SHOCK 불가).
 "어닝 서프라이즈", "대규모 계약 체결" 등.
+
+```
+# 개별 야간 공시 생성 의사코드
+for stock in all_stocks:
+    if randf() < overnight_individual_prob:  # 0.05
+        candidates = filter(scope == INDIVIDUAL,
+                            impact_tier in [SMALL, MEDIUM],
+                            event_tags match stock.event_tags)
+        # 야간 이벤트 풀 필터: GRADUAL_SHIFT만 허용
+        candidates = [t for t in candidates if t.event_type == "GRADUAL_SHIFT"]
+        if candidates:
+            overnight_buffer.individual_disclosures.append(
+                generate_event(weighted_random_choice(candidates), stock))
+```
 
 ##### 7-3. 프리마켓 공개
 
@@ -694,8 +729,9 @@ OvernightBuffer {
 | 시즌 시작 | UNINITIALIZED → READY | `on_season_start` — 풀 로드, 테마 배정 |
 | PRE_MARKET | READY (대기) | `on_market_state_changed(PRE_MARKET, ...)` |
 | MARKET_OPEN | ACTIVE | `on_market_open` — 일일 슬롯 스케줄 생성 |
-| MARKET_CLOSE | DAY_END | `on_market_close` — 야간 이벤트 생성, 큐 정리 |
+| MARKET_CLOSED | DAY_END | `on_market_close` — 야간 이벤트 생성, 큐 정리 |
 | DAY_TRANSITION | DAY_END (유지) | `on_day_transition` — 개별 공시 생성, 프리마켓 큐 준비 |
+| WEEK_END | DAY_END (유지) | `on_week_end` — 주간 이벤트 정리. 다음 주 테마 반영 준비 |
 | DAY_TRANSITION → PRE_MARKET | DAY_END → READY | `on_market_state_changed(PRE_MARKET, DAY_TRANSITION)` — 프리마켓 공개 |
 | 시즌 종료 | SEASON_END → UNINITIALIZED | `on_season_end` |
 
@@ -710,13 +746,13 @@ OvernightBuffer {
 
 **템플릿 선택은 해당 틱에 수행**: 쿨다운 상태는 이전 슬롯 처리 후에야
 판별 가능하므로, 구체적인 템플릿은 슬롯 발생 틱에 동적으로 선택한다.
-Lv4 루머는 슬롯 발생 시각과 Scope/Impact가 확정된 시점에서
+S3 루머는 슬롯 발생 시각과 Scope/Impact가 확정된 시점에서
 `rumor_advance_ticks` 전에 "대상 섹터/종목 관련 공시 임박" 형태로
 생성한다 (템플릿 미확정이므로 구체적 내용은 숨김).
 
 **사전 결정의 이점**:
 - 매 틱 확률 체크 불필요. `current_tick == schedule[i].tick` 단순 비교만 수행
-- Lv4 루머: 발생 시각과 Scope를 미리 알므로 루머 타이밍 결정 가능
+- S3 루머: 발생 시각과 Scope를 미리 알므로 루머 타이밍 결정 가능
 - 디버깅 시 "오늘 152틱에 MACRO LARGE 발생 예정" 즉시 확인 가능
 
 단, 최소 보장 이벤트(하루 0건 시 강제 발생)는 장 중반에 동적으로 추가될 수 있다.
@@ -727,9 +763,10 @@ Lv4 루머는 슬롯 발생 시각과 Scope/Impact가 확정된 시점에서
 |--------|-----------|-----------|
 | **게임 시계** | 뉴스/이벤트가 의존 | `on_tick` — 슬롯 체크. `on_market_state_changed(new_state, prev_state)` — PRE_MARKET 감지(프리마켓 공개), MARKET_OPEN/CLOSED 전환, DAY_TRANSITION(야간 이벤트 생성), SEASON_END(이벤트 통계 기록 + 시스템 리셋) 트리거. `on_season_start` — 시즌 초기화(이벤트 풀 로드, 테마 배정) |
 | **종목 DB** | 뉴스/이벤트가 의존 | `get_stocks_by_event_tag(tag)` — INDIVIDUAL 이벤트 대상 종목 매칭. `get_stocks_by_sector(sector_id)` — SECTOR 이벤트 대상 종목 조회. `get_stock(id)` — 종목명/섹터 변수 주입 |
-| **가격 엔진** | 가격 엔진이 이벤트를 소비 | `push_event(Event)` — 생성된 Event 오브젝트 전달. 가격 엔진의 이벤트 큐에 추가 |
-| **뉴스 피드 UI** | UI가 뉴스 텍스트를 소비 | `on_news_display(NewsQueueEntry)` — 딜레이 경과 후 뉴스 텍스트 전달. 프리마켓 뉴스 묶음 전달 |
-| **스킬 트리** | 뉴스/이벤트가 참조 | `get_market_sense_level()` — 플레이어 딜레이 틱 수 결정. Lv4 시 루머 채널 활성화 |
+| **가격 엔진** | 양방향 | **→ 가격 엔진**: `push_event(Event)` — 생성된 Event 오브젝트 전달. **← 가격 엔진**: `on_vi_triggered(stock_id, is_upper, halt_ticks)`, `on_vi_released(stock_id)`, `on_circuit_breaker(stage, halt_ticks)` — VI/CB 발동 시그널 수신 → 시스템 이벤트 뉴스 생성 (`is_system_event = true`). 뉴스/이벤트 시스템이 VI/CB 알림의 **단일 소스(single source)**이며, 트레이딩 스크린은 `on_news_display`의 `is_system_event` 플래그로 알림 탭에 라우팅만 담당 |
+| **뉴스 피드 UI** | UI가 뉴스 텍스트를 소비 | `on_news_display(NewsQueueEntry)` — 딜레이 경과 후 뉴스 텍스트 전달. 프리마켓 뉴스 묶음 전달. `is_system_event = true`인 항목은 토스트를 생성하지 않음 (뉴스 피드 UI 규칙 5-1a 참조) |
+| **트레이딩 스크린** | 트레이딩 스크린이 알림 라우팅 | `on_news_display` 구독 → `is_system_event = true`인 항목을 VI/CB 알림 탭에 표시 (트레이딩 스크린 규칙 9 참조) |
+| **스킬 트리** | 뉴스/이벤트가 참조 | `get_news_delay_ticks()` — 딜레이 틱 수 반환. `has_rumor_channel()` — S3 해금 시 루머 활성화 |
 | **시즌/대회 관리** | 뉴스/이벤트가 참조 | `get_season_theme()` — 활성 시즌 테마 조회. 테마별 이벤트 가중치 적용 |
 
 ## Formulas
@@ -740,7 +777,7 @@ Lv4 루머는 슬롯 발생 시각과 Scope/Impact가 확정된 시점에서
 
 ```
 E[daily_events] = Σ(slot_probability_i) for all slots
-                = 0.70 + 0.55 + 0.55 + 0.60 = 2.40
+                = 0.70(Opening) + 0.55(Midday-1) + 0.55(Midday-2) + 0.60(Closing) = 2.40
 ```
 
 #### F2. Scope 가중치 (시즌 테마 적용)
@@ -755,7 +792,10 @@ normalized_w = adjusted_w / Σ(adjusted_w_all)
 ```
 effective_weight = template.weight_base
                  × theme.sector_bias.get(target_sector, 1.0)
+                 × narrative_boost_factor
 ```
+
+> `narrative_boost_factor` = 규칙 3-2의 `narrative_weight_boosts`에서 해당 template_id의 부스트 값. 미설정 시 1.0.
 
 #### F4. 종목 선택 가중치 (INDIVIDUAL)
 
@@ -768,15 +808,16 @@ volatility_weight: EXTREME=1.5, HIGH=1.2, MEDIUM=1.0, LOW=0.7
 
 ```
 display_tick = created_tick + player_delay_ticks
-player_delay_ticks: Lv1=30, Lv2=15, Lv3=0
+player_delay_ticks: T0=40 (10min×4TPM), T1=20 (5min×4TPM), T2=0
 ```
 
-#### F6. 루머 발생 (Lv4)
+#### F6. 루머 발생 (S3 해금)
 
 ```
 rumor_tick = event_scheduled_tick - advance_ticks
-advance_ticks = 20
+advance_ticks = 60  # RUMOR_LEAD_MINUTES(15) × TICKS_PER_MINUTE(4)
 rumor_probability: LARGE/MEGA=1.0, MEDIUM=0.3, SMALL=0.0
+rumor_accuracy = 0.70  # 30% 확률로 방향 반전
 ```
 
 ### 변수 마스터 테이블
@@ -790,9 +831,9 @@ rumor_probability: LARGE/MEGA=1.0, MEDIUM=0.3, SMALL=0.0
 | `scope_weight_sector` | 0.35 | 0.2~0.5 | config | SECTOR 기본 가중치 |
 | `scope_weight_macro` | 0.10 | 0.05~0.3 | config | MACRO 기본 가중치 |
 | `daily_hard_cap` | 5 | 3~8 | config | 하루 최대 이벤트 수 |
-| `player_delay_lv1` | 30 | 15~60 | config | Lv1 뉴스 딜레이 (틱) |
-| `player_delay_lv2` | 15 | 5~30 | config | Lv2 뉴스 딜레이 (틱) |
-| `rumor_advance_ticks` | 20 | 10~40 | config | 루머 선행 틱 수 (= Lv4 player_delay의 절대값) |
+| `NEWS_DELAY_T0` | 10분 (=40틱) | 5~15분 | @export | T0 뉴스 딜레이 (분 단위, ×TPM으로 틱 변환) |
+| `NEWS_DELAY_T1_MIN` | 5분 (=20틱) | 2~10분 | @export | T1 뉴스 딜레이 (S1 해금 시) |
+| `rumor_advance_ticks` | 60 | 20~120 | config | 루머 선행 틱 수 = RUMOR_LEAD_MINUTES(15) × TPM(4). skill-tree.md 참조 |
 | `fake_rumor_per_day` | 2 | 0~4 | config | 하루 페이크 루머 수 |
 | `overnight_individual_prob` | 0.05 | 0.02~0.10 | config | 야간 개별 공시 확률 |
 
@@ -804,15 +845,15 @@ rumor_probability: LARGE/MEGA=1.0, MEDIUM=0.3, SMALL=0.0
 | 한 틱에 복수 슬롯 겹침 | 순서대로 모두 처리. 각각 독립 Event 생성 | 극히 희박하나 가능 |
 | INDIVIDUAL 대상 후보 종목 0개 | SECTOR로 Scope 격상 후 재시도 | 풀 고갈 방지 |
 | 쿨다운으로 모든 템플릿 소진 | Impact를 SMALL로 강등 후 재시도. 여전히 없으면 슬롯 건너뜀 | 무한 루프 방지 |
-| Lv1 딜레이 뉴스가 장 마감 전 미표시 | INDIVIDUAL/SECTOR: 폐기. MACRO: "오늘의 시장 요약"에 통합 | 정보 비대칭 게임플레이 |
-| 페이크 루머와 진짜 루머 동시 발생 | 둘 다 표시. 플레이어가 구분해야 함 | Lv4 스킬의 판단 요소 |
+| S0 딜레이 뉴스가 장 마감 전 미표시 | INDIVIDUAL/SECTOR: 폐기. MACRO: "오늘의 시장 요약"에 통합 | 정보 비대칭 게임플레이 |
+| 페이크 루머와 진짜 루머 동시 발생 | 둘 다 표시. 플레이어가 구분해야 함 | S3 스킬의 판단 요소 |
 | MEGA 이벤트 2개가 같은 날 추첨 | 두 번째 MEGA를 LARGE로 강등 | 하루 MEGA 최대 1회 |
 | 시즌 첫 거래일 (테마 미파악) | 정상 이벤트 발생. 힌트는 hint_revealed_at_day까지 미공개 | 테마 추론이 스킬 |
 | 야간 이벤트 + 프리마켓 공시 동시 | 모두 "오늘의 시장 전망"에 묶어 표시. 가격 엔진에 순서대로 전달 | 정보 과부하 방지 |
 | GRADUAL_SHIFT 야간 이벤트 진행 중 다음 장 마감 | 잔여 틱 보존. 거래일 경계에서 소실 없음 | 가격 엔진 규칙과 일관 |
 | direction=VARIABLE 이벤트 | 50:50 무작위 결정. 뉴스 텍스트도 방향에 맞게 조정 | 예측 불가 이벤트 허용 |
 | 강제 발생 vs 하드캡 충돌 | 하드캡(5) 판정이 우선. 슬롯에서 이미 5개 발생 시 강제 발생 없음. 반대로 4슬롯 모두 미발생 시 장 중반에 SMALL MACRO 1개 강제 — 이 강제 이벤트도 하드캡 카운트에 포함 | 하드캡은 절대 상한, 강제는 빈 날 방지용 안전망 |
-| Lv4 루머 타이밍 — 이벤트 발생 틱 < rumor_advance_ticks (20) | 루머 display_tick = 0 (PRE_MARKET). 다음 거래일이 아닌 **현재 거래일 PRE_MARKET** 뉴스 묶음에 루머 포함 — 이미 MARKET_OPEN이면 즉시 표시. 루머가 이벤트보다 20틱 전에 표시될 수 없으므로 가능한 만큼만 선행 | 틱 0 이전은 존재하지 않음. 장 초반 이벤트의 루머는 축소된 선행 시간으로 표시 |
+| S3 루머 타이밍 — 이벤트 발생 틱 < rumor_advance_ticks (60) | 루머 display_tick = 0 (PRE_MARKET). 다음 거래일이 아닌 **현재 거래일 PRE_MARKET** 뉴스 묶음에 루머 포함 — 이미 MARKET_OPEN이면 즉시 표시. 루머가 이벤트보다 60틱 전에 표시될 수 없으므로 가능한 만큼만 선행 | 틱 0 이전은 존재하지 않음. 장 초반 이벤트의 루머는 축소된 선행 시간으로 표시 |
 | mutex_group 필터링으로 후보 템플릿 0개 | mutex 필터 전 단계(scope/impact)로 후퇴 후 재시도. 그래도 없으면 슬롯 건너뜀 | 무한 루프 방지 |
 | narrative_state TTL=0인 이벤트 | state를 설정하지 않음 (narrative_sets_state 무시). 다른 필드는 정상 동작 | 0은 "미설정"의 의미 |
 | 같은 mutex_group의 야간 이벤트 + 장중 이벤트 | 야간 이벤트는 전일 mutex에 등록. 다음 날은 새 mutex 딕셔너리이므로 같은 그룹 장중 이벤트 발생 가능 | mutex는 일일 스코프 |
@@ -826,7 +867,7 @@ rumor_probability: LARGE/MEGA=1.0, MEDIUM=0.3, SMALL=0.0
 | 종목 DB | 뉴스/이벤트가 의존 | event_tags로 대상 종목 매칭, 종목 속성 참조. **Hard** |
 | 가격 엔진 | 가격 엔진이 이벤트를 소비 | Event 오브젝트 전달. **Hard** (가격 엔진 입장) |
 | 뉴스 피드 UI | UI가 뉴스 텍스트를 소비 | NewsQueueEntry 전달. **Soft** (UI 없이도 이벤트 생성 가능) |
-| 스킬 트리 | 뉴스/이벤트가 참조 | 딜레이 레벨 조회. **Soft** (미구현 시 Lv1 기본값) |
+| 스킬 트리 | 뉴스/이벤트가 참조 | 딜레이 레벨 조회. **Soft** (미구현 시 S0 기본값) |
 | 시즌/대회 관리 | 뉴스/이벤트가 참조 | 시즌 테마 조회. **Soft** (미구현 시 기본 가중치) |
 
 ## Tuning Knobs
@@ -836,8 +877,9 @@ rumor_probability: LARGE/MEGA=1.0, MEDIUM=0.3, SMALL=0.0
 | `slot_probability_*` | 0.55~0.70 | 0.3~0.9 | 이벤트 빈도 증가 | 조용한 시장 |
 | `daily_hard_cap` | 5 | 3~8 | 더 바쁜 시장 | 인지 부하 감소 |
 | `scope_weight_macro` | 0.10 | 0.05~0.3 | 시장 전체 충격 빈번 | MACRO 희소화 |
-| `player_delay_lv1` | 30틱 | 15~60 | 정보 격차 심화. 너무 높으면 이탈 위험 | Lv1도 빠른 반응. 스킬 업그레이드 가치 감소 |
-| `rumor_advance_ticks` | 20틱 | 10~40 | 루머 가치 증가. 너무 높으면 Lv4 OP | 선행 시간 감소. 루머 실질 가치 하락 |
+| `NEWS_DELAY_T0` | 10분(=40틱) | 5~15분 | 정보 격차 심화. 너무 높으면 이탈 위험 | T0도 빠른 반응. 스킬 업그레이드 가치 감소 |
+| `max_single_impact` | 0.15 | 0.10~0.25 | 극단적 이벤트 허용 (VI 빈번) | 가격 변동 상한 제한 (안정적 시장) |
+| `rumor_advance_ticks` | 60틱 | 20~120 | 루머 가치 증가. 너무 높으면 S3 OP | 선행 시간 감소. 루머 실질 가치 하락 |
 | `fake_rumor_per_day` | 2 | 0~4 | 루머 신뢰도 하락 | 루머 과신 가능 |
 | `overnight_individual_prob` | 0.05 | 0.02~0.10 | 프리마켓 뉴스 풍부 | 조용한 아침 |
 | `theme.sector_bias` | 테마별 상이 | 0.3~3.0 | 테마 편향 강화 | 균등 분포 |
@@ -853,8 +895,8 @@ rumor_probability: LARGE/MEGA=1.0, MEDIUM=0.3, SMALL=0.0
 - [ ] 빈 거래일이 발생하지 않음 (최소 1개 보장)
 - [ ] MACRO/SECTOR/INDIVIDUAL 이벤트가 설계 비율대로 분포함
 - [ ] 템플릿 변수 치환 후 뉴스 텍스트가 자연스럽게 읽힘
-- [ ] Lv1에서 30틱 딜레이 후 뉴스가 표시됨
-- [ ] Lv3에서 이벤트와 동시에 뉴스가 표시됨
+- [ ] T0에서 40틱(10분×4TPM) 딜레이 후 뉴스가 표시됨
+- [ ] S2(T2) 해금 시 이벤트와 동시에 뉴스가 표시됨
 - [ ] 가격 엔진에 유효한 Event 오브젝트가 정확히 전달됨
 - [ ] LARGE+ 이벤트 시 가격 엔진에서 BREAKOUT이 유발됨
 - [ ] 시즌 테마에 따라 이벤트 분포가 유의미하게 변화함
@@ -865,14 +907,17 @@ rumor_probability: LARGE/MEGA=1.0, MEDIUM=0.3, SMALL=0.0
 - [ ] INDIVIDUAL mutex의 {stock_id} 플레이스홀더가 종목별로 독립 동작
 - [ ] (V-Slice) narrative_state TTL이 정확히 감소하고 만료 시 삭제됨
 - [ ] (V-Slice) narrative_weight_boosts가 템플릿 가중치에 정확히 반영됨
+- [ ] S1 해금 시 뉴스 딜레이가 T0(40틱)에서 T1(20틱)으로 감소함
+- [ ] S3 해금 시 LARGE/MEGA 이벤트 60틱 전에 루머가 생성되어 표시됨. scheduled_tick < 60인 경우 PRE_MARKET에 루머가 표시됨
 - [ ] 성능: 일일 슬롯 생성 1ms 이내, 틱당 슬롯 체크 0.1ms 이내
 
 ## Open Questions
 
 | Question | Owner | Deadline | Resolution |
 |----------|-------|----------|------------|
-| 이벤트 풀 50개 콘텐츠 실제 작성 — 템플릿별 변수 후보값 포함 | writer + game-designer | V-Slice | MVP는 최소 30개로 시작 |
+| 이벤트 풀 50개 콘텐츠 실제 작성 — 템플릿별 변수 후보값 포함 | writer + game-designer | V-Slice | MVP는 최소 50개. Overview 기준과 일치. |
 | direction=VARIABLE 이벤트의 뉴스 텍스트 분기 — 호재/악재 양방향 템플릿 필요 여부 | game-designer | 구현 시 | **결정됨**: `headline_positive`/`headline_negative` + `body_positive`/`body_negative` 듀얼 필드 방식 채택 (규칙 1-3 스키마 참조) |
-| Lv4 페이크 루머의 최적 빈도 — 하루 2회가 너무 많거나 적을 수 있음 | game-designer | 프로토타입 후 | 플레이테스트로 조정 |
+| S3 페이크 루머의 최적 빈도 — 하루 2회가 너무 많거나 적을 수 있음 | game-designer | 프로토타입 후 | 플레이테스트로 조정 |
 | 시즌 테마 추가 (5개+) 시 테마 간 밸런스 검증 방법 | systems-designer | V-Slice | 미정 |
 | 이벤트 풀 저장 형식 — JSON vs Godot Resource | engine-programmer | 엔진 설정 후 | /setup-engine 후 결정 |
+| 뉴스 출처별 신뢰도 시스템 — EventTemplate에 `source_type` 필드 추가 (공시/뉴스/업계/루머). 퍼센트 수치 표시 NO, 아이콘 코드로 시각 구분. 루머 내 출처 차별화로 판단 깊이 향상 | game-designer + ux-designer | V-Slice | MVP=단일 [루머] 태그. 외부 감사 권고 (2026-04-03) |

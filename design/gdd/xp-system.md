@@ -58,7 +58,7 @@ daily_xp = floor(BASE_DAILY_XP × daily_return_multiplier)
 - `BASE_DAILY_XP` = 30 (튜닝 가능)
 - 거래 0건인 날: 일일 보너스 XP 없음 (활동 조건 — 체결(FILLED) 1건 이상 필요)
 - 손실 시에도 최소 XP 부여 — 손실에서 배우는 것도 성장
-- 시즌 첫 거래일: 전일 장 마감 데이터 없으므로 초기 시드머니 대비 산출
+- 시즌 첫 거래일: 전일 장 마감 데이터 없으므로 `season_start_cash` 대비 산출 (→ Edge Cases: 시즌 첫 거래일 기준)
 
 ##### 1-2. 시즌 보너스 XP (Season Bonus XP) — 시즌 종료 시
 
@@ -85,11 +85,12 @@ required_xp(level) = BASE_LEVEL_XP × (level ^ LEVEL_EXPONENT)
 
 - `BASE_LEVEL_XP` = 100
 - `LEVEL_EXPONENT` = 1.5
-- 예시: Lv1→2: 100, Lv2→3: 283, Lv3→4: 520, Lv5→6: 1,118
+- 예시: 레벨 1→2: 100, 2→3: 282, 3→4: 519, 5→6: 1,118
 
 레벨업 시:
 - 스킬 포인트 +1 획득
-- `on_level_up(new_level, skill_points)` 시그널 발신
+- `on_level_up(new_level: int, skill_points: int)` 시그널 발신. `skill_points`는 항상 1.
+- **2+ 레벨업 시**: 레벨당 1회씩 순차 발신. 예: 레벨 3→5 = `on_level_up(4, 1)` → `on_level_up(5, 1)` 순서.
 - 레벨업 연출 (UI 담당)
 
 #### 규칙 3. 스킬 포인트
@@ -98,6 +99,14 @@ required_xp(level) = BASE_LEVEL_XP × (level ^ LEVEL_EXPONENT)
 - 스킬 트리에서 소비 (스킬 트리 GDD에서 정의)
 - 미사용 포인트 누적 가능
 - 영구 보존 (시즌 리셋 없음)
+
+#### 규칙 4. 시그널 발행 시점
+
+- **`on_xp_gained(amount: int, new_total: int)`**: XP가 추가될 때마다 즉시 발신.
+  - 일일 보너스: `on_market_close` 처리 중 1회 발신
+  - 시즌 보너스: `on_season_end` 처리 중 1회 발신
+  - UI(프로그레션 UI)가 XP 바 애니메이션 트리거로 사용
+- **`on_level_up`**: `on_xp_gained` 발신 직후, 레벨 임계값 도달 시 발신 (규칙 2 참조)
 
 ### States and Transitions
 
@@ -167,7 +176,7 @@ RANK_XP_TABLE:
 | 4~5위 | 150 |
 | 6위+ | 50 |
 
-예시: 시즌 3위, 수익률 +25% → 200 + 250 + 250 = **700 XP**
+예시: 시즌 3위, 수익률 +25% → BASE_SEASON_XP(200) + rank_bonus(250) + return_bonus(floor(25×10)=250) = **700 XP**
 
 ### F3. 레벨업 필요 XP
 
@@ -182,14 +191,20 @@ required_xp(level) = floor(BASE_LEVEL_XP × (level ^ LEVEL_EXPONENT))
 
 레벨업 테이블 (기본값 기준):
 
-| 레벨 | 필요 누적 XP | 해당 레벨 XP | 예상 시즌 수 |
-|------|-------------|------------|------------|
+| 레벨 | 해당 구간 필요 XP | 필요 누적 XP | 예상 시즌 수 |
+|------|------------|-------------|------------|
 | 1→2 | 100 | 100 | ~0.1 시즌 |
-| 2→3 | 383 | 283 | ~0.5 시즌 |
-| 3→4 | 903 | 520 | ~1 시즌 |
-| 4→5 | 1,603 | 700 | ~2 시즌 |
-| 5→6 | 2,521 | 918 | ~2.5 시즌 |
-| 9→10 | 8,662 | 2,080 | ~5.5 시즌 |
+| 2→3 | 282 | 382 | ~0.2 시즌 |
+| 3→4 | 519 | 901 | ~0.6 시즌 |
+| 4→5 | 800 | 1,701 | ~1.1 시즌 |
+| 5→6 | 1,118 | 2,819 | ~1.8 시즌 |
+| 6→7 | 1,469 | 4,288 | ~2.7 시즌 |
+| 7→8 | 1,852 | 6,140 | ~3.8 시즌 |
+| 8→9 | 2,262 | 8,402 | ~5.3 시즌 |
+| 9→10 | 2,700 | 11,102 | ~6.9 시즌 |
+
+> **산출 기준**: `floor(100 × level^1.5)`. 예상 시즌 수는 시즌 평균 ~1,600 XP
+> (경쟁 플레이어 기준: 3위, 수익률 1~3%) 가정. 하위 플레이어는 시즌당 ~550 XP.
 
 ### F4. 스킬 포인트
 
@@ -201,7 +216,15 @@ available_skill_points = total_skill_points - spent_skill_points
 시즌 1회 평균 XP 추정 (20거래일, 3위 가정):
 - 일일 보너스: 20일 × 45 (평균 multiplier 1.5) = 900
 - 시즌 보너스: 200 + 250(3위) + 250(+25%) = 700
-- **합계: ~1,600 XP / 시즌** → 약 2시즌에 Lv5 도달 (스킬 포인트 4개)
+- **합계: ~1,600 XP / 시즌** → 약 2시즌에 레벨 5 도달 (스킬 포인트 4개, T1 전체 해금 가능)
+
+### F5. 누적 XP 조회
+
+```
+get_cumulative_xp_for_level(target_level) = Σ required_xp(lv) for lv = 1 to (target_level - 1)
+```
+
+레벨업 판정: `total_xp >= get_cumulative_xp_for_level(current_level + 1)` 일 때 레벨업 발생.
 
 ## Edge Cases
 
@@ -215,7 +238,7 @@ available_skill_points = total_skill_points - spent_skill_points
 | 최대 레벨 | 제한 없음. XP와 레벨은 무한 성장 (스킬 포인트 잉여 누적) |
 | 저장 데이터 손상 | XP/레벨이 음수가 되면 0으로 클램프 |
 | 스팸 매매 | XP에 영향 없음. 거래 횟수는 XP 산출에 사용되지 않음 |
-| 시즌 첫 거래일 기준 | 전일 장 마감 자산 = 초기 시드머니 (1,000,000원) |
+| 시즌 첫 거래일 기준 | 전일 장 마감 자산이 없으므로 season_start_cash를 전일 자산으로 대체하여 daily_return을 산출. 첫 시즌: 1,000,000원. 이후 시즌: 이월된 season_start_cash. |
 
 ## Dependencies
 
@@ -232,8 +255,8 @@ available_skill_points = total_skill_points - spent_skill_points
 
 | 시스템 | 의존 유형 | 데이터 |
 |--------|----------|--------|
-| 스킬 트리 | Hard | `get_available_skill_points()`, `on_level_up` 시그널 |
-| UI (XP 표시) | Soft | `get_current_xp()`, `get_current_level()`, `get_xp_progress()` |
+| 스킬 트리 | Hard | `get_available_skill_points()`, `on_level_up(new_level: int, skill_points: int)` 시그널 |
+| UI (프로그레션 UI) | Soft | `get_total_xp()`, `get_current_level()`, `get_xp_progress()`, `get_cumulative_xp_for_level()`, `on_xp_gained(amount: int, new_total: int)` 시그널, `on_level_up(new_level: int, skill_points: int)` 시그널 (레벨업 배너 트리거) |
 
 ## Tuning Knobs
 
@@ -259,7 +282,7 @@ available_skill_points = total_skill_points - spent_skill_points
 | AC-6 | 한 번에 2+ 레벨업 시 각 레벨마다 포인트 부여 | 유닛 테스트: 대량 XP 부여 후 포인트 == 레벨-1 |
 | AC-7 | XP/레벨/스킬 포인트가 시즌 리셋 시 영구 유지 | 시즌 리셋 전후 값 비교 테스트 |
 | AC-8 | `on_level_up` 시그널이 레벨업 시 정확히 1회 발신 | 시그널 카운트 테스트 |
-| AC-9 | 시즌 1회 평균 XP가 ~1,400~1,800 범위 (20거래일 기준) | 시뮬레이션 테스트로 밸런스 확인 |
+| AC-9 | 시즌 1회 평균 XP가 ~1,400~1,800 범위 (경쟁 플레이어 기준, 20거래일, 수익률 1~3%, 3위 가정). 하위 플레이어 기준 ~550 XP 이상. | 시뮬레이션 테스트로 밸런스 확인 |
 
 ## Open Questions
 

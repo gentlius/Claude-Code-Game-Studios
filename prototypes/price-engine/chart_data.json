@@ -1,5 +1,5 @@
 {
-  "KF": {
+  "KSF": {
     "name": "코스모푸드",
     "base_price": 65000,
     "volatility": "MEDIUM",
@@ -15751,7 +15751,7 @@
       2
     ]
   },
-  "SC": {
+  "STC": {
     "name": "스타칩",
     "base_price": 120000,
     "volatility": "HIGH",
@@ -31503,7 +31503,7 @@
       3
     ]
   },
-  "KB": {
+  "KRB": {
     "name": "코리아뱅크",
     "base_price": 52000,
     "volatility": "LOW",
@@ -47255,7 +47255,7 @@
       1
     ]
   },
-  "NE": {
+  "NXE": {
     "name": "넥스트엔터",
     "base_price": 42000,
     "volatility": "HIGH",
@@ -63007,7 +63007,7 @@
       3
     ]
   },
-  "MG": {
+  "MDG": {
     "name": "메디진",
     "base_price": 180000,
     "volatility": "EXTREME",
@@ -78759,7 +78759,7 @@
       4
     ]
   },
-  "GC": {
+  "GRC": {
     "name": "그린케미",
     "base_price": 38000,
     "volatility": "MEDIUM",
@@ -94511,7 +94511,7 @@
       2
     ]
   },
-  "DH": {
+  "DHI": {
     "name": "대한중공업",
     "base_price": 95000,
     "volatility": "LOW",
@@ -110263,7 +110263,7 @@
       3
     ]
   },
-  "PT": {
+  "PLT": {
     "name": "피플텔레콤",
     "base_price": 78000,
     "volatility": "MEDIUM",
@@ -126015,7 +126015,7 @@
       2
     ]
   },
-  "SK": {
+  "SKL": {
     "name": "스카이로직",
     "base_price": 210000,
     "volatility": "HIGH",
@@ -141767,7 +141767,7 @@
       4
     ]
   },
-  "BF": {
+  "BPH": {
     "name": "블루팜",
     "base_price": 320000,
     "volatility": "EXTREME",

@@ -190,6 +190,8 @@ func test_mutex_clears_on_market_open() -> void:
 	assert_eq(NewsEventSystem._daily_mutex.size(), 1, "precondition: mutex registered")
 
 	# Act — invoke the actual market-open handler that clears the mutex
+	# (state must be ACTIVE or the handler early-returns before clearing)
+	NewsEventSystem._state = NewsEventSystem.SystemState.ACTIVE
 	NewsEventSystem._on_market_open()
 
 	# Assert

@@ -226,3 +226,9 @@ func load_save_data(data: Dictionary) -> void:
 		# Only load skills that still exist in definitions (GDD edge case)
 		if _skill_definitions.has(skill_id):
 			_unlocked_skills[skill_id] = true
+
+
+## Resets all unlocked skills for unit tests. Call in before_each.
+## Note: skill point balances are owned by XpSystem — reset that separately.
+func reset_for_testing() -> void:
+	_unlocked_skills.clear()

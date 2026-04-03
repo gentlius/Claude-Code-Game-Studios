@@ -14,6 +14,13 @@ func before_each() -> void:
 	OrderEngine._sell_locks.clear()
 	# Ensure limit order skill (TR1) is unlocked so tests exercise tick size logic
 	SkillTree._unlocked_skills["TR1"] = true
+	# Ensure KSF exists in PriceEngine so get_current_price returns a real value
+	# (tick size tests set limit_price explicitly, but validation reads current_price for daily limits)
+	if not PriceEngine._stock_states.has("KSF"):
+		PriceEngine._stock_states["KSF"] = {
+			"current_price": 65000,
+			"prev_day_close": 65000,
+		}
 
 
 # ── Tick Size Validation in Limit Orders ──
@@ -44,6 +51,9 @@ func test_limit_order_accepted_valid_tick_size() -> void:
 func test_limit_order_tick_size_low_price() -> void:
 	GameClock._market_state = GameClock.MarketState.MARKET_OPEN
 	CurrencySystem._sim_cash = 10_000_000
+	# Set prev_day_close near the test price so daily limits don't reject first
+	PriceEngine._stock_states["KSF"]["prev_day_close"] = 3000
+	PriceEngine._stock_states["KSF"]["current_price"] = 3000
 
 	# At price 3000, tick=5. 3003 is invalid.
 	var order: Dictionary = OrderEngine.submit_limit_order("BUY", "KSF", 1, 3003)
@@ -54,6 +64,9 @@ func test_limit_order_tick_size_low_price() -> void:
 func test_limit_order_tick_size_boundary() -> void:
 	GameClock._market_state = GameClock.MarketState.MARKET_OPEN
 	CurrencySystem._sim_cash = 10_000_000
+	# Set prev_day_close near the test price so daily limits don't reject first
+	PriceEngine._stock_states["KSF"]["prev_day_close"] = 5000
+	PriceEngine._stock_states["KSF"]["current_price"] = 5000
 
 	# At price 5000, tick=10. 5000 is valid.
 	var order: Dictionary = OrderEngine.submit_limit_order("BUY", "KSF", 1, 5000)

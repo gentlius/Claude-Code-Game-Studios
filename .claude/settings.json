@@ -86,7 +86,15 @@
       "Bash(find '/c/Program Files' '/c/Program Files \\(x86\\)' -maxdepth 3 -iname *godot* -type f)",
       "Bash(/d/Godot4/Godot_v4.6.1-stable_win64_console.exe --headless --export-release \"Windows Desktop\" \"d:/Github/ta/build/windows/SeedMoney.exe\" --path \"d:/Github/ta\")",
       "Bash(/d/Godot4/Godot_v4.6.1-stable_win64_console.exe --headless --path \"d:/Github/ta\" --script res://tests/integration/test_trading_screen.gd)",
-      "Bash(/d/Godot4/Godot_v4.6.1-stable_win64_console.exe --path \"d:/Github/ta\" --headless --quit-after 3)"
+      "Bash(/d/Godot4/Godot_v4.6.1-stable_win64_console.exe --path \"d:/Github/ta\" --headless --quit-after 3)",
+      "Bash(godot --headless --path . -s addons/gut/gut_cmdln.gd -gdir=tests/unit -ginclude_subdirs -gexit)",
+      "Bash(\"/c/Users/joywo/Downloads/Godot_v4.6.1-stable_win64.exe\" --headless --path \"d:/Github/ta\" -s addons/gut/gut_cmdln.gd -gdir=tests/unit -ginclude_subdirs -gexit)",
+      "Bash(cmd /c '\"C:\\\\Users\\\\joywo\\\\Downloads\\\\Godot_v4.6.1-stable_win64.exe\" --headless --path \"D:\\\\Github\\\\ta\" -s addons/gut/gut_cmdln.gd -gdir=tests/unit -ginclude_subdirs -gexit')",
+      "Bash(cmd /c \"\\\\\"C:\\\\\\\\Users\\\\\\\\joywo\\\\\\\\Downloads\\\\\\\\Godot_v4.6.1-stable_win64.exe\\\\\" --headless --path \\\\\"D:\\\\\\\\Github\\\\\\\\ta\\\\\" -s addons/gut/gut_cmdln.gd -gdir=tests/unit -ginclude_subdirs -gexit 2>&1\")",
+      "Bash(cmd /c \"\\\\\"C:\\\\\\\\Users\\\\\\\\joywo\\\\\\\\Downloads\\\\\\\\Godot_v4.6.1-stable_win64.exe\\\\\" --headless --path \\\\\"D:\\\\\\\\Github\\\\\\\\ta\\\\\" -s addons/gut/gut_cmdln.gd -gdir=tests/unit -ginclude_subdirs -gexit > D:\\\\\\\\Github\\\\\\\\ta\\\\\\\\gut_output.txt 2>&1\")",
+      "Bash(powershell -Command \"& 'C:\\\\Users\\\\joywo\\\\Downloads\\\\Godot_v4.6.1-stable_win64.exe' --headless --path 'D:\\\\Github\\\\ta' -s 'addons/gut/gut_cmdln.gd' -gdir='tests/unit' -ginclude_subdirs -gexit 2>&1 | Tee-Object -FilePath 'D:\\\\Github\\\\ta\\\\gut_output.txt'\")",
+      "Read(//d/Godot4//**)",
+      "Bash(\"/d/Godot4/Godot_v4.6.1-stable_win64_console.exe\" --headless --path \"D:/Github/ta\" -s \"addons/gut/gut_cmdln.gd\" -gdir=\"tests/unit\" -ginclude_subdirs -gexit)"
     ],
     "deny": [
       "Bash(rm -rf *)",

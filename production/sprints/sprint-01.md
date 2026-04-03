@@ -98,6 +98,6 @@ MVP 보강(VI/서킷브레이커, 지수 HUD, 테스트 환경)을 완료하고,
 - [x] Must Have 6개 태스크 전부 완료 (S1-01,02,03,06,07,13 모두 pre-sprint)
 - [x] VI/CB 발동 시 뉴스 생성 확인 (VI/CB alerts → trading_screen alerts tab)
 - [x] 경험치가 장 마감 시 수익률 기반으로 부여되는 것 확인 (xp_system.gd + 23 tests)
-- [ ] 헤드리스 테스트 통과 (기존 + 신규)
+- [x] 헤드리스 테스트 통과 (120/120, 2026-04-03)
 - [x] GDD 업데이트 완료 (trading-screen, news-feed-ui, news-events 3건 QA 후 수정)
-- [ ] 코드 커밋 완료
+- [x] 코드 커밋 완료

@@ -188,13 +188,24 @@ var _cb_halt_remaining: int = 0  ## Stage 1 remaining halt ticks
 # ── Lifecycle ──
 
 func _ready() -> void:
-	GameClock.on_tick.connect(_on_tick)
+	# on_tick is NOT connected here — GameClock calls _on_tick directly in
+	# _process_tick() to enforce the GDD-mandated News → Price → Order order.
 	GameClock.on_season_start.connect(_on_season_start)
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
 
 
 func _on_season_start() -> void:
 	_initialize_season()
+
+
+## Resets all price engine state for unit tests. Call in before_each.
+func reset_for_testing() -> void:
+	_stock_states.clear()
+	_vi_states.clear()
+	_cb_stage = 0
+	_cb_halt_remaining = 0
+	_prev_day_index = 0.0
+	_current_index = 0.0
 
 
 func _on_market_state_changed(

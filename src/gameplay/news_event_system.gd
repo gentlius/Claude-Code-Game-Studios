@@ -113,7 +113,8 @@ var _season_stats: Dictionary = {
 func _ready() -> void:
 	_build_slot_config()
 	GameClock.on_season_start.connect(_on_season_start)
-	GameClock.on_tick.connect(_on_tick)
+	# on_tick is NOT connected here — GameClock calls _on_tick directly in
+	# _process_tick() to enforce the GDD-mandated News → Price → Order order.
 	GameClock.on_market_open.connect(_on_market_open)
 	GameClock.on_market_close.connect(_on_market_close)
 	GameClock.on_day_transition.connect(_on_day_transition)
@@ -140,6 +141,14 @@ func _build_slot_config() -> void:
 ## Converts game-minutes to ticks.
 static func _minutes_to_ticks(minutes: int) -> int:
 	return minutes * GameClock.TICKS_PER_MINUTE
+
+
+## Resets volatile intraday/queue state for unit tests. Call in before_each.
+func reset_for_testing() -> void:
+	_daily_mutex.clear()
+	_news_delay_queue.clear()
+	_daily_event_count = 0
+	_state = SystemState.UNINITIALIZED
 
 
 func _on_season_start() -> void:

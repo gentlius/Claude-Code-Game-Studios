@@ -86,3 +86,10 @@ func award_prize(amount: int) -> void:
 		return
 	_deposit += amount
 	deposit_changed.emit(_deposit, amount)
+
+
+## Resets volatile season state for unit tests. Call in before_each.
+## Does NOT reset _deposit — tests that need a clean deposit must set it directly.
+func reset_for_testing() -> void:
+	_sim_cash = 0
+	_season_active = false

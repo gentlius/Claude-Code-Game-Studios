@@ -27,7 +27,8 @@ var _sell_locks: Dictionary = {}  ## stock_id -> locked_quantity (int)
 # ── Lifecycle ──
 
 func _ready() -> void:
-	GameClock.on_tick.connect(_on_tick)
+	# on_tick is NOT connected here — GameClock calls _on_tick directly in
+	# _process_tick() to enforce the GDD-mandated News → Price → Order order.
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
 	GameClock.on_season_start.connect(_on_season_start)
 
@@ -39,6 +40,16 @@ func _on_season_start() -> void:
 	_order_history.clear()
 	_sell_locks.clear()
 	_next_order_id = 1
+
+
+## Resets all order engine state for unit tests. Call in before_each.
+func reset_for_testing() -> void:
+	_next_order_id = 1
+	_market_order_queue.clear()
+	_pending_limit_orders.clear()
+	_pre_market_queue.clear()
+	_order_history.clear()
+	_sell_locks.clear()
 
 # ── Public API ──
 

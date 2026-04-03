@@ -228,6 +228,7 @@ func test_cb_skips_when_prev_day_index_zero() -> void:
 
 func test_cb_stage2_triggers_at_minus_20pct() -> void:
 	# Arrange
+	watch_signals(PriceEngine)
 	PriceEngine._prev_day_index = 1000.0
 	PriceEngine._current_index = 800.0  # -20%
 	PriceEngine._cb_stage = 0
@@ -235,8 +236,9 @@ func test_cb_stage2_triggers_at_minus_20pct() -> void:
 	# Act
 	PriceEngine._check_circuit_breaker()
 
-	# Assert — stage 2 triggers _end_trading_day() which is an acceptable side effect
-	assert_eq(PriceEngine._cb_stage, 2, "CB Stage 2 should trigger at -20%")
+	# Assert — _end_trading_day() resets _cb_stage to 0, so verify via signal instead
+	assert_signal_emitted(PriceEngine, "on_circuit_breaker",
+		"CB Stage 2 should emit on_circuit_breaker signal")
 
 
 func test_cb_stage2_skips_if_already_stage2() -> void:

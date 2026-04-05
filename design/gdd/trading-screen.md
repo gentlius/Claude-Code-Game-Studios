@@ -425,3 +425,43 @@ estimated_amount = quantity × reference_price
 | 모바일/태블릿 대응 레이아웃 | ux-designer | 확장 시점 | MVP는 PC 전용 |
 | 다크 모드/라이트 모드 | art-director | Alpha | 미정 |
 | 접근성 (스크린 리더, 고대비 모드) | accessibility-specialist | Alpha | 미정 |
+
+---
+
+## 9. Implementation Checklist
+
+Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
+
+### 진입점
+
+| 기능 | 진입점 |
+|------|--------|
+| 메인 HUD 진입 | `game_main.gd._ready()` → `MainScreen.tscn` → `TradingScreen.tscn` (F1 탭) |
+| 시즌 시작 버튼 | `TradingScreen._on_btn_market_open_pressed()` → `SeasonManager.start_season()` (is_season_active 분기) |
+| 주문 제출 | `TradingScreen._submit_order()` → `OrderEngine.submit_order(...)` |
+| 탭 전환 → F2 이동 | `TradingScreen.league_tab_requested` 시그널 → `MainScreen._switch_tab(TAB_F2)` (ADR-006) |
+| 일시정지/속도 | `TradingScreen.pause_toggle_requested` / `speed_change_requested` → `MainScreen` → `GameClock` (TD-03, S3-13) |
+
+### 호출 경로
+
+- [x] `SeasonManager.is_season_active()` — PRE_MARKET 버튼 분기
+- [x] `SeasonManager.get_season_return_pct()` — 상태바 HUD
+- [x] `SeasonManager.get_weekly_return_pct()` — 상태바 HUD
+- [x] `SeasonManager.get_tier_name()` — 상태바 HUD
+- [x] `GameClock.confirm_market_open()` — 장 시작 버튼
+- [x] `GameClock.confirm_transition()` — 정산 확인
+- [x] `OrderEngine.submit_order(...)` — 주문 제출
+- [x] `TradingScreen.league_tab_requested` 시그널 존재 (S3-06)
+- [x] `TradingScreen.pause_toggle_requested` 시그널 존재 (S3-13)
+- [x] `TradingScreen.speed_change_requested` 시그널 존재 (S3-13)
+
+### AC → 테스트 매핑
+
+| AC | 테스트 파일 | 테스트 함수 | 상태 |
+|----|------------|------------|------|
+| 전체 AC (시각/통합 검증) | E2E 검증 필요 (S3-07) | — | ⬜ 단위 테스트 없음 |
+| API 계약 (league_tab_requested 등) | `tests/unit/test_api_contracts.gd` | `test_trading_screen_api()` | ⬜ 미추가 |
+
+### 빌드 검증
+
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______

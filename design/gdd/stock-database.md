@@ -352,3 +352,39 @@ season_base_price = original_base_price * season_theme_modifier
 | 종목 데이터를 JSON vs Resource(Godot) 중 어느 형식으로 저장 | engine-programmer | 엔진 설정 후 | /setup-engine 후 결정 |
 | MVP→V-Slice 전환 시 기존 세이브 데이터 호환성 | engine-programmer | V-Slice 시점 | 미정 |
 | 배당 메카닉 도입 시점과 dividend_yield 활용 방안 | game-designer | 향후 | dividend_yield 필드는 이미 준비됨 |
+
+---
+
+## 9. Implementation Checklist
+
+Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
+
+### 진입점
+
+| 기능 | 진입점 |
+|------|--------|
+| 종목 데이터 로드 | `stock_database.gd._ready()` → `_load_stocks_from_json()` (자동, 게임 시작 시) |
+| 섹터별 종목 조회 | 각 시스템 → `StockDatabase.get_stocks_by_sector(sector)` — O(1) 인덱스 (S3-09) |
+| 이벤트 태그 조회 | `news_event_system.gd` → `StockDatabase.get_stocks_by_event_tag(tag)` — O(1) 인덱스 (S3-09) |
+
+### 호출 경로
+
+- [x] `StockDatabase.get_stock(stock_id) -> StockData` 존재
+- [x] `StockDatabase.get_all_stock_ids() -> Array[String]` 존재
+- [x] `StockDatabase.get_stocks_by_sector(sector) -> Array[StockData]` 존재 (O(1) 인덱스)
+- [x] `StockDatabase.get_stock_ids_by_sector(sector) -> Array[String]` 존재
+- [x] `StockDatabase.get_stocks_by_event_tag(tag) -> Array[StockData]` 존재 (O(1) 인덱스)
+- [x] `StockDatabase.stock_exists(stock_id) -> bool` 존재
+- [x] `assets/data/stocks.json` — 46종목 11섹터 데이터 파일 존재
+
+### AC → 테스트 매핑
+
+| AC | 테스트 파일 | 테스트 함수 | 상태 |
+|----|------------|------------|------|
+| JSON 로드 정상 | `tests/unit/test_api_contracts.gd` | `test_stock_database_api()` | ✅ |
+| 종목 수 검증 (46개) | 런타임 검증 (StockDatabase.get_stock_count() == 46) | — | ⬜ 단독 테스트 없음 |
+| 섹터 인덱스 정확성 | 런타임 검증 필요 | — | ⬜ |
+
+### 빌드 검증
+
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______

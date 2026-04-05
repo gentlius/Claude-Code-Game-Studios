@@ -6,7 +6,7 @@ extends Node
 # ── Signals ──
 
 signal on_level_up(new_level: int, skill_points: int)
-signal on_xp_gained(amount: int, new_total: int)
+signal on_xp_gained(amount: int, new_total: int, source: String)
 
 # ── Config (Tuning Knobs — see GDD Tuning Knobs section) ──
 
@@ -103,7 +103,7 @@ func _grant_xp(amount: int, source: String) -> int:
 	if amount <= 0:
 		return 0
 	_total_xp += amount
-	on_xp_gained.emit(amount, _total_xp)
+	on_xp_gained.emit(amount, _total_xp, source)
 	return _check_level_ups()
 
 
@@ -225,3 +225,12 @@ func load_save_data(data: Dictionary) -> void:
 	_total_xp = maxi(_total_xp, 0)
 	_current_level = maxi(_current_level, 1)
 	_spent_skill_points = maxi(_spent_skill_points, 0)
+
+
+## Resets all XP state to initial values for unit tests. Call in before_each.
+func reset_for_testing() -> void:
+	_total_xp = 0
+	_current_level = 1
+	_spent_skill_points = 0
+	_daily_has_trade = false
+	_prev_close_assets = 0

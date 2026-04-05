@@ -269,3 +269,44 @@ total_season_days = weeks_per_season * 5
 | 8x 배속 옵션이 필요한가? (스킬 해금 후 고수용) | game-designer | 스킬 트리 GDD 작성 시 | 미정 |
 | 멀티플레이어 전환 시 ServerClock 인터페이스 상세 | network-programmer | 멀티 확장 시점 | 향후 |
 | ~~PRE_MARKET 상태의 지속 시간~~ | game-designer | — | **RESOLVED**: 플레이어 확인 버튼 클릭까지 대기 방식으로 결정 |
+
+---
+
+## 9. Implementation Checklist
+
+Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
+
+### 진입점
+
+| 기능 | 진입점 |
+|------|--------|
+| 시즌 초기화 (틱 카운터 리셋) | `season_manager.gd.start_season()` → `GameClock.start_season()` (TD-08, S3-01) |
+| 매 틱 처리 | `game_clock.gd._process()` → `_process_tick()` → `on_tick.emit()` |
+| 장 개시 확인 | `trading_screen.gd._on_btn_market_open_pressed()` → `GameClock.confirm_market_open()` |
+| 일시정지 | `main_screen.gd` → `GameClock.toggle_pause()` (TD-03 시그널 경유, S3-13) |
+| 참조 카운팅 일시정지 | `main_screen.gd._switch_tab()` → `GameClock.pause_request/release(source_id)` (S3-02) |
+
+### 호출 경로
+
+- [x] `GameClock.start_season()` — `season_manager.gd.start_season()` 에서만 호출
+- [x] `GameClock.pause_request(source_id: String)` / `pause_release(source_id: String)` 존재
+- [x] `GameClock.toggle_pause()` 존재
+- [x] `GameClock.set_speed(multiplier: float)` 존재
+- [x] `GameClock.on_tick(tick, day, week)` 시그널 존재
+- [x] `GameClock.reset_for_testing()` 존재
+
+### AC → 테스트 매핑
+
+| AC | 테스트 파일 | 테스트 함수 | 상태 |
+|----|------------|------------|------|
+| pause_request → PAUSED 전환 | `tests/unit/test_game_clock.gd` | `test_pause_request_transitions_market_open_to_paused()` | ✅ |
+| 모든 소스 해제 → 재개 | `tests/unit/test_game_clock.gd` | `test_pause_release_resumes_when_all_sources_released()` | ✅ |
+| 중복 source_id 멱등 | `tests/unit/test_game_clock.gd` | `test_pause_request_duplicate_source_id_is_idempotent()` | ✅ |
+| 미등록 source_id 해제 noop | `tests/unit/test_game_clock.gd` | `test_pause_release_unknown_source_is_noop()` | ✅ |
+| 비장중 pause_request noop | `tests/unit/test_game_clock.gd` | `test_pause_request_noop_when_not_market_open()` | ✅ |
+| reset_for_testing 초기화 | `tests/unit/test_game_clock.gd` | `test_reset_for_testing_clears_pause_sources()` | ✅ |
+| API 계약 | `tests/unit/test_api_contracts.gd` | `test_game_clock_api()` | ✅ |
+
+### 빌드 검증
+
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______

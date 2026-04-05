@@ -235,6 +235,16 @@ func estimate_player_rank(player_return_pct: float) -> int:
 	var count: int = td["count"]
 	return int(float(count) * (1.0 - float(bucket_idx) / float(RANK_BUCKETS))) + 1
 
+
+## Resets all AI competitor state for unit tests. Call in before_each.
+func reset_for_testing() -> void:
+	_initialized = false
+	_player_tier = 0
+	_season_seed = 0
+	_current_day = 0
+	_current_tick = 0
+	_tier_data.clear()
+
 # ── Signal Handlers ──
 
 ## GameClock.on_tick 연결 핸들러. 플레이어 티어 틱 내 보간 상태 갱신.

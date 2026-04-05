@@ -241,3 +241,52 @@ context_rows = SeasonManager.get_leaderboard(tier, my_rank - LEADERBOARD_CONTEXT
 - [ ] AC-14: 시즌 미시작 상태에서는 "시즌 시작 전" 안내와 [시즌 시작] 버튼이 표시된다
 - [ ] AC-15: 좌측 패널에 주간 수익률상 현황(주간 순위, 체결 횟수 자격 여부)이 표시된다
 - [ ] AC-16: HUD 갱신(매 틱 SeasonManager 게터 호출 + 라벨 업데이트) 처리 시간이 16.6ms 이하임을 Godot 프로파일러로 확인한다. 측정 구간: `on_tick` 콜백 진입 ~ 모든 라벨 갱신 완료. 기준 환경: 프로젝트 최소 사양 기기 (미확정 시 개발 PC 기준, 별도 명시 필요)
+
+## 9. Implementation Checklist
+
+Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
+
+### 진입점
+
+| 기능 | 진입점 |
+|------|--------|
+| 상태바 HUD (티어·수익률) | `trading_screen.gd._update_status_bar()` — 매 틱 자동 갱신 ✅ 구현됨 |
+| HUD → F2 탭 클릭 이동 | `trading_screen.gd._lbl_league_tier` `gui_input` → `league_tab_requested` 시그널 → `main_screen.gd._switch_tab(TAB_F2)` ✅ 구현됨 (S3-06) |
+| F2 탭 전환 | `main_screen.gd._switch_tab(TAB_F2)` → `LeagueScreen.tscn` 인스턴스 표시 ✅ 구현됨 (S3-04) |
+| 장 중 자동 일시정지 | `main_screen.gd._switch_tab()` → `GameClock.pause_request("tab_switch")` ✅ 구현됨 (S3-02/S3-04) |
+| 리더보드 데이터 | `league_screen.gd._refresh()` → `SeasonManager.get_leaderboard()` ✅ 구현됨 (S3-05) |
+
+### 의존 메서드 존재 확인
+
+| 메서드 | 파일 | 상태 |
+|--------|------|------|
+| `SeasonManager.get_season_return_pct()` | `season_manager.gd` | ✅ |
+| `SeasonManager.get_weekly_return_pct()` | `season_manager.gd` | ✅ |
+| `SeasonManager.get_current_tier()` | `season_manager.gd` | ✅ |
+| `SeasonManager.get_tier_name()` | `season_manager.gd` | ✅ |
+| `SeasonManager.get_is_free_market()` | `season_manager.gd` | ✅ |
+| `SeasonManager.get_leaderboard()` | `season_manager.gd` | ✅ (S3-03) |
+| `SeasonManager.get_tier_rank()` | `season_manager.gd` | ✅ (S3-05 추가) |
+| `SeasonManager.get_weekly_trade_count()` | `season_manager.gd` | ✅ (S3-05 추가) |
+| `SeasonManager.is_season_trade_eligible()` | `season_manager.gd` | ✅ (S3-05 추가) |
+| `GameClock.pause_request(source_id)` | `game_clock.gd` | ✅ (S3-02) |
+| `GameClock.pause_release(source_id)` | `game_clock.gd` | ✅ (S3-02) |
+
+### AC → 테스트 매핑
+
+| AC | 테스트 파일 | 테스트 함수 | 상태 |
+|----|------------|------------|------|
+| AC-01 (HUD 표시) | `test_api_contracts.gd` | `test_season_manager_api()` | 부분 |
+| AC-08 ~ AC-15 (F2 화면) | 미작성 | — | ❌ |
+| AC-16 (프레임 버짓) | 퍼포먼스 프로파일링 | — | ❌ |
+
+### 구현 완료 (S3-01 ~ S3-05)
+
+1. ✅ `MainScreen.tscn` + F1/F2/F3 TabBar — `main_screen.gd` (S3-04)
+2. ✅ `LeagueScreen.tscn` + `league_screen.gd` 구현 (S3-05)
+3. ✅ `GameClock.pause_request/release()` 참조 카운팅 일시정지 (S3-02)
+4. ✅ `SeasonManager.get_leaderboard()` 구현 (S3-03)
+5. ✅ HUD 클릭 영역 → F2 탭 이동 (`league_tab_requested` 시그널, S3-06)
+
+### 빌드 검증
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______

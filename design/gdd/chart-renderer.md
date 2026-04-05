@@ -465,3 +465,32 @@ candle_end_tick = candle_start_tick + timeframe_ticks - 1
 | Canvas 2D vs Control 노드 기반 렌더링 결정 | technical-artist | 엔진 설정 후 | 성능 프로토타입 결과로 결정 |
 | 다크 모드/라이트 모드 색상 테마 | art-director | Alpha | 미정 |
 | 기업 재무제표(PER/PBR) A3 표시 위치 — 차트 내 vs 별도 패널 | ux-designer | V-Slice | 미정 |
+
+---
+
+## 9. Implementation Checklist
+
+Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
+
+### 진입점
+
+| 기능 | 진입점 |
+|------|--------|
+| 캔들 데이터 갱신 | `GameClock.on_tick` 시그널 → `chart_renderer.gd._on_tick()` |
+| 종목 선택 시 차트 교체 | `trading_screen.gd.stock_selected` 시그널 → `ChartRenderer.set_stock(stock_id)` |
+
+### 호출 경로
+
+- [x] `PriceEngine.get_price_history(stock_id) -> Array[int]` 존재
+- [x] `SkillTree.is_skill_unlocked("A1")` — MA 표시 여부 확인
+- [x] `SkillTree.is_skill_unlocked("A2")` — RSI 표시 여부 확인
+
+### AC → 테스트 매핑
+
+| AC | 테스트 파일 | 테스트 함수 | 상태 |
+|----|------------|------------|------|
+| 전체 AC (시각 검증) | 시각적 검증 필요 (E2E, S3-07) | — | ⬜ 단위 테스트 없음 |
+
+### 빌드 검증
+
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______

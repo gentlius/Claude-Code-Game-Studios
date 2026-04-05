@@ -19,6 +19,15 @@ enum UIState {
 ## Emitted when the player selects a stock from the list.
 signal stock_selected(stock_id: String)
 
+## Emitted when the player clicks the league HUD and requests the F2 tab.
+## MainScreen connects to this to handle tab switch (ADR-006: TradingScreen does not call
+## GameClock.pause_request directly).
+signal league_tab_requested()
+## TD-03: Emitted instead of calling GameClock.toggle_pause() directly.
+signal pause_toggle_requested()
+## TD-03: Emitted instead of calling GameClock.set_speed() directly.
+signal speed_change_requested(multiplier: float)
+
 # ── State ──
 
 var _ui_state: UIState = UIState.LOADING
@@ -34,6 +43,9 @@ var _settlement_queue: Array[String] = []  ## Sequential reports: "daily", "week
 # Status bar
 var _lbl_season_info: Label
 var _lbl_tick_progress: Label
+var _lbl_league_tier: Label    ## 티어명 (e.g. "브론즈", "프리마켓")
+var _lbl_season_return: Label  ## 시즌 수익률 (e.g. "시즌 +12.3%")
+var _lbl_weekly_return: Label  ## 주간 수익률 (e.g. "주간 +2.1%")
 var _progress_bar: ProgressBar
 var _lbl_speed: Label
 var _lbl_market_index: Label
@@ -59,6 +71,7 @@ var _btn_max_qty: Button
 var _btn_submit_order: Button
 var _btn_cancel_order: Button
 var _lbl_order_error: Label
+var _error_tween: Tween  ## 주문 에러 메시지 자동 제거 Tween — 누적 방지용 참조 보관
 var _pending_orders_container: VBoxContainer
 
 # Bottom tabs
@@ -248,6 +261,11 @@ func _update_ui_for_state() -> void:
 	match _ui_state:
 		UIState.PRE_MARKET:
 			_btn_market_open.visible = true
+			# TD-08: first PRE_MARKET shows "시즌 시작", subsequent days show "장 시작"
+			if SeasonManager.is_season_active():
+				_btn_market_open.text = "장 시작 Enter"
+			else:
+				_btn_market_open.text = "시즌 시작 Enter"
 			_btn_submit_order.text = "주문 예약 Enter"
 			# GDD Rule 6: PRE_MARKET SP reminder
 			_update_sp_alert()
@@ -269,6 +287,15 @@ func _update_ui_for_state() -> void:
 
 
 # ── Signal Handlers ──
+
+## PRE_MARKET 버튼 핸들러. 시즌 미시작 시 SeasonManager.start_season() 호출,
+## 시즌 진행 중이면 GameClock.confirm_market_open() 호출 (TD-08).
+func _on_btn_market_open_pressed() -> void:
+	if SeasonManager.is_season_active():
+		GameClock.confirm_market_open()
+	else:
+		SeasonManager.start_season()
+
 
 func _on_tick(_tick: int, _day: int, _week: int) -> void:
 	_update_status_bar()
@@ -359,7 +386,7 @@ func _on_level_up(new_level: int, _skill_points: int) -> void:
 		_pending_level_up["sp"] += 1
 
 
-func _on_xp_gained(amount: int, source: String) -> void:
+func _on_xp_gained(amount: int, _new_total: int, source: String) -> void:
 	_last_xp_gained = amount
 	_last_xp_source = source
 	if source == "daily_bonus":
@@ -536,10 +563,12 @@ func _submit_order() -> void:
 
 func _show_order_error(msg: String) -> void:
 	_lbl_order_error.text = msg
-	# Clear after 3 seconds
-	var tween: Tween = create_tween()
-	tween.tween_interval(3.0)
-	tween.tween_callback(func() -> void: _lbl_order_error.text = "")
+	# Kill previous tween before creating a new one (prevents accumulation)
+	if _error_tween and _error_tween.is_valid():
+		_error_tween.kill()
+	_error_tween = create_tween()
+	_error_tween.tween_interval(3.0)
+	_error_tween.tween_callback(func() -> void: _lbl_order_error.text = "")
 
 
 func _flash_order_panel(side: String) -> void:
@@ -738,6 +767,35 @@ func _update_status_bar() -> void:
 
 	_update_speed_display()
 
+	# League HUD (SeasonManager getters — safe to call any time)
+	var is_free: bool = SeasonManager.get_is_free_market()
+	if is_free:
+		_lbl_league_tier.text = "프리마켓"
+		_lbl_league_tier.add_theme_color_override("font_color", ThemeSetup.NEUTRAL_GRAY)
+	else:
+		_lbl_league_tier.text = SeasonManager.get_tier_name(SeasonManager.get_current_tier())
+		_lbl_league_tier.add_theme_color_override("font_color", ThemeSetup.NEUTRAL_GRAY)
+
+	var season_ret: float = SeasonManager.get_season_return_pct()
+	var s_sign: String = "+" if season_ret >= 0.0 else ""
+	_lbl_season_return.text = "시즌 %s%.1f%%" % [s_sign, season_ret]
+	if season_ret > 0.0:
+		_lbl_season_return.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
+	elif season_ret < 0.0:
+		_lbl_season_return.add_theme_color_override("font_color", ThemeSetup.LOSS_BLUE)
+	else:
+		_lbl_season_return.add_theme_color_override("font_color", ThemeSetup.NEUTRAL_GRAY)
+
+	var weekly_ret: float = SeasonManager.get_weekly_return_pct()
+	var w_sign: String = "+" if weekly_ret >= 0.0 else ""
+	_lbl_weekly_return.text = "주간 %s%.1f%%" % [w_sign, weekly_ret]
+	if weekly_ret > 0.0:
+		_lbl_weekly_return.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
+	elif weekly_ret < 0.0:
+		_lbl_weekly_return.add_theme_color_override("font_color", ThemeSetup.LOSS_BLUE)
+	else:
+		_lbl_weekly_return.add_theme_color_override("font_color", ThemeSetup.NEUTRAL_GRAY)
+
 
 func _update_speed_display() -> void:
 	if _ui_state == UIState.PAUSED:
@@ -759,7 +817,7 @@ func _update_speed_display() -> void:
 func _set_speed(multiplier: float) -> void:
 	if _ui_state != UIState.MARKET_OPEN and _ui_state != UIState.PAUSED:
 		return
-	GameClock.set_speed(multiplier)
+	speed_change_requested.emit(multiplier)
 	_update_speed_display()
 	_update_speed_buttons(multiplier)
 
@@ -776,7 +834,7 @@ func _update_speed_buttons(multiplier: float) -> void:
 
 func _handle_pause_toggle() -> void:
 	if _ui_state == UIState.MARKET_OPEN or _ui_state == UIState.PAUSED:
-		GameClock.toggle_pause()
+		pause_toggle_requested.emit()
 
 
 func _handle_enter_key() -> void:
@@ -1292,11 +1350,12 @@ func _build_status_bar(parent: VBoxContainer) -> void:
 	ThemeSetup.apply_button_theme(_btn_pause)
 	row1.add_child(_btn_pause)
 
-	# Market open button (PRE_MARKET only) — in row 1, toggled with speed buttons
+	# Market open / season start button (PRE_MARKET only) — in row 1
+	# Text and action update in _set_ui_state based on SeasonManager.is_season_active().
 	_btn_market_open = Button.new()
-	_btn_market_open.text = "장 시작 Enter"
+	_btn_market_open.text = "시즌 시작 Enter"
 	_btn_market_open.visible = false
-	_btn_market_open.pressed.connect(func() -> void: GameClock.confirm_market_open())
+	_btn_market_open.pressed.connect(_on_btn_market_open_pressed)
 	ThemeSetup.apply_accent_button(_btn_market_open)
 	row1.add_child(_btn_market_open)
 
@@ -1334,6 +1393,43 @@ func _build_status_bar(parent: VBoxContainer) -> void:
 	var spacer: Control = Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row2.add_child(spacer)
+
+	# League HUD — tier name (clickable → F2 tab, league-ui.md AC-01)
+	_lbl_league_tier = Label.new()
+	_lbl_league_tier.text = "프리마켓"
+	_lbl_league_tier.add_theme_font_size_override("font_size", 12)
+	_lbl_league_tier.mouse_filter = Control.MOUSE_FILTER_STOP
+	_lbl_league_tier.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_lbl_league_tier.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
+			league_tab_requested.emit()
+	)
+	ThemeSetup.style_label_secondary(_lbl_league_tier)
+	row2.add_child(_lbl_league_tier)
+
+	var sep_league1: VSeparator = VSeparator.new()
+	sep_league1.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
+	row2.add_child(sep_league1)
+
+	_lbl_season_return = Label.new()
+	_lbl_season_return.text = "시즌 -"
+	_lbl_season_return.add_theme_font_size_override("font_size", 12)
+	ThemeSetup.style_label_secondary(_lbl_season_return)
+	row2.add_child(_lbl_season_return)
+
+	var sep_league2: VSeparator = VSeparator.new()
+	sep_league2.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
+	row2.add_child(sep_league2)
+
+	_lbl_weekly_return = Label.new()
+	_lbl_weekly_return.text = "주간 -"
+	_lbl_weekly_return.add_theme_font_size_override("font_size", 12)
+	ThemeSetup.style_label_secondary(_lbl_weekly_return)
+	row2.add_child(_lbl_weekly_return)
+
+	var sep_league3: VSeparator = VSeparator.new()
+	sep_league3.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
+	row2.add_child(sep_league3)
 
 	# XP Bar — right-aligned in row 2
 	_xp_bar = XpBar.new()
@@ -1607,6 +1703,8 @@ func _build_overlays() -> void:
 	# Skill tree overlay (GDD Rule 4)
 	_skill_tree_overlay = SkillTreeOverlay.new()
 	add_child(_skill_tree_overlay)
+	# TD-03: relay overlay pause signal upward so MainScreen routes to GameClock
+	_skill_tree_overlay.pause_toggle_requested.connect(func() -> void: pause_toggle_requested.emit())
 
 	# Settlement panel — centered modal with structured layout
 	_settlement_panel = PanelContainer.new()
@@ -1917,15 +2015,6 @@ func _show_toast(text: String, scope: String) -> void:
 
 # ── Utility ──
 
+## Delegates to FormatUtils.number() — single source of truth (TD-04 note).
 func _format_number(value: int) -> String:
-	var s: String = str(absi(value))
-	var result: String = ""
-	var count: int = 0
-	for i: int in range(s.length() - 1, -1, -1):
-		if count > 0 and count % 3 == 0:
-			result = "," + result
-		result = s[i] + result
-		count += 1
-	if value < 0:
-		result = "-" + result
-	return result
+	return FormatUtils.number(value)

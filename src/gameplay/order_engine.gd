@@ -14,6 +14,8 @@ signal on_order_expired(order: Dictionary)
 
 const MAX_PENDING_LIMIT_ORDERS: int = 10
 const PRE_MARKET_BUFFER_PCT: float = 0.15
+## 시즌당 주문 히스토리 최대 보관 건수. 초과 시 오래된 항목 제거. Tuning Knob.
+const ORDER_HISTORY_MAX_SIZE: int = 500
 
 # ── State ──
 
@@ -61,7 +63,7 @@ func submit_market_order(side: String, stock_id: String, quantity: int) -> Dicti
 	if reject != "":
 		order["status"] = "REJECTED"
 		order["reject_reason"] = reject
-		_order_history.append(order)
+		_history_append(order)
 		on_order_rejected.emit(order)
 		return order
 
@@ -75,7 +77,7 @@ func submit_market_order(side: String, stock_id: String, quantity: int) -> Dicti
 			if not CurrencySystem.sim_deduct(reserved):
 				order["status"] = "REJECTED"
 				order["reject_reason"] = "잔액 부족"
-				_order_history.append(order)
+				_history_append(order)
 				on_order_rejected.emit(order)
 				return order
 			order["reserved_cash"] = reserved
@@ -92,7 +94,7 @@ func submit_market_order(side: String, stock_id: String, quantity: int) -> Dicti
 			if not CurrencySystem.sim_deduct(cost):
 				order["status"] = "REJECTED"
 				order["reject_reason"] = "잔액 부족"
-				_order_history.append(order)
+				_history_append(order)
 				on_order_rejected.emit(order)
 				return order
 			order["reserved_cash"] = cost
@@ -109,7 +111,7 @@ func submit_market_order(side: String, stock_id: String, quantity: int) -> Dicti
 	else:
 		order["status"] = "REJECTED"
 		order["reject_reason"] = "장이 열려 있지 않습니다"
-		_order_history.append(order)
+		_history_append(order)
 		on_order_rejected.emit(order)
 
 	return order
@@ -125,7 +127,7 @@ func submit_limit_order(
 	if reject != "":
 		order["status"] = "REJECTED"
 		order["reject_reason"] = reject
-		_order_history.append(order)
+		_history_append(order)
 		on_order_rejected.emit(order)
 		return order
 
@@ -135,7 +137,7 @@ func submit_limit_order(
 		if not CurrencySystem.sim_deduct(reserved):
 			order["status"] = "REJECTED"
 			order["reject_reason"] = "잔액 부족"
-			_order_history.append(order)
+			_history_append(order)
 			on_order_rejected.emit(order)
 			return order
 		order["reserved_cash"] = reserved
@@ -157,7 +159,7 @@ func cancel_order(order_id: int) -> bool:
 			_refund_order(order)
 			order["status"] = "CANCELLED"
 			_pending_limit_orders.remove_at(i)
-			_order_history.append(order)
+			_history_append(order)
 			on_order_cancelled.emit(order)
 			return true
 
@@ -168,7 +170,7 @@ func cancel_order(order_id: int) -> bool:
 			_refund_order(order)
 			order["status"] = "CANCELLED"
 			_pre_market_queue.remove_at(i)
-			_order_history.append(order)
+			_history_append(order)
 			on_order_cancelled.emit(order)
 			return true
 
@@ -179,7 +181,7 @@ func cancel_order(order_id: int) -> bool:
 			_refund_order(order)
 			order["status"] = "CANCELLED"
 			_market_order_queue.remove_at(i)
-			_order_history.append(order)
+			_history_append(order)
 			on_order_cancelled.emit(order)
 			return true
 
@@ -229,6 +231,13 @@ func get_season_trade_count() -> int:
 		if order.get("status", "") == "FILLED":
 			count += 1
 	return count
+
+
+## Append order to history, enforcing ORDER_HISTORY_MAX_SIZE cap.
+func _history_append(order: Dictionary) -> void:
+	_order_history.append(order)
+	if _order_history.size() > ORDER_HISTORY_MAX_SIZE:
+		_order_history = _order_history.slice(_order_history.size() - ORDER_HISTORY_MAX_SIZE)
 
 
 ## Returns order history.
@@ -314,7 +323,7 @@ func _process_pre_market_queue() -> void:
 				CurrencySystem.sim_add(reserved)
 				order["status"] = "REJECTED"
 				order["reject_reason"] = "장 시작 가격이 예약금을 초과했습니다"
-				_order_history.append(order)
+				_history_append(order)
 				on_order_rejected.emit(order)
 			else:
 				# Fill and refund difference
@@ -325,7 +334,7 @@ func _process_pre_market_queue() -> void:
 				order["status"] = "FILLED"
 				order["filled_price"] = filled_price
 				order["filled_tick"] = GameClock.get_current_tick()
-				_order_history.append(order)
+				_history_append(order)
 				on_order_filled.emit(order)
 
 		elif order["side"] == "SELL":
@@ -336,7 +345,7 @@ func _process_pre_market_queue() -> void:
 			order["status"] = "FILLED"
 			order["filled_price"] = filled_price
 			order["filled_tick"] = GameClock.get_current_tick()
-			_order_history.append(order)
+			_history_append(order)
 			on_order_filled.emit(order)
 
 # ── Fill Helpers ──
@@ -356,7 +365,7 @@ func _fill_market_order(order: Dictionary) -> void:
 				CurrencySystem.sim_add(reserved)
 				order["status"] = "REJECTED"
 				order["reject_reason"] = "잔액 부족 (가격 변동)"
-				_order_history.append(order)
+				_history_append(order)
 				on_order_rejected.emit(order)
 				return
 		PortfolioManager.add_holding(order["stock_id"], order["quantity"], filled_price)
@@ -370,7 +379,7 @@ func _fill_market_order(order: Dictionary) -> void:
 	order["status"] = "FILLED"
 	order["filled_price"] = filled_price
 	order["filled_tick"] = GameClock.get_current_tick()
-	_order_history.append(order)
+	_history_append(order)
 	on_order_filled.emit(order)
 
 
@@ -392,7 +401,7 @@ func _fill_limit_order(order: Dictionary, current_price: int) -> void:
 	order["status"] = "FILLED"
 	order["filled_price"] = current_price
 	order["filled_tick"] = GameClock.get_current_tick()
-	_order_history.append(order)
+	_history_append(order)
 	on_order_filled.emit(order)
 
 # ── Expiry ──
@@ -412,7 +421,7 @@ func _expire_pending_orders() -> void:
 	for order: Dictionary in to_expire:
 		_refund_order(order)
 		order["status"] = "EXPIRED"
-		_order_history.append(order)
+		_history_append(order)
 		on_order_expired.emit(order)
 
 # ── Validation (GDD Rule 3, 8 steps) ──

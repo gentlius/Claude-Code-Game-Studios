@@ -124,6 +124,9 @@ func _ready() -> void:
 	GameClock.on_week_end.connect(_on_week_end)
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
 	OrderEngine.on_order_filled.connect(_on_order_filled)
+	## TD-08: SeasonManager owns the full season-start sequence.
+	## GameClock emits on_new_season_requested after SEASON_END confirmation.
+	GameClock.on_new_season_requested.connect(func() -> void: start_season())
 
 
 # ── Public API ──
@@ -160,6 +163,9 @@ func start_season() -> bool:
 		AiCompetitor.init_season(_current_tier, participant_counts, seed_val)
 
 	on_season_started.emit(_current_tier, _is_free_market)
+	## TD-08: SeasonManager owns GameClock initialisation (tick counters, state).
+	## Called here so the UI only needs to call SeasonManager.start_season().
+	GameClock.start_season()
 	return true
 
 
@@ -202,6 +208,85 @@ func get_weekly_return_pct() -> float:
 ## Season start capital snapshot.
 func get_season_start_capital() -> int:
 	return _season_start_capital
+
+
+## True when a season has been started this session (season capital > 0).
+## Used by TradingScreen to decide whether to show "시즌 시작" or "장 시작" button.
+func is_season_active() -> bool:
+	return _season_start_capital > 0
+
+
+## Player's current rank within their tier (1-based). 0 = unranked (free-market).
+## Delegates to _calculate_player_tier_rank with the live season return.
+func get_tier_rank() -> int:
+	if not is_season_active() or _is_free_market:
+		return 0
+	return _calculate_player_tier_rank(get_season_return_pct())
+
+
+## Weekly fill count for the current week (resets on on_week_end).
+## Used by LeagueScreen to display weekly prize eligibility status.
+func get_weekly_trade_count() -> int:
+	return _weekly_trade_count
+
+
+## True when the player has enough season fills for rank eligibility (GDD §4-6).
+func is_season_trade_eligible() -> bool:
+	return OrderEngine.get_season_trade_count() >= MIN_TRADES_FOR_RANK
+
+
+## Leaderboard for the given tier: AI + player entries, sorted by return_pct descending.
+## [br]tier: target tier (TIER_BRONZE ~ TIER_MASTER_OF_INVESTMENT). Default = player tier.
+## [br]from_rank: first rank to return (1-based). Default 1.
+## [br]to_rank: last rank to return inclusive (-1 = all). Default -1.
+## [br]Returns: Array[Dictionary] — [{rank, nickname, return_pct, prize_preview, is_player}]
+## [br]Returns [] in free-market mode or before season start.
+func get_leaderboard(tier: int = -99, from_rank: int = 1, to_rank: int = -1) -> Array:
+	var target_tier: int = _current_tier if tier == -99 else tier
+
+	if not is_season_active() or target_tier == TIER_FREE_MARKET:
+		return []
+
+	var all_returns: Array = AiCompetitor.get_all_return_pcts(target_tier)
+
+	var entries: Array = []
+
+	for i: int in range(all_returns.size()):
+		var meta: Dictionary = AiCompetitor.get_participant_meta(target_tier, i)
+		entries.append({
+			"nickname": meta["display_name"],
+			"return_pct": all_returns[i],
+			"is_player": false,
+			"is_grandmaster_ai": meta.get("is_master_of_investment", false),
+		})
+
+	if target_tier == _current_tier:
+		entries.append({
+			"nickname": "나",
+			"return_pct": get_season_return_pct(),
+			"is_player": true,
+			"is_grandmaster_ai": false,
+		})
+
+	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return a["return_pct"] > b["return_pct"]
+	)
+
+	for i: int in range(entries.size()):
+		var rank: int = i + 1
+		entries[i]["rank"] = rank
+		entries[i]["prize_preview"] = _prize_for_rank(rank, target_tier)
+
+	var start_idx: int = clampi(from_rank - 1, 0, entries.size())
+	var end_idx: int = entries.size() if to_rank == -1 else clampi(to_rank, 0, entries.size())
+	return entries.slice(start_idx, end_idx)
+
+
+## Prize cash amount for a given finish rank in a given tier.
+func _prize_for_rank(rank: int, tier: int) -> int:
+	if tier < 0 or tier >= TIER_THRESHOLD.size():
+		return 0
+	return int(float(TIER_THRESHOLD[tier]) * PRIZE_RATE.get(rank, 0.0))
 
 
 # ── Signal Handlers ──
@@ -277,7 +362,7 @@ func _on_market_state_changed(
 	# Check Hangang ending on PRE_MARKET transition (Q3 decision).
 	# One check per state transition — not every tick.
 	if new_state == GameClock.MarketState.PRE_MARKET and _is_free_market and not _ending_triggered:
-		var holdings: Array = PortfolioManager.get_holdings()
+		var holdings: Array = PortfolioManager.get_all_holdings()
 		var cash: int = CurrencySystem.get_sim_cash()
 		# EC-06: both conditions must be true simultaneously.
 		if holdings.is_empty() and cash < HANGANG_THRESHOLD:
@@ -392,3 +477,14 @@ func load_save_data(data: Dictionary) -> void:
 	_season_start_capital = data.get("season_start_capital", 0)
 	_weekly_start_capital = data.get("weekly_start_capital", 0)
 	_weekly_trade_count = data.get("weekly_trade_count", 0)
+
+
+## Resets all season state to initial values for unit tests. Call in before_each.
+func reset_for_testing() -> void:
+	_current_tier = TIER_FREE_MARKET
+	_is_free_market = true
+	_season_start_capital = 0
+	_weekly_start_capital = 0
+	_weekly_trade_count = 0
+	_last_week_trade_count = 0
+	_ending_triggered = false

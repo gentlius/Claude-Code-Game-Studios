@@ -261,15 +261,6 @@ func _refresh_transactions() -> void:
 
 # ── Utility ──
 
+## Delegates to FormatUtils.number() — single source of truth (TD-04 note).
 func _format_number(value: int) -> String:
-	var s: String = str(absi(value))
-	var result: String = ""
-	var count: int = 0
-	for i: int in range(s.length() - 1, -1, -1):
-		if count > 0 and count % 3 == 0:
-			result = "," + result
-		result = s[i] + result
-		count += 1
-	if value < 0:
-		result = "-" + result
-	return result
+	return FormatUtils.number(value)

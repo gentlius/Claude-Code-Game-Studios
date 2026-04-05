@@ -134,6 +134,9 @@ func update_display() -> void:
 
 ## Animate XP bar fill from previous value to current (after settlement popup).
 func animate_xp_gain() -> void:
+	if _reduced_motion():
+		update_display()
+		return
 	var target: float = XpSystem.get_xp_progress()
 	var tween: Tween = create_tween()
 	tween.set_ease(Tween.EASE_OUT)
@@ -146,6 +149,9 @@ func animate_xp_gain() -> void:
 
 func _on_xp_gained(amount: int, _source: String) -> void:
 	_spawn_float_text("+%d XP" % amount)
+	if _reduced_motion():
+		update_display()
+		return
 	# Animate bar fill
 	var old_ratio: float = _fill_ratio
 	var new_ratio: float = XpSystem.get_xp_progress()
@@ -157,8 +163,11 @@ func _on_xp_gained(amount: int, _source: String) -> void:
 
 
 func _on_level_up(new_level: int, _skill_points: int) -> void:
-	# Level badge bounce animation
 	_lbl_level.text = "Lv.%d" % new_level
+	update_display()
+	if _reduced_motion():
+		return
+	# Level badge bounce animation
 	var tween: Tween = create_tween()
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_ELASTIC)
@@ -168,7 +177,6 @@ func _on_level_up(new_level: int, _skill_points: int) -> void:
 	tween.tween_callback(func() -> void:
 		_lbl_level.add_theme_color_override("font_color", GOLD_COLOR)
 	)
-	update_display()
 
 
 # ── Internal ──
@@ -199,6 +207,8 @@ func _update_sp_badge(sp: int) -> void:
 		if not _sp_visible:
 			_sp_visible = true
 			_btn_sp_badge.visible = true
+			if _reduced_motion():
+				return
 			# Pulse animation on first appear
 			_btn_sp_badge.modulate.a = 0.0
 			_btn_sp_badge.scale = Vector2(1.3, 1.3)
@@ -210,6 +220,10 @@ func _update_sp_badge(sp: int) -> void:
 	else:
 		_btn_sp_badge.visible = false
 		_sp_visible = false
+
+
+func _reduced_motion() -> bool:
+	return ProjectSettings.get_setting("accessibility/reduced_motion", false)
 
 
 func _disconnect_signals() -> void:
@@ -227,6 +241,10 @@ func _spawn_float_text(text: String) -> void:
 	lbl.position = Vector2(40, -8)
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_float_container.add_child(lbl)
+
+	if _reduced_motion():
+		lbl.queue_free()
+		return
 
 	var tween: Tween = create_tween()
 	tween.set_parallel(true)

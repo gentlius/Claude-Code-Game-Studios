@@ -327,3 +327,31 @@ MEGA는 쿨다운 무시 (항상 표시).
 | 지정가 체결 알림 vs 뉴스 딜레이 간 UX 괴리 — 뉴스 미도착 상태에서 체결 알림이 먼저 뜨는 상황. 체결 알림에 "가격 변동에 의한 체결" 명시 or 알림 지연 동기화 검토 | ux-designer | V-Slice | 미정 |
 | 프리마켓 뉴스 정렬 우선순위 — 틱 1에서 야간 뉴스 변환 카드와 개장 재료 뉴스가 섞일 때, sort_key에 `is_premarket` 가중치를 추가하여 야간 재료가 상단에 오도록 정렬 보완 필요 | game-designer | V-Slice | 미정 |
 | 알림 피로도 집계 — 다수 종목 동시 VI 발동 등으로 TOAST 알림이 화면을 가릴 수 있음. 동일 섹터/유형 알림을 "반도체 섹터 3개 종목 급등 중" 형태로 요약 집계하는 로직 검토 | ux-designer | Production | 미정 |
+
+---
+
+## 9. Implementation Checklist
+
+Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
+
+### 진입점
+
+| 기능 | 진입점 |
+|------|--------|
+| 뉴스 카드 추가 | `NewsEventSystem.on_news_published` 시그널 → `news_feed_panel.gd._on_news_published(event)` |
+| 체결 알림 토스트 | `OrderEngine.on_order_filled` 시그널 → `trading_screen.gd` 토스트 표시 |
+
+### 호출 경로
+
+- [x] `NewsEventSystem.on_news_published` 시그널 → 뉴스 피드 구독
+- [x] `NewsEventSystem.get_active_events()` 존재 (초기 표시용)
+
+### AC → 테스트 매핑
+
+| AC | 테스트 파일 | 테스트 함수 | 상태 |
+|----|------------|------------|------|
+| 전체 AC (UI 시각 검증) | 시각적 검증 필요 (E2E, S3-07) | — | ⬜ 단위 테스트 없음 |
+
+### 빌드 검증
+
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______

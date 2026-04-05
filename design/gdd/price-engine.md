@@ -1115,3 +1115,41 @@ EXTREME 변동성(메디진, base_price=180,000원) + 대형 이벤트 1회, vol
 | ~~VI(변동성완화장치) 발동 조건 및 거래 정지 시간~~ | — | **해결됨** | 규칙 2-4 참조. ±15% → 8틱 정지, 종목당 일 1회 |
 | ~~서킷브레이커(시장 전체 거래 중단) 발동 조건~~ | — | **해결됨** | 규칙 2-5 참조. 지수 -12% → Stage 1 (20틱 정지), -20% → Stage 2 (조기 마감) |
 | ~~전일 종가 대비 등락률 제한(가격제한폭) 도입 여부~~ | — | **해결됨** | ±30% 일일 가격제한폭 구현 완료. 규칙 2-2 참조 |
+
+---
+
+## 9. Implementation Checklist
+
+Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
+
+### 진입점
+
+| 기능 | 진입점 |
+|------|--------|
+| 매 틱 가격 갱신 | `game_clock.gd._process_tick()` → `PriceEngine._on_tick(tick, day, week)` (직접 호출, 틱 순서 2번째) |
+| 현재가 조회 | 각 시스템 → `PriceEngine.get_current_price(stock_id)` |
+| VI/서킷브레이커 | 자동 — `_on_tick()` 내부에서 가격 변동 감지 후 발동 |
+
+### 호출 경로
+
+- [x] `PriceEngine.get_current_price(stock_id) -> int` 존재
+- [x] `PriceEngine.get_tick_size(price) -> int` 존재 (KRX 호가 단위, ADR-002)
+- [x] `PriceEngine.get_daily_limits(stock_id) -> Dictionary` 존재
+- [x] `PriceEngine.get_market_index() -> float` 존재
+- [x] `PriceEngine.on_vi_triggered(stock_id, is_upper, halt_ticks)` 시그널 존재
+- [x] `PriceEngine.on_circuit_breaker(stage, halt_ticks)` 시그널 존재
+- [x] `PriceEngine.reset_for_testing()` 존재
+
+### AC → 테스트 매핑
+
+| AC | 테스트 파일 | 테스트 함수 | 상태 |
+|----|------------|------------|------|
+| KRX 호가 단위 (ADR-002) | `tests/unit/test_price_engine.gd` | `test_tick_size_*` | ✅ |
+| VI 발동 조건 | `tests/unit/test_vi_cb.gd` | `test_vi_triggers_at_15pct()` | ✅ |
+| 서킷브레이커 Stage1 | `tests/unit/test_vi_cb.gd` | `test_circuit_breaker_stage1()` | ✅ |
+| 일일 가격제한폭 ±30% | `tests/unit/test_price_engine.gd` | `test_daily_price_limit_clamped()` | ✅ |
+| API 계약 | `tests/unit/test_api_contracts.gd` | `test_price_engine_api()` | ✅ |
+
+### 빌드 검증
+
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______

@@ -36,6 +36,12 @@ window/stretch/mode="canvas_items"
 
 enabled=PackedStringArray("res://addons/gut/plugin.cfg")
 
+[accessibility]
+
+## TD-07: reduced_motion — if true, all UI Tweens skip animation and jump to final value.
+## Toggle in Project Settings > Accessibility > Reduced Motion.
+reduced_motion=false
+
 [rendering]
 
 renderer/rendering_method="forward_plus"

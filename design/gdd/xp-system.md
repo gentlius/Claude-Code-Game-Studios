@@ -299,3 +299,40 @@ get_cumulative_xp_for_level(target_level) = Σ required_xp(lv) for lv = 1 to (ta
 
 - ~~시즌 관리 시스템과의 인터페이스~~ → 시즌 관리 GDD 설계 시 확정 (provisional: `on_season_end` + `final_rank: int, 1-indexed`)
 - ~~거래 XP 스팸 문제~~ → 디자인 리뷰에서 거래 XP 제거로 해결 (2026-04-01). 근거: "판단이 곧 실력" 필라 우선, 거래 횟수 보상은 스팸 유발
+
+---
+
+## 9. Implementation Checklist
+
+Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
+
+### 진입점
+
+| 기능 | 진입점 |
+|------|--------|
+| 시즌 XP 지급 | `season_manager.gd._on_season_end()` → `XpSystem.grant_season_bonus(rank, is_free_market, return_pct, trade_count)` |
+| 주문 체결 XP | `order_engine.gd.on_order_filled` 시그널 → `xp_system.gd._on_order_filled()` |
+| XP 바 갱신 | `XpSystem.on_xp_gained` 시그널 → `xp_bar.gd._on_xp_gained()` |
+
+### 호출 경로
+
+- [x] `XpSystem.grant_season_bonus(rank, is_free_market, return_pct, trade_count)` 존재
+- [x] `XpSystem.get_current_level() -> int` 존재
+- [x] `XpSystem.get_xp_progress() -> float` 존재
+- [x] `XpSystem.get_available_skill_points() -> int` 존재
+- [x] `XpSystem.on_xp_gained(amount, source)` 시그널 존재
+- [x] `XpSystem.on_level_up(new_level, skill_points)` 시그널 존재
+- [x] `XpSystem.reset_for_testing()` 존재
+
+### AC → 테스트 매핑
+
+| AC | 테스트 파일 | 테스트 함수 | 상태 |
+|----|------------|------------|------|
+| 시즌 XP 지급 공식 | `tests/unit/test_xp_system.gd` | `test_season_bonus_xp_*` | ✅ |
+| 레벨업 임계값 | `tests/unit/test_xp_system.gd` | `test_level_up_at_threshold()` | ✅ |
+| 프리마켓 XP 감소 | `tests/unit/test_xp_system.gd` | `test_free_market_xp_penalty()` | ✅ |
+| API 계약 | `tests/unit/test_api_contracts.gd` | `test_xp_system_api()` | ✅ |
+
+### 빌드 검증
+
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______

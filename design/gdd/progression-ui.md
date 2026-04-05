@@ -317,3 +317,45 @@
 | AC-8 | 스킬 해금 후 즉시 효과 적용 | A1 해금 → 차트에 MA 표시 확인 |
 | AC-9 | 시즌 종료 시 XP 순차 공개 (3단계) | 시즌 종료 화면 확인 |
 | AC-10 | SP > 0일 때 배지 표시, SP == 0이면 숨김 | 포인트 사용 전후 확인 |
+
+---
+
+## 9. Implementation Checklist
+
+Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
+
+### 진입점
+
+| 기능 | 진입점 |
+|------|--------|
+| XP 바 표시 | `TradingScreen._build_status_bar()` → `XpBar` 위젯 인스턴스 생성 |
+| 레벨업 배너 | `XpSystem.on_level_up` 시그널 → `LevelUpBanner.show_level_up()` |
+| 스킬 트리 오버레이 | K키 / 레벨업 배너 버튼 → `SkillTreeOverlay.open()` |
+| 오버레이 일시정지 | `SkillTreeOverlay.pause_toggle_requested` 시그널 → `TradingScreen` relay → `MainScreen` → `GameClock.toggle_pause()` (TD-03) |
+
+### 호출 경로
+
+- [x] `XpSystem.get_current_level()` 존재
+- [x] `XpSystem.get_xp_progress()` 존재
+- [x] `XpSystem.get_available_skill_points()` 존재
+- [x] `XpSystem.on_xp_gained(amount, source)` 시그널 존재
+- [x] `XpSystem.on_level_up(new_level, skill_points)` 시그널 존재
+- [x] `SkillTree.unlock_skill(skill_id)` 존재
+- [x] `SkillTree.can_unlock(skill_id)` 존재
+- [x] `SkillTreeOverlay.pause_toggle_requested` 시그널 존재 (S3-13)
+- [x] reduced_motion 체크 (`xp_bar.gd`, `level_up_banner.gd`) — S3-12 구현
+
+### AC → 테스트 매핑
+
+| AC | 테스트 파일 | 테스트 함수 | 상태 |
+|----|------------|------------|------|
+| XP 바 표시 (AC-1~AC-5) | 시각적 검증 (E2E, S3-07) | — | ⬜ |
+| 스킬 트리 열 때 일시정지 (AC-6) | `tests/unit/test_api_contracts.gd` | 시그널 존재 확인 | ⬜ 기능 테스트 없음 |
+| 해금/잠금 버튼 (AC-7) | 시각적 검증 (E2E) | — | ⬜ |
+| 스킬 효과 즉시 적용 (AC-8) | `tests/unit/test_skill_tree.gd` | `test_unlock_skill_*` | ✅ (간접) |
+| 시즌 종료 XP (AC-9) | `tests/unit/test_xp_system.gd` | `test_season_bonus_xp_*` | ✅ (간접) |
+| SP 배지 표시 (AC-10) | 시각적 검증 | — | ⬜ |
+
+### 빌드 검증
+
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______

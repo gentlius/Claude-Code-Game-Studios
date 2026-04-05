@@ -484,5 +484,48 @@ participant_rng_seed = (season_seed × 1000003) XOR (participant_id × 998244353
 
 ---
 
+## 9. Implementation Checklist
+
+Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
+
+### 진입점
+
+| 기능 | 진입점 |
+|------|--------|
+| AI 시즌 초기화 | `season_manager.gd.start_season()` → `AiCompetitor.init_season(tier, counts, seed)` |
+| AI 수익률 실시간 보간 | `game_clock.gd._process_tick()` 내 `on_tick` emit → `ai_competitor.gd._on_tick()` 자동 구독 |
+| 리더보드 데이터 제공 | `season_manager.gd.get_leaderboard()` → `AiCompetitor.get_all_return_pcts(tier)` + `get_participant_meta(tier, id)` |
+| 플레이어 순위 추정 | `season_manager.gd._calculate_player_tier_rank()` → `AiCompetitor.get_all_return_pcts(tier)` 선형 스캔 |
+
+### 호출 경로
+
+- [x] `SeasonManager.start_season()` → `AiCompetitor.init_season(player_tier, participant_counts, seed)` 존재 확인
+- [x] `GameClock.on_tick` 시그널 → `AiCompetitor._on_tick(tick, day, week)` 구독 연결
+- [x] `AiCompetitor.get_all_return_pcts(tier) -> Array` 공개 API 존재
+- [x] `AiCompetitor.get_participant_meta(tier, id) -> Dictionary` → `{display_name, is_master_of_investment}` 반환
+- [x] `AiCompetitor.reset_for_testing()` 존재 (테스트 격리)
+
+### AC → 테스트 매핑
+
+| AC | 테스트 파일 | 테스트 함수 | 상태 |
+|----|------------|------------|------|
+| AC-01 결정론적 재현성 | `tests/unit/test_ai_competitor.gd` | `test_init_is_deterministic_for_same_seed()` | ✅ 구현됨 |
+| AC-02 티어 단조성 | `tests/unit/test_ai_competitor.gd` | `test_tier_monotonicity()` | ✅ 구현됨 |
+| AC-03 계약 인터페이스 | `tests/unit/test_api_contracts.gd` | `test_ai_competitor_api()` | ✅ 구현됨 |
+| AC-04 성능 예산 | `tests/unit/test_ai_competitor.gd` | `test_get_all_return_pcts_performance()` | ✅ 구현됨 |
+| AC-05 틱 보간 성능 | Godot 프로파일러 (S3-10 측정 예정) | — | ⬜ 미확인 |
+| AC-06 클램프 동작 | `tests/unit/test_ai_competitor.gd` | `test_return_pct_clamped_to_range()` | ✅ 구현됨 |
+| AC-07 버킷 오차 범위 | `tests/unit/test_ai_competitor.gd` | `test_bucket_rank_error_within_tolerance()` | ✅ 구현됨 |
+| AC-08 거장 AI 메타데이터 | `tests/unit/test_ai_competitor.gd` | `test_grandmaster_ai_metadata()` | ✅ 구현됨 |
+| AC-09 에러 가드 | `tests/unit/test_ai_competitor.gd` | `test_get_tier_return_pct_before_init_returns_zero()` | ✅ 구현됨 |
+| AC-10 단조성 assert | `tests/unit/test_ai_competitor.gd` | `test_monotonicity_validation_assert()` | ✅ 구현됨 |
+| AC-11 경험적 순위 분포 | 플레이테스트 (S3-07 E2E 검증) | — | ⬜ 미확인 |
+
+### 빌드 검증
+
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+
+---
+
 *이 문서는 season-manager.md와 교차 검증되었으며 양방향 의존 관계가 확인됨.*
 *마지막 교차 검증: 2026-04-03*

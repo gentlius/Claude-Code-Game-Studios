@@ -921,3 +921,35 @@ rumor_accuracy = 0.70  # 30% 확률로 방향 반전
 | 시즌 테마 추가 (5개+) 시 테마 간 밸런스 검증 방법 | systems-designer | V-Slice | 미정 |
 | 이벤트 풀 저장 형식 — JSON vs Godot Resource | engine-programmer | 엔진 설정 후 | /setup-engine 후 결정 |
 | 뉴스 출처별 신뢰도 시스템 — EventTemplate에 `source_type` 필드 추가 (공시/뉴스/업계/루머). 퍼센트 수치 표시 NO, 아이콘 코드로 시각 구분. 루머 내 출처 차별화로 판단 깊이 향상 | game-designer + ux-designer | V-Slice | MVP=단일 [루머] 태그. 외부 감사 권고 (2026-04-03) |
+
+---
+
+## 9. Implementation Checklist
+
+Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
+
+### 진입점
+
+| 기능 | 진입점 |
+|------|--------|
+| 매 틱 이벤트 처리 | `game_clock.gd._process_tick()` → `NewsEventSystem._on_tick(tick, day, week)` (틱 순서 1번째) |
+| 뉴스 카드 UI 갱신 | `NewsEventSystem.on_news_published` 시그널 → `news_feed_panel.gd._on_news_published()` |
+
+### 호출 경로
+
+- [x] `NewsEventSystem.on_news_published(event: Dictionary)` 시그널 존재
+- [x] `NewsEventSystem.get_active_events() -> Array[Dictionary]` 존재
+- [x] `NewsEventSystem.reset_for_testing()` 존재
+- [x] `assets/data/events.json` 이벤트 데이터 파일 존재
+
+### AC → 테스트 매핑
+
+| AC | 테스트 파일 | 테스트 함수 | 상태 |
+|----|------------|------------|------|
+| mutex_group 충돌 방지 | `tests/unit/test_news_mutex.gd` | `test_mutex_group_prevents_conflict()` | ✅ |
+| API 계약 | `tests/unit/test_api_contracts.gd` | `test_news_event_system_api()` | ✅ |
+| 이벤트 분기 direction=VARIABLE | 통합 테스트 — E2E (S3-07) | — | ⬜ |
+
+### 빌드 검증
+
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______

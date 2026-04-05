@@ -163,6 +163,15 @@ func show_level_up(old_level: int, new_level: int, skill_points: int) -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_is_showing = true
 
+	# TD-07: reduced_motion — show immediately without animation
+	if ProjectSettings.get_setting("accessibility/reduced_motion", false):
+		_flash_rect.modulate.a = 0.0
+		_dim_overlay.modulate.a = 1.0
+		_banner_panel.offset_top = 0.0
+		_banner_panel.offset_bottom = float(BANNER_HEIGHT)
+		_lbl_level_number.scale = Vector2.ONE
+		return
+
 	# Phase 1: Golden flash burst
 	_flash_rect.modulate.a = 1.0
 	var flash_tween: Tween = create_tween()
@@ -198,6 +207,12 @@ func hide_banner() -> void:
 	if not _is_showing:
 		return
 	_is_showing = false
+
+	if ProjectSettings.get_setting("accessibility/reduced_motion", false):
+		visible = false
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		banner_closed.emit()
+		return
 
 	var tween: Tween = create_tween()
 	tween.set_ease(Tween.EASE_IN)

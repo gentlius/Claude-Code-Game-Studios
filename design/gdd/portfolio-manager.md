@@ -393,3 +393,38 @@ else:
 | 시즌 종료 강제 청산의 정확한 시점 — 마지막 틱 종가 vs 장 마감 후 별도 처리 | game-designer | 시즌 관리 GDD 시 | 잠정 결정: MARKET_CLOSED 직후 ①~③(청산+스냅샷) 실행, 리포트 확인 후 ④~⑤(리셋). 시즌/대회 관리가 오케스트레이터. 시즌 관리 GDD에서 최종 확정 |
 | 거래 내역 시즌 간 보존 여부 — 이전 시즌 기록 열람 가능? | game-designer | 세이브/로드 GDD 시 | 미정. 영향: TransactionRecord 보관 범위 (현 설계: 시즌 내 전체 보존). 세이브/로드 GDD에서 결정 전까지 현 범위 유지. |
 | RealPortfolio 확장 시 수수료/배당 처리 | systems-designer | 확장 시점 | 향후 |
+
+---
+
+## 9. Implementation Checklist
+
+Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
+
+### 진입점
+
+| 기능 | 진입점 |
+|------|--------|
+| 보유 추가 | `order_engine.gd._fill_*_order()` → `PortfolioManager.add_holding(stock_id, qty, price)` |
+| 보유 제거 | `order_engine.gd._fill_*_order()` → `PortfolioManager.remove_holding(stock_id, qty, price)` |
+| 강제 청산 | `season_manager.gd._force_liquidate_all()` → `PortfolioManager.remove_holding(...)` |
+| 총 자산 계산 | `season_manager.gd.get_season_return_pct()` → `PortfolioManager.get_total_assets()` |
+
+### 호출 경로
+
+- [x] `PortfolioManager.add_holding(stock_id, qty, price)` 존재
+- [x] `PortfolioManager.remove_holding(stock_id, qty, price)` 존재
+- [x] `PortfolioManager.get_total_assets() -> int` 존재
+- [x] `PortfolioManager.get_all_holdings() -> Array[Dictionary]` 존재
+- [x] `PortfolioManager.update_valuation(cash, reserved)` 존재
+- [x] `PortfolioManager.reset_for_testing()` 존재
+
+### AC → 테스트 매핑
+
+| AC | 테스트 파일 | 테스트 함수 | 상태 |
+|----|------------|------------|------|
+| 보유 추가/조회 | `tests/unit/test_api_contracts.gd` | `test_portfolio_manager_api()` | ✅ |
+| 총 자산 계산 | 통합 — OrderEngine 테스트 내 | — | ⬜ 단독 테스트 없음 |
+
+### 빌드 검증
+
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______

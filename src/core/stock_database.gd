@@ -17,6 +17,9 @@ const VOL_MAP: Dictionary = {
 }
 
 var _stocks: Dictionary = {}  ## stock_id -> StockData
+## 사전 계산 인덱스 — 매 틱 O(n) 스캔 방지 (S3-09).
+var _sector_index: Dictionary = {}  ## sector -> Array[StockData]
+var _tag_index: Dictionary = {}     ## event_tag -> Array[StockData]
 
 
 func _ready() -> void:
@@ -74,31 +77,27 @@ func get_all_sectors() -> Array[Dictionary]:
 	return result
 
 
-## Returns all stocks in a given sector.
+## Returns all stocks in a given sector. O(1) via precomputed index.
 func get_stocks_by_sector(sector: String) -> Array[StockData]:
-	var result: Array[StockData] = []
-	for stock: StockData in _stocks.values():
-		if stock.sector == sector:
-			result.append(stock)
-	return result
+	if not _sector_index.has(sector):
+		return []
+	return _sector_index[sector]
 
 
-## Returns stock IDs in a given sector.
+## Returns stock IDs in a given sector. O(k) where k = sector size.
 func get_stock_ids_by_sector(sector: String) -> Array[String]:
-	var result: Array[String] = []
-	for stock: StockData in _stocks.values():
-		if stock.sector == sector:
-			result.append(stock.stock_id)
-	return result
+	var ids: Array[String] = []
+	if _sector_index.has(sector):
+		for stock: StockData in _sector_index[sector]:
+			ids.append(stock.stock_id)
+	return ids
 
 
-## Returns stocks whose event_tags intersect with the given tag.
+## Returns stocks whose event_tags intersect with the given tag. O(1) via precomputed index.
 func get_stocks_by_event_tag(tag: String) -> Array[StockData]:
-	var result: Array[StockData] = []
-	for stock: StockData in _stocks.values():
-		if stock.event_tags.has(tag):
-			result.append(stock)
-	return result
+	if not _tag_index.has(tag):
+		return []
+	return _tag_index[tag]
 
 
 ## Load stocks from JSON data file. See design/gdd/stock-database.md for spec.
@@ -154,4 +153,21 @@ func _load_stocks_from_json() -> void:
 		stock.description = entry.get("description", "")
 		_stocks[stock.stock_id] = stock
 
+	_build_indexes()
 	stocks_loaded.emit()
+
+
+## Build sector and tag lookup indexes after JSON load. Called once per season load.
+func _build_indexes() -> void:
+	_sector_index.clear()
+	_tag_index.clear()
+	for stock: StockData in _stocks.values():
+		if not _sector_index.has(stock.sector):
+			var sector_arr: Array[StockData] = []
+			_sector_index[stock.sector] = sector_arr
+		_sector_index[stock.sector].append(stock)
+		for tag: String in stock.event_tags:
+			if not _tag_index.has(tag):
+				var tag_arr: Array[StockData] = []
+				_tag_index[tag] = tag_arr
+			_tag_index[tag].append(stock)

@@ -135,6 +135,25 @@ XpSystem은 SeasonManager를 참조하지 않는다. 단방향 의존.
 - **AC-04**: XpSystem이 `on_season_end` 시그널 핸들러를 직접 구독하지 않음
   (코드 리뷰 항목).
 
+## Implementation Notes (구현 중 결정 사항, 2026-04-04)
+
+### Q3: 한강 엔딩 체크 타이밍 — 매 틱 → PRE_MARKET 전환 시 1회
+
+초기 설계에서 한강 엔딩 조건(현금 < 10,000원 AND 보유 주식 없음)을 매 틱 on_tick에서 체크하는 방안을 고려했다. 그러나:
+- 매 틱 체크는 장중 순간적인 0 상태(주문 대기 중)에서 오발동 가능
+- 장중에는 예약 현금(reserved_cash)이 별도 관리되어 실제 잔고와 분리됨
+- 플레이어 관점에서 "장 시작 전" 자산 상태가 가장 의미 있는 기준점
+
+**결정**: `on_market_state_changed` → PRE_MARKET 전환 시 1회만 체크. 장 시작 직전 상태를 기준으로 한강 엔딩 판정.
+
+### Q4: 주간 스냅샷 갱신 타이밍 — 주간 어워드 지급 후
+
+`_on_week_end()`에서 주간 수익률 계산 → 어워드 지급 → 스냅샷 갱신 순서로 처리. 어워드 지급 이후에 `_weekly_start_capital`을 갱신해야 다음 주 수익률 기산점이 어워드를 포함한 올바른 자산으로 설정됨.
+
+### 알려진 구조적 gap: SeasonManager.start_season() 호출 경로 없음
+
+`SeasonManager.start_season()`이 현재 어떤 UI 코드에서도 호출되지 않음. `tech-debt.md TD-08` 참조. 해결 전까지 티어 배정/AI 초기화는 비활성 상태.
+
 ## Related Decisions
 
 - [ADR-001](001-system-communication-pattern.md) — 직접 호출 vs 시그널 판단 기준

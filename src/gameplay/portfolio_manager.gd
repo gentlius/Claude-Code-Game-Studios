@@ -208,6 +208,12 @@ func reset() -> void:
 	_cached_sim_cash = 0
 	_cached_reserved_cash = 0
 
+
+## Resets all state including season baseline for unit tests. Call in before_each.
+func reset_for_testing() -> void:
+	reset()
+	_initial_seed = 0
+
 # ── Internal ──
 
 func _record_transaction(

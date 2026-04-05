@@ -188,3 +188,36 @@ season_return_rate = (sim_total_assets - season_start_cash) / season_start_cash 
 | 예수금 이자 시스템 도입 여부 | economy-designer | 확장 시점 | 향후 |
 | 상금 스케일링: 참가자 수에 따른 상금 조정 필요 여부 | economy-designer | 시즌 관리 GDD 시 | 미정 |
 | 1억 달성 시 엔딩/특별 콘텐츠 | game-designer | 확장 시점 | 미정 |
+
+---
+
+## 9. Implementation Checklist
+
+Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
+
+### 진입점
+
+| 기능 | 진입점 |
+|------|--------|
+| 시즌 초기 자금 설정 | `game_main.gd._ready()` → `CurrencySystem.init_first_season()` |
+| 매수 예수금 차감 | `order_engine.gd.submit_order()` → `CurrencySystem.sim_deduct(amount)` |
+| 매도/상금 입금 | `order_engine.gd._fill_*()` / `season_manager.gd._grant_season_prize()` → `CurrencySystem.sim_add(amount)` |
+
+### 호출 경로
+
+- [x] `CurrencySystem.get_sim_cash() -> int` 존재
+- [x] `CurrencySystem.sim_add(amount: int)` 존재
+- [x] `CurrencySystem.sim_deduct(amount: int) -> bool` 존재
+- [x] `CurrencySystem.init_first_season()` 존재
+- [x] `CurrencySystem.reset_for_testing()` 존재
+
+### AC → 테스트 매핑
+
+| AC | 테스트 파일 | 테스트 함수 | 상태 |
+|----|------------|------------|------|
+| API 계약 | `tests/unit/test_api_contracts.gd` | `test_currency_system_api()` | ✅ |
+| 잔액 부족 시 false 반환 | `tests/unit/test_order_engine.gd` | `test_buy_rejected_insufficient_cash()` | ✅ (간접) |
+
+### 빌드 검증
+
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______

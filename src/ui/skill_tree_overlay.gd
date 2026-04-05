@@ -7,6 +7,9 @@ extends Control
 # ── Signals ──
 
 signal closed
+## TD-03: Emitted instead of calling GameClock.toggle_pause() directly.
+## Parent (TradingScreen) relays to GameClock via signal routing.
+signal pause_toggle_requested
 
 # ── Config (Tuning Knobs — GDD) ──
 
@@ -60,7 +63,6 @@ func _ready() -> void:
 
 	_build_ui()
 	SkillTree.on_skill_unlocked.connect(_on_skill_unlocked)
-	tree_exiting.connect(_disconnect_signals)
 
 
 # ── Public API ──
@@ -76,7 +78,7 @@ func open() -> void:
 	# Pause game (track if already paused)
 	_was_paused_before = GameClock.get_market_state() == GameClock.MarketState.PAUSED
 	if not _was_paused_before:
-		GameClock.toggle_pause()
+		pause_toggle_requested.emit()
 
 	_refresh_all()
 
@@ -93,7 +95,7 @@ func close() -> void:
 
 	# Resume if we paused it
 	if not _was_paused_before:
-		GameClock.toggle_pause()
+		pause_toggle_requested.emit()
 
 	closed.emit()
 

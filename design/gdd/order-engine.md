@@ -542,3 +542,42 @@ fee = floor(trade_value × fee_rate)
 | AI 경쟁자의 주문 처리 — 같은 엔진 사용 여부 | game-designer | AI 경쟁자 GDD 시 | 미정 |
 | 슬리피지 도입 — 대량 주문 시 평균 체결가 악화 모델. 스킬 해금(TR3+)과 연동 검토. 가격 관찰자 모델 전환 필요 | game-designer + systems-designer | Post-MVP | MVP=없음. 외부 감사 권고 (2026-04-03) |
 | 볼륨 기반 지정가 체결 우선순위 — 거래량 부족 시 미체결. 미체결 시 "가격 도달 — 대기 중" 피드백 추가 | game-designer + ux-designer | Post-MVP | MVP=가격 조건만 체크. 외부 감사 권고 (2026-04-03) |
+
+---
+
+## 9. Implementation Checklist
+
+Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
+
+### 진입점
+
+| 기능 | 진입점 |
+|------|--------|
+| 시장가/지정가 주문 접수 | `trading_screen.gd._submit_order()` → `OrderEngine.submit_order(side, stock_id, qty, type, price)` |
+| 틱 체결 처리 | `game_clock.gd._process_tick()` → `OrderEngine._on_tick(tick, day, week)` (틱 순서 3번째) |
+| 주문 취소 | `trading_screen.gd` → `OrderEngine.cancel_order(order_id)` |
+| 시즌 종료 전량 취소 | `season_manager.gd._on_season_end()` → `OrderEngine.cancel_all_pending_orders()` |
+
+### 호출 경로
+
+- [x] `OrderEngine.submit_order(side, stock_id, qty, type, price) -> Dictionary` 존재
+- [x] `OrderEngine.cancel_order(order_id) -> bool` 존재
+- [x] `OrderEngine.cancel_all_pending_orders()` 존재
+- [x] `OrderEngine.get_season_trade_count() -> int` 존재
+- [x] `OrderEngine.get_order_history(limit) -> Array[Dictionary]` 존재
+- [x] `OrderEngine.on_order_filled(order)` 시그널 존재
+- [x] `OrderEngine.reset_for_testing()` 존재
+- [x] `ORDER_HISTORY_MAX_SIZE = 500` 상수 존재 (S3-09 cap 추가)
+
+### AC → 테스트 매핑
+
+| AC | 테스트 파일 | 테스트 함수 | 상태 |
+|----|------------|------------|------|
+| 시장가 매수 체결 | `tests/unit/test_order_engine.gd` | `test_market_buy_fills_at_current_price()` | ✅ |
+| 지정가 체결 조건 | `tests/unit/test_order_engine.gd` | `test_limit_order_fills_when_price_reached()` | ✅ |
+| 잔액 부족 거부 | `tests/unit/test_order_engine.gd` | `test_buy_rejected_insufficient_cash()` | ✅ |
+| API 계약 | `tests/unit/test_api_contracts.gd` | `test_order_engine_api()` | ✅ |
+
+### 빌드 검증
+
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______

@@ -48,7 +48,7 @@ Not every decision requires user input. Use this table to determine who decides:
 
 | Level | Decision Owner | Examples |
 |-------|---------------|---------|
-| **Team Autonomous** | Director agents decide internally (TD, UX, Game Designer, etc.) | Scene structure, UI layout options, tech implementation choices, formula details, edge case handling |
+| **Team Autonomous** | Director Group 11인이 내부 결정 (Tier 1: creative-director · technical-director · producer / Tier 2: game-designer · lead-programmer · art-director · audio-director · narrative-director · qa-lead · release-manager · localization-lead) | Scene structure, UI layout options, tech implementation choices, formula details, edge case handling |
 | **Report to User** | Team resolves, then summarizes outcome | Cross-domain conflicts, decisions affecting multiple GDDs simultaneously, design review findings |
 | **User Decision Required** | Must escalate to user | Core game concept changes, scope expansion/reduction, monetization direction, narrative pillars, any decision that changes what the game fundamentally is |
 

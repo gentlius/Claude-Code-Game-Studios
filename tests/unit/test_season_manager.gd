@@ -5,13 +5,7 @@ extends GutTest
 
 ## Reset SeasonManager's internal state before each test.
 func before_each() -> void:
-	SeasonManager._current_tier = SeasonManager.TIER_FREE_MARKET
-	SeasonManager._is_free_market = true
-	SeasonManager._season_start_capital = 0
-	SeasonManager._weekly_start_capital = 0
-	SeasonManager._weekly_trade_count = 0
-	SeasonManager._last_week_trade_count = 0
-	SeasonManager._ending_triggered = false
+	SeasonManager.reset_for_testing()
 
 
 # ─────────────────────────────────────────────
@@ -293,3 +287,50 @@ func test_participant_counts_sum_equals_ai_total() -> void:
 		abs(total - expected_ai) <= SeasonManager.TIER_COUNT,
 		"AI 참가자 합계 ≈ %d (실제: %d)" % [expected_ai, total]
 	)
+
+
+# ─────────────────────────────────────────────
+# is_season_active / get_leaderboard (S3-03)
+# ─────────────────────────────────────────────
+
+func test_is_season_active_false_before_start() -> void:
+	# Arrange: reset ensures _season_start_capital == 0
+	# Assert
+	assert_false(SeasonManager.is_season_active(), "시즌 시작 전 → false")
+
+
+func test_is_season_active_true_after_start() -> void:
+	# Arrange: simulate season start
+	SeasonManager._season_start_capital = 1_000_000
+	# Assert
+	assert_true(SeasonManager.is_season_active(), "시즌 시작 후 → true")
+
+
+func test_get_leaderboard_returns_empty_before_season() -> void:
+	# Arrange: no season started (_season_start_capital == 0)
+	# Act
+	var result: Array = SeasonManager.get_leaderboard()
+	# Assert
+	assert_eq(result.size(), 0, "시즌 미시작 시 빈 배열")
+
+
+func test_get_leaderboard_returns_empty_in_free_market() -> void:
+	# Arrange: free-market mode
+	SeasonManager._is_free_market = true
+	SeasonManager._season_start_capital = 500_000  # below threshold but season "started"
+	# Act
+	var result: Array = SeasonManager.get_leaderboard(SeasonManager.TIER_FREE_MARKET)
+	# Assert
+	assert_eq(result.size(), 0, "프리마켓 모드 → 빈 배열")
+
+
+func test_prize_for_rank_rank1_bronze() -> void:
+	# Bronze threshold = 1,000,000. PRIZE_RATE[1] = 0.50 → 500,000원
+	var prize: int = SeasonManager._prize_for_rank(1, SeasonManager.TIER_BRONZE)
+	assert_eq(prize, 500_000, "브론즈 1위 상금 = 500,000원")
+
+
+func test_prize_for_rank_unranked_returns_zero() -> void:
+	# rank > 10 has no PRIZE_RATE entry → 0
+	var prize: int = SeasonManager._prize_for_rank(11, SeasonManager.TIER_BRONZE)
+	assert_eq(prize, 0, "11위 이하 상금 = 0")

@@ -399,3 +399,53 @@ daily_xp_granted = base_daily_xp × (FREE_MARKET_XP_RATE if is_free_market else 
 - [ ] AC-18: 프리마켓 참가자는 시즌 순위 보너스 XP를 받지 못한다
 - [ ] AC-19: 프리마켓 참가자도 수익률 ≥ 0% AND 체결 ≥ 5회 충족 시 완주 보너스 20 XP를 받는다 (패널티 없음)
 - [ ] AC-20: 프리마켓에서 `sim_total_assets ≥ 1,000,000` 달성 시 다음 시즌 시작 버튼 시점에 브론즈로 배정된다
+
+---
+
+## 9. Implementation Checklist
+
+Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
+
+### 진입점
+
+| 기능 | 진입점 |
+|------|--------|
+| 시즌 시작 | `trading_screen.gd._on_btn_market_open_pressed()` → `SeasonManager.start_season()` → 내부에서 `GameClock.start_season()` |
+| 시즌 재시작 (S→P→S 루프) | `game_clock.gd.confirm_transition(SEASON_END)` → `on_new_season_requested` emit → `season_manager.gd._ready()` 에서 연결된 `start_season()` 호출 |
+| 시즌 종료 처리 | `game_clock.gd.on_season_end` 시그널 → `season_manager.gd._on_season_end()` |
+| 주간 정산 | `game_clock.gd.on_week_end` 시그널 → `season_manager.gd._on_week_end()` |
+| 리더보드 조회 | `league_screen.gd._update_leaderboard()` → `SeasonManager.get_leaderboard(tier, from, to)` |
+
+### 호출 경로
+
+- [x] `SeasonManager.start_season()` 내에서 `GameClock.start_season()` 호출 (TD-08 해결, S3-01)
+- [x] `GameClock.on_new_season_requested` 시그널 → `SeasonManager.start_season()` 연결 (Foundation→Gameplay 의존성 역전 방지)
+- [x] `SeasonManager.get_leaderboard(tier, from_rank, to_rank) -> Array` 공개 API 존재
+- [x] `SeasonManager.is_season_active() -> bool` 공개 API 존재 (TradingScreen 분기용)
+- [x] `SeasonManager.get_tier_rank() -> int` 공개 API 존재 (LeagueScreen용, S3-05 추가)
+- [x] `SeasonManager.get_weekly_trade_count() -> int` 공개 API 존재 (LeagueScreen용, S3-05 추가)
+- [x] `SeasonManager.is_season_trade_eligible() -> bool` 공개 API 존재 (LeagueScreen용, S3-05 추가)
+- [x] `SeasonManager.reset_for_testing()` 존재 (테스트 격리)
+
+### AC → 테스트 매핑
+
+| AC | 테스트 파일 | 테스트 함수 | 상태 |
+|----|------------|------------|------|
+| AC-01 티어 배정 | `tests/unit/test_season_manager.gd` | `test_tier_assignment_*` | ✅ 구현됨 |
+| AC-02 강제 청산 | `tests/unit/test_season_manager.gd` | `test_force_liquidation_*` | ✅ 구현됨 |
+| AC-03 거장 엔딩 | `tests/unit/test_season_manager.gd` | `test_master_ending_triggered()` | ✅ 구현됨 |
+| AC-04 프리마켓 진입 | `tests/unit/test_season_manager.gd` | `test_free_market_entry()` | ✅ 구현됨 |
+| AC-05 한강 엔딩 | `tests/unit/test_season_manager.gd` | `test_hangang_ending_triggered()` | ✅ 구현됨 |
+| AC-06 수익률 공식 | `tests/unit/test_season_manager.gd` | `test_season_return_pct_formula()` | ✅ 구현됨 |
+| AC-07 reserved_cash 포함 | `tests/unit/test_season_manager.gd` | `test_reserved_cash_included_in_assets()` | ✅ 구현됨 |
+| AC-08 체결 미달 자격 | `tests/unit/test_season_manager.gd` | `test_prize_eligibility_min_trades()` | ✅ 구현됨 |
+| AC-09 브론즈 1위 상금 | `tests/unit/test_season_manager.gd` | `test_bronze_first_prize_amount()` | ✅ 구현됨 |
+| AC-11~13 특별 보상 | `tests/unit/test_season_manager.gd` | `test_weekly_prize_*` | ✅ 구현됨 |
+| is_season_active (S3-03) | `tests/unit/test_season_manager.gd` | `test_is_season_active_*` | ✅ 구현됨 |
+| get_leaderboard (S3-03) | `tests/unit/test_season_manager.gd` | `test_get_leaderboard_*` | ✅ 구현됨 |
+| AC-16 처리 순서 | 통합 테스트 — E2E 검증 (S3-07) | — | ⬜ 미확인 |
+| AC-17~20 프리마켓 XP | `tests/unit/test_season_manager.gd` | `test_free_market_xp_*` | ✅ 구현됨 |
+
+### 빌드 검증
+
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______

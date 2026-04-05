@@ -310,3 +310,32 @@ get_color(value):
 | 자산 변동 그래프 (일일/시즌 수익률 추이) | ux-designer | V-Slice | MVP는 텍스트/숫자만 |
 | 예수금 표시 위치 — 포트폴리오 UI 내 vs 별도 화면 | game-designer | 구현 시 | 미정 |
 | 시즌 간 포트폴리오 히스토리 비교 | game-designer | 세이브/로드 GDD 시 | 향후 |
+
+---
+
+## 9. Implementation Checklist
+
+Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
+
+### 진입점
+
+| 기능 | 진입점 |
+|------|--------|
+| 보유 목록 갱신 | `OrderEngine.on_order_filled` 시그널 → `portfolio_view.gd._refresh()` |
+| 총 자산 표시 | `GameClock.on_tick` 시그널 → `portfolio_view.gd._update_totals()` |
+
+### 호출 경로
+
+- [x] `PortfolioManager.get_all_holdings() -> Array[Dictionary]` 존재
+- [x] `PortfolioManager.get_total_assets() -> int` 존재
+- [x] `CurrencySystem.get_sim_cash() -> int` 존재
+
+### AC → 테스트 매핑
+
+| AC | 테스트 파일 | 테스트 함수 | 상태 |
+|----|------------|------------|------|
+| 전체 AC (시각 검증) | 시각적 검증 필요 (E2E, S3-07) | — | ⬜ 단위 테스트 없음 |
+
+### 빌드 검증
+
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______

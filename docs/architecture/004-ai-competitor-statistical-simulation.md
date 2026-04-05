@@ -129,6 +129,28 @@ func get_all_return_pcts(tier: int) -> Array
 - **AC-04**: 시즌 20일 경과 후 `get_tier_return_pct(i)` 반환값이
   해당 티어 TIER_PARAMS `r_min~r_max` 범위 내.
 
+## Implementation Notes (구현 중 결정 사항, 2026-04-04)
+
+### mu 산출 방식: 복리 공식 → 선형 보간
+
+초기 구현에서 `mu`를 연간 복리 수익률에서 역산하는 공식으로 산출했더니 200%↔233% 교대 패턴이 발생하여 인접 티어 간 중앙값이 역전됨 (AC-02 실패). 원인: 복리 공식의 비선형성이 구간에 따라 상승/하강을 교대로 산출.
+
+**결정**: `mu`를 브론즈 100% → 거장 310%의 선형 보간으로 직접 지정.
+단조 증가를 수식이 아닌 테이블로 보장하고, GDD §4-1 TIER_PARAMS 테이블에 명시.
+이후 `_validate_tier_monotonicity()` 런타임 검증이 항상 통과함을 확인.
+
+### push_error → push_warning (EC-01, EC-02)
+
+`_validate_tier_monotonicity()`에서 `push_error()`를 사용했더니 GUT 테스트 프레임워크가 Unexpected Error로 처리하여 EC-01/EC-02 테스트가 실패. `push_warning()`으로 변경하여 해결. 단조성 위반은 데이터 설정 오류이므로 게임을 중단할 만한 오류가 아니라는 판단.
+
+### participant_counts 합계 오차: 마지막 티어 나머지 배정
+
+float → int 트런케이션 누적으로 전체 합계가 19,999 미만이 되는 경우 발생. 마지막 티어(TIER_MASTER_OF_INVESTMENT)에 `ai_total - assigned` 나머지를 배정하는 방식으로 정확한 합산 보장. `SeasonManager._build_participant_counts()` 참조.
+
+### count=0 티어 처리
+
+참가자가 없는 티어에서 `_rebuild_player_tier_buckets()` 진입 시 out-of-bounds 발생. count=0이면 버킷 재계산을 스킵하고, `init_season()` 내에서도 count=0 티어는 초기화 대상에서 제외.
+
 ## Related Decisions
 
 - [ADR-001](001-system-communication-pattern.md) — GameClock 시그널 구독 패턴

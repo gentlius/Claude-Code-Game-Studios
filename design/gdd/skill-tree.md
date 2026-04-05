@@ -252,3 +252,38 @@ margin_call_threshold = -(initial_investment / LEVERAGE_RATIO)
 - 공매도(TR3)/레버리지(TR4)는 MVP 범위 밖. V-Slice에서 스킬 트리에 표시하되 해금 불가로 처리할지, 아예 숨길지 결정 필요
 - 리스펙(스킬 초기화) 기능 추가 여부 — 현재는 비가역. 향후 프리미엄 리셋 아이템 가능성
 - 루머 채널(S3)의 구체적 UX: 별도 패널? 뉴스 피드에 "[루머]" 태그?
+
+---
+
+## 9. Implementation Checklist
+
+Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
+
+### 진입점
+
+| 기능 | 진입점 |
+|------|--------|
+| 스킬 해금 | `skill_tree_overlay.gd._on_unlock_pressed(skill_id)` → `SkillTree.unlock_skill(skill_id)` |
+| 스킬 활성 여부 확인 | `chart_renderer.gd` 등 → `SkillTree.is_skill_unlocked(skill_id)` |
+| SP 소비 연동 | `SkillTree.unlock_skill()` 내부 → `XpSystem.spend_skill_point()` |
+
+### 호출 경로
+
+- [x] `SkillTree.unlock_skill(skill_id: String) -> bool` 존재
+- [x] `SkillTree.is_skill_unlocked(skill_id: String) -> bool` 존재
+- [x] `SkillTree.can_unlock(skill_id: String) -> bool` 존재
+- [x] `SkillTree.on_skill_unlocked(skill_id)` 시그널 존재
+- [x] `SkillTree.reset_for_testing()` 존재
+
+### AC → 테스트 매핑
+
+| AC | 테스트 파일 | 테스트 함수 | 상태 |
+|----|------------|------------|------|
+| 사전 요건 검증 | `tests/unit/test_skill_tree.gd` | `test_cannot_unlock_without_prereq()` | ✅ |
+| SP 소비 | `tests/unit/test_skill_tree.gd` | `test_unlock_consumes_skill_point()` | ✅ |
+| 이미 해금된 스킬 재해금 방지 | `tests/unit/test_skill_tree.gd` | `test_cannot_unlock_already_unlocked()` | ✅ |
+| API 계약 | `tests/unit/test_api_contracts.gd` | `test_skill_tree_api()` | ✅ |
+
+### 빌드 검증
+
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______

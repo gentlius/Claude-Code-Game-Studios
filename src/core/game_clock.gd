@@ -31,6 +31,11 @@ signal on_day_transition()
 signal on_week_end()
 signal on_season_end()
 
+## Emitted when SEASON_END settlement is confirmed and a new season should begin.
+## SeasonManager connects to this and calls start_season() — keeps Foundation→Gameplay
+## dependency direction clean (GameClock never calls SeasonManager directly).
+signal on_new_season_requested()
+
 # ── Constants ──
 
 const TICKS_PER_MINUTE: int = 4    ## 기본 단위: 1 game-minute = 4 ticks
@@ -50,6 +55,9 @@ var _current_week: int = 0  ## 0-based within season
 var _speed_multiplier: float = 1.0
 var _tick_accumulator: float = 0.0
 var _season_active: bool = false
+## Reference-counted pause sources. Market resumes only when all sources release.
+## Key: source_id (String), Value: true. Dictionary used as a set.
+var _pause_sources: Dictionary = {}
 
 # ── Public API ──
 
@@ -128,11 +136,31 @@ func confirm_market_open() -> void:
 	on_market_open.emit()
 
 
-## Toggle pause during MARKET_OPEN.
+## Toggle pause during MARKET_OPEN. Kept for backwards-compat with existing UI callers.
+## New code should prefer pause_request/pause_release for multi-source pause safety.
 func toggle_pause() -> void:
 	if _market_state == MarketState.MARKET_OPEN:
 		_change_state(MarketState.PAUSED)
 	elif _market_state == MarketState.PAUSED:
+		_change_state(MarketState.MARKET_OPEN)
+
+
+## Reference-counted pause request (S3-02). Market pauses on the first call.
+## Multiple callers (e.g. league screen + skill overlay) each hold their own source_id.
+## Duplicate source_id calls are idempotent (no double-pause).
+## [br]Usage: GameClock.pause_request("league_screen")
+func pause_request(source_id: String) -> void:
+	_pause_sources[source_id] = true
+	if _market_state == MarketState.MARKET_OPEN:
+		_change_state(MarketState.PAUSED)
+
+
+## Release one pause source. Market resumes only when _pause_sources is empty.
+## Calling release for an unknown source_id is a no-op.
+## [br]Usage: GameClock.pause_release("league_screen")
+func pause_release(source_id: String) -> void:
+	_pause_sources.erase(source_id)
+	if _market_state == MarketState.PAUSED and _pause_sources.is_empty():
 		_change_state(MarketState.MARKET_OPEN)
 
 
@@ -144,7 +172,21 @@ func confirm_transition() -> void:
 		MarketState.WEEK_END:
 			_advance_to_next_day()
 		MarketState.SEASON_END:
-			start_season()
+			## TD-08: SeasonManager owns the full season-start sequence.
+			## Signal keeps Foundation→Gameplay dependency direction clean.
+			on_new_season_requested.emit()
+
+
+## Resets all runtime state to initial values for unit tests. Call in before_each.
+func reset_for_testing() -> void:
+	_market_state = MarketState.PRE_MARKET
+	_current_tick = 0
+	_current_day = 0
+	_current_week = 0
+	_speed_multiplier = 1.0
+	_tick_accumulator = 0.0
+	_season_active = false
+	_pause_sources.clear()
 
 # ── Processing ──
 

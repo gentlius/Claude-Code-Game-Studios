@@ -726,6 +726,12 @@ func _end_trading_day() -> void:
 		# Update prev_day_close for next day's daily limit calculation
 		s["prev_day_close"] = close_price
 
+		# Reset tick buffers — OHLCV is now in ohlcv_daily; keeping all-time
+		# ticks would grow O(days × TICKS_PER_DAY) and make chart aggregation
+		# progressively slower each day (S3-10 perf fix).
+		s["tick_prices"] = [] as Array[int]
+		s["tick_volumes"] = [] as Array[float]
+
 	# Reset VI daily counters (GDD Rule 2-4: max 1 per day resets each day)
 	for stock_id: String in _vi_states:
 		_vi_states[stock_id]["count_today"] = 0

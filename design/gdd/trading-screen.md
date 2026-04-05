@@ -281,6 +281,72 @@ Game Clock의 시장 상태에 따라 트레이딩 스크린의 UI 상태가 결
 - 현재 활성 탭의 이벤트는 뱃지를 증가시키지 않음 (이미 보고 있으므로)
 - 뱃지 스타일: 탭 텍스트에 직접 카운트 표시 (별도 뱃지 UI 없음)
 
+#### 규칙 10. 컴포넌트 아키텍처 (TD-04)
+
+> **배경**: `trading_screen.gd`가 2020줄·8개 책임을 단독 보유하면서 매 틱 `get_children()`
+> 호출과 `StyleBoxFlat.new()` 반복 생성으로 UI 버벅임이 발생했다 (Sprint 3 이후 확인).
+> Sprint 4에서 5개 서브컴포넌트로 분리한다.
+
+##### 10-1. 컴포넌트 책임 분리
+
+```
+TradingScreen  (조율자 — UIState 머신, 시그널 라우팅, 서브컴포넌트 구성)
+├── StockListPanel      src/ui/stock_list_panel.gd
+├── StatusBar           src/ui/status_bar.gd
+├── OrderPanel          src/ui/order_panel.gd
+├── SettlementReporter  src/ui/settlement_reporter.gd
+└── ToastManager        src/ui/toast_manager.gd
+```
+
+| 컴포넌트 | 책임 | 소유 노드 |
+|---------|------|---------|
+| **StockListPanel** | 46종목 행 표시·갱신, 종목 선택 하이라이트 | `_stock_list_container`, `_stock_row_nodes` |
+| **StatusBar** | 상태바 행 1/2, 진행바, 배속 버튼 | `_lbl_season_info`, `_progress_bar`, `_btn_speed_*` |
+| **OrderPanel** | 매수/매도 폼, 수량·단가 입력, 주문 제출, 미체결 목록 | `_spin_quantity`, `_btn_submit_order`, `_pending_orders_container` |
+| **SettlementReporter** | 일일·주간·시즌 정산 팝업 3종, 순차 큐 관리 | `_settlement_panel`, `_settlement_queue` |
+| **ToastManager** | 뉴스 토스트 스택, reduced_motion 지원 (TD-07 잔여) | `_toast_container` |
+
+##### 10-2. 서브컴포넌트 시그널 인터페이스
+
+각 컴포넌트가 소유·구독하는 시그널은 아래와 같다.
+TradingScreen은 `_connect_signals()`에서 서브컴포넌트 시그널을 수신하여 상위 라우팅한다.
+
+| 컴포넌트 | 구독 (autoload 시그널) | 발신 시그널 | TradingScreen 처리 |
+|---------|----------------------|-----------|-------------------|
+| **StockListPanel** | `PriceEngine.on_price_updated`, `OrderEngine.on_order_filled` | `stock_selected(stock_id)` | `OrderPanel.set_stock()` + `ChartRenderer.load_stock()` |
+| **StatusBar** | `GameClock.on_tick`, `CurrencySystem.sim_cash_changed`, `PortfolioManager.valuation_updated` | `league_hud_clicked()`, `pause_toggled()`, `speed_changed(multiplier)` | 각각 `league_tab_requested`, `pause_toggle_requested`, `speed_change_requested` 상위 emit |
+| **OrderPanel** | `OrderEngine.on_order_filled/rejected/cancelled/expired`, `CurrencySystem.sim_cash_changed` | — (OrderEngine 직접 호출) | — |
+| **SettlementReporter** | `GameClock.on_market_close`, `on_week_end`, `on_season_end` | `settlement_confirmed()` | `GameClock.confirm_transition()` 호출 |
+| **ToastManager** | `NewsEventSystem.on_news_display` | — | — |
+
+##### 10-3. TradingScreen 잔여 책임 (분리 후)
+
+분리 후 `TradingScreen`이 단독 소유하는 책임:
+
+- **UIState 머신**: `GameClock.on_market_state_changed` → `_set_ui_state()` → 각 서브컴포넌트에 상태 전파
+- **서브컴포넌트 구성**: `_build_ui()`에서 5개 컴포넌트 인스턴스화 및 계층 배치
+- **키보드 단축키**: `_unhandled_input()` — B/S/Space/Enter/Tab/Esc/Shift+1~3
+- **XP·레벨업 흐름**: `XpBar`, `LevelUpBanner`, `SkillTreeOverlay` 소유 및 시그널 수신
+- **신호 버블업**: `league_tab_requested`, `pause_toggle_requested`, `speed_change_requested` (ADR-006·TD-03)
+
+##### 10-4. StockListPanel 성능 설계
+
+매 틱 UI 버벅임의 직접 원인을 구조적으로 제거한다.
+
+| 문제 | 해결책 |
+|------|--------|
+| `get_children()` 매 틱 호출 | `_row_nodes: Array[HBoxContainer]` — `_ready()`에서 1회 빌드, 이후 인덱스 접근 |
+| 가격 미변동 행도 전체 갱신 | `_last_prices: Dictionary` — 이전 가격과 동일하면 해당 행 skip |
+| `StyleBoxFlat.new()` 매 틱 생성 | `_sel_style: StyleBoxFlat` + `_desel_style: StyleBoxFlat` — `_ready()`에서 1회 생성·캐시 |
+| 보유 여부 매 틱 autoload 조회 | `_held_stocks: Dictionary` — `on_order_filled` 시에만 갱신 |
+
+##### 10-5. 코딩 제약
+
+- 각 서브컴포넌트 파일: **40줄 메서드 제한** 준수
+- 각 서브컴포넌트: `class_name` 선언 (전역 접근 불필요 — TradingScreen만 인스턴스화)
+- 서브컴포넌트 ↔ autoload 직접 접근 허용 (읽기 전용 query)
+- 서브컴포넌트 → 다른 서브컴포넌트 직접 참조 **금지** — TradingScreen 경유 의무
+
 ### States and Transitions
 
 | State | Description | Transition |
@@ -415,6 +481,8 @@ estimated_amount = quantity × reference_price
 - [ ] 키보드 단축키가 모두 정상 작동
 - [ ] 최소 해상도 1280×720에서 레이아웃 깨짐 없음
 - [ ] 성능: 종목 전환 100ms 이내, 틱 처리 및 UI 갱신 비용 16ms 이내 (60fps 프레임 버짓 이내)
+- [ ] StockListPanel: 가격 미변동 행은 매 틱 갱신 skip (dirty flag 동작 확인)
+- [ ] 각 서브컴포넌트 파일의 메서드 중 40줄 초과 없음
 
 ## Open Questions
 
@@ -438,29 +506,45 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 |------|--------|
 | 메인 HUD 진입 | `game_main.gd._ready()` → `MainScreen.tscn` → `TradingScreen.tscn` (F1 탭) |
 | 시즌 시작 버튼 | `TradingScreen._on_btn_market_open_pressed()` → `SeasonManager.start_season()` (is_season_active 분기) |
-| 주문 제출 | `TradingScreen._submit_order()` → `OrderEngine.submit_order(...)` |
-| 탭 전환 → F2 이동 | `TradingScreen.league_tab_requested` 시그널 → `MainScreen._switch_tab(TAB_F2)` (ADR-006) |
-| 일시정지/속도 | `TradingScreen.pause_toggle_requested` / `speed_change_requested` → `MainScreen` → `GameClock` (TD-03, S3-13) |
+| 주문 제출 | `OrderPanel._submit_order()` → `OrderEngine.submit_market_order()` / `submit_limit_order()` |
+| 탭 전환 → F2 이동 | `StatusBar.league_hud_clicked` → `TradingScreen.league_tab_requested` → `MainScreen._switch_tab(TAB_F2)` (ADR-006) |
+| 일시정지/속도 | `StatusBar.pause_toggled` / `speed_changed` → `TradingScreen.pause_toggle_requested` / `speed_change_requested` → `MainScreen` → `GameClock` (TD-03) |
+| 정산 확인 | `SettlementReporter.settlement_confirmed` → `TradingScreen` → `GameClock.confirm_transition()` |
 
 ### 호출 경로
 
 - [x] `SeasonManager.is_season_active()` — PRE_MARKET 버튼 분기
-- [x] `SeasonManager.get_season_return_pct()` — 상태바 HUD
-- [x] `SeasonManager.get_weekly_return_pct()` — 상태바 HUD
-- [x] `SeasonManager.get_tier_name()` — 상태바 HUD
+- [x] `SeasonManager.get_season_return_pct()` — StatusBar HUD
+- [x] `SeasonManager.get_weekly_return_pct()` — StatusBar HUD
+- [x] `SeasonManager.get_tier_name()` — StatusBar HUD
 - [x] `GameClock.confirm_market_open()` — 장 시작 버튼
-- [x] `GameClock.confirm_transition()` — 정산 확인
-- [x] `OrderEngine.submit_order(...)` — 주문 제출
+- [x] `GameClock.confirm_transition()` — SettlementReporter 경유
+- [x] `OrderEngine.submit_market_order()` / `submit_limit_order()` — OrderPanel 직접 호출
 - [x] `TradingScreen.league_tab_requested` 시그널 존재 (S3-06)
 - [x] `TradingScreen.pause_toggle_requested` 시그널 존재 (S3-13)
 - [x] `TradingScreen.speed_change_requested` 시그널 존재 (S3-13)
+- [ ] `StockListPanel._row_nodes` — `_ready()`에서 1회 빌드, `get_children()` 런타임 호출 없음
+- [ ] `StockListPanel._last_prices` — dirty flag skip 동작
+- [ ] `StockListPanel._sel_style` / `_desel_style` — `_ready()` 1회 캐시, 런타임 `StyleBoxFlat.new()` 없음
 
 ### AC → 테스트 매핑
 
 | AC | 테스트 파일 | 테스트 함수 | 상태 |
 |----|------------|------------|------|
-| 전체 AC (시각/통합 검증) | E2E 검증 필요 (S3-07) | — | ⬜ 단위 테스트 없음 |
-| API 계약 (league_tab_requested 등) | `tests/unit/test_api_contracts.gd` | `test_trading_screen_api()` | ⬜ 미추가 |
+| 전체 AC (시각/통합 검증) | E2E 플레이 검증 (S4-02) | — | ⬜ |
+| API 계약 (league_tab_requested 등) | `tests/unit/test_api_contracts.gd` | `test_trading_screen_signals()` | ⬜ S4 추가 예정 |
+| 성능 AC (16ms, dirty flag) | Godot 프로파일러 (S4-04) | `docs/profiling/v-slice-baseline.md` | ⬜ |
+
+### TD-04 분리 진행 상황
+
+| 서브컴포넌트 | 파일 | 상태 |
+|------------|------|------|
+| StockListPanel | `src/ui/stock_list_panel.gd` | ⬜ |
+| StatusBar | `src/ui/status_bar.gd` | ⬜ |
+| OrderPanel | `src/ui/order_panel.gd` | ⬜ |
+| SettlementReporter | `src/ui/settlement_reporter.gd` | ⬜ |
+| ToastManager | `src/ui/toast_manager.gd` | ⬜ |
+| TradingScreen 리팩터 | `src/ui/trading_screen.gd` | ⬜ |
 
 ### 빌드 검증
 

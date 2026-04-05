@@ -97,6 +97,7 @@ func test_season_manager_api():
 	assert_true(SeasonManager.has_method("get_tier_rank"),             "get_tier_rank 존재")
 	assert_true(SeasonManager.has_method("get_weekly_trade_count"),    "get_weekly_trade_count 존재")
 	assert_true(SeasonManager.has_method("is_season_trade_eligible"),  "is_season_trade_eligible 존재")
+	assert_true(SeasonManager.has_method("get_fiction_date"),          "get_fiction_date 존재")
 
 
 # ── AiCompetitor ─────────────────────────────────────────────────────

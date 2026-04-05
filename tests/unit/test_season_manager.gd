@@ -334,3 +334,52 @@ func test_prize_for_rank_unranked_returns_zero() -> void:
 	# rank > 10 has no PRIZE_RATE entry → 0
 	var prize: int = SeasonManager._prize_for_rank(11, SeasonManager.TIER_BRONZE)
 	assert_eq(prize, 0, "11위 이하 상금 = 0")
+
+
+# ─────────────────────────────────────────────
+# get_fiction_date() — 픽션 날짜 체계
+# ─────────────────────────────────────────────
+
+func test_fiction_date_before_season_start_returns_month_1() -> void:
+	# _seasons_played == 0 → quarter_idx clamps to 0 → 1월
+	var d: Dictionary = SeasonManager.get_fiction_date()
+	assert_eq(d["month"], 1, "시즌 미시작(0회) → 1월")
+
+
+func test_fiction_date_season_1_returns_month_1() -> void:
+	# Season 1 → SEASON_MONTH_STARTS[0] = 1월
+	SeasonManager._seasons_played = 1
+	var d: Dictionary = SeasonManager.get_fiction_date()
+	assert_eq(d["month"], 1, "시즌 1 → 1월")
+
+
+func test_fiction_date_season_2_returns_month_4() -> void:
+	SeasonManager._seasons_played = 2
+	var d: Dictionary = SeasonManager.get_fiction_date()
+	assert_eq(d["month"], 4, "시즌 2 → 4월")
+
+
+func test_fiction_date_season_3_returns_month_7() -> void:
+	SeasonManager._seasons_played = 3
+	var d: Dictionary = SeasonManager.get_fiction_date()
+	assert_eq(d["month"], 7, "시즌 3 → 7월")
+
+
+func test_fiction_date_season_4_returns_month_10() -> void:
+	SeasonManager._seasons_played = 4
+	var d: Dictionary = SeasonManager.get_fiction_date()
+	assert_eq(d["month"], 10, "시즌 4 → 10월")
+
+
+func test_fiction_date_season_5_wraps_to_month_1() -> void:
+	# 5번째 시즌은 다시 1월 (4로 나눈 나머지 = 0)
+	SeasonManager._seasons_played = 5
+	var d: Dictionary = SeasonManager.get_fiction_date()
+	assert_eq(d["month"], 1, "시즌 5 → 1월 (4주기 순환)")
+
+
+func test_fiction_date_has_day_key() -> void:
+	SeasonManager._seasons_played = 1
+	var d: Dictionary = SeasonManager.get_fiction_date()
+	assert_true(d.has("day"), "day 키 존재")
+	assert_true(d["day"] >= 1, "day ≥ 1")

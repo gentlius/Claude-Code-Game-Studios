@@ -40,6 +40,11 @@ const TIER_MASTER_OF_INVESTMENT: int = 10
 
 const TIER_COUNT: int = 11
 
+## Fiction date — each season maps to one quarter. Seasons cycle Q1→Q2→Q3→Q4→Q1…
+## Used to generate realistic-looking news dates without hardcoding a real calendar year.
+## Season 1 = 1월, Season 2 = 4월, Season 3 = 7월, Season 4 = 10월, Season 5 = 1월, …
+const SEASON_MONTH_STARTS: Array[int] = [1, 4, 7, 10]
+
 # ── Config — Tier Thresholds (GDD §3-2, Tuning Knob §7-1) ──
 ## Entry capital threshold for each tier (index = tier constant).
 ## Designer adjustable: align with narrative & daily return targets.
@@ -104,6 +109,8 @@ var PRIZE_RATE: Dictionary = {
 
 var _current_tier: int = TIER_FREE_MARKET
 var _is_free_market: bool = true
+## Number of seasons started since application launch (increments each start_season call).
+var _seasons_played: int = 0
 var _season_start_capital: int = 0
 var _weekly_start_capital: int = 0
 
@@ -142,6 +149,7 @@ func start_season() -> bool:
 		push_error("SeasonManager.start_season: sim_total_assets <= 0, season cannot begin")
 		return false
 
+	_seasons_played += 1
 	_season_start_capital = total_assets
 	_weekly_start_capital = total_assets
 	_weekly_trade_count = 0
@@ -214,6 +222,19 @@ func get_season_start_capital() -> int:
 ## Used by TradingScreen to decide whether to show "시즌 시작" or "장 시작" button.
 func is_season_active() -> bool:
 	return _season_start_capital > 0
+
+
+## Fiction calendar date for the current game tick.
+## Returns {month: int, day: int} — month cycles Q1→Q2→Q3→Q4 per season.
+## day is 1-based within the month (trading day 0 = 1일, day 19 = 20일).
+## Used by news headlines so they never show a hardcoded real-world month.
+func get_fiction_date() -> Dictionary:
+	var quarter_idx: int = (_seasons_played - 1) % SEASON_MONTH_STARTS.size()
+	if quarter_idx < 0:
+		quarter_idx = 0
+	var month: int = SEASON_MONTH_STARTS[quarter_idx]
+	var day: int = GameClock.get_current_day() + 1  ## 0-based → 1-based
+	return {"month": month, "day": day}
 
 
 ## Player's current rank within their tier (1-based). 0 = unranked (free-market).
@@ -488,3 +509,4 @@ func reset_for_testing() -> void:
 	_weekly_trade_count = 0
 	_last_week_trade_count = 0
 	_ending_triggered = false
+	_seasons_played = 0

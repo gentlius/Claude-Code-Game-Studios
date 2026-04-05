@@ -608,7 +608,8 @@ func _resolve_text(
 		text = text.replace("{ticker}", stock.stock_id)
 		text = text.replace("{sector_name}", stock.sector)
 
-	text = text.replace("{date}", "%d월 %d일" % [3, GameClock.get_current_day() + 1])
+	var fiction_date: Dictionary = SeasonManager.get_fiction_date()
+	text = text.replace("{date}", "%d월 %d일" % [fiction_date["month"], fiction_date["day"]])
 
 	# Template-specific variables
 	var variables: Dictionary = template.get("variables", {})

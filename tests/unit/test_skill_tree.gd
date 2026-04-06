@@ -75,13 +75,13 @@ func test_skill_point_deducted() -> void:
 # ── AC-6: News delay changes with skills ──
 
 func test_news_delay_default() -> void:
-	assert_eq(SkillTree.get_news_delay_ticks(), 40, "Default delay = 40 ticks")
+	assert_eq(SkillTree.get_news_delay_ticks(), 20, "Default delay = 20 ticks (5min×4TPM, reduced from 40 per UX audit)")
 
 
 func test_news_delay_s1() -> void:
 	_grant_skill_points(1)
 	SkillTree.unlock_skill("S1")
-	assert_eq(SkillTree.get_news_delay_ticks(), 20, "S1 delay = 20 ticks")
+	assert_eq(SkillTree.get_news_delay_ticks(), 8, "S1 delay = 8 ticks (2min×4TPM, reduced from 20 to preserve S1 upgrade value)")
 
 
 func test_news_delay_s2() -> void:

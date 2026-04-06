@@ -67,6 +67,24 @@ var _ohlcv_daily: Array[Dictionary] = []
 var _dirty: bool = true
 var _tick_counter: int = 0  ## For render skip
 
+## Indicator caches — computed in _rebuild_indicator_caches() (full) or
+## _update_last_indicator() (incremental). _draw_rsi/_draw_macd read these directly.
+var _rsi_cache: Array[float] = []
+var _macd_line_cache: Array[float] = []
+var _signal_line_cache: Array[float] = []
+## Running Wilder state — holds the state at the LAST COMPLETE candle for O(1) incremental update.
+var _rsi_avg_gain: float = 0.0
+var _rsi_avg_loss: float = 0.0
+## Running EMA state for MACD — held at last complete candle.
+var _ema_fast_state: float = 0.0
+var _ema_slow_state: float = 0.0
+var _sig_ema_state: float = 0.0
+var _indicator_seeded: bool = false  ## True once full seed calculation done
+
+## Debounce for load_stock — prevents full rebuild storms during rapid stock scrolling.
+var _pending_stock_id: String = ""
+var _load_debounce_timer: Timer
+
 # ── Crosshair ──
 
 var _crosshair_pos: Vector2 = Vector2(-1, -1)
@@ -105,6 +123,11 @@ func _ready() -> void:
 	PriceEngine.on_price_updated.connect(_on_price_updated)
 	clip_contents = true
 	tree_exiting.connect(_disconnect_signals)
+	_load_debounce_timer = Timer.new()
+	_load_debounce_timer.wait_time = 0.08  # 80ms — absorbs rapid stock-list scrolling
+	_load_debounce_timer.one_shot = true
+	_load_debounce_timer.timeout.connect(_on_load_debounce_timeout)
+	add_child(_load_debounce_timer)
 
 
 func _build_header() -> void:
@@ -179,8 +202,17 @@ func _build_header() -> void:
 
 # ── Public API ──
 
-## Load chart data for a stock. Called when player selects a stock.
+## Load chart data for a stock. Debounced — rapid calls are coalesced into one rebuild.
 func load_stock(stock_id: String) -> void:
+	_pending_stock_id = stock_id
+	_load_debounce_timer.start()
+
+
+func _on_load_debounce_timeout() -> void:
+	_do_load_stock(_pending_stock_id)
+
+
+func _do_load_stock(stock_id: String) -> void:
 	_stock_id = stock_id
 	_chart_state = ChartState.LOADING
 	_scroll_offset = 0
@@ -345,6 +377,7 @@ func _aggregate_candles() -> void:
 		if _tick_prices.size() > 0:
 			var today_candle: Dictionary = _aggregate_range(0, _tick_prices.size() - 1)
 			_candles.append(today_candle)
+		_rebuild_indicator_caches()
 		return
 
 	# For intra-day timeframes, aggregate from tick data
@@ -358,6 +391,7 @@ func _aggregate_candles() -> void:
 		var candle: Dictionary = _aggregate_range(i, end)
 		_candles.append(candle)
 		i += tf
+	_rebuild_indicator_caches()
 
 
 ## Incremental update — only rebuilds the last (in-progress) candle. O(1) per tick.
@@ -391,6 +425,121 @@ func _update_last_candle() -> void:
 			_candles[complete] = partial
 		else:
 			_candles.append(partial)
+	_update_last_indicator()
+
+
+## Full rebuild of RSI and MACD caches from _candles. Stores running state for
+## incremental updates. Called after _aggregate_candles() (stock switch / day boundary).
+func _rebuild_indicator_caches() -> void:
+	var n: int = _candles.size()
+	_rsi_cache.resize(n)
+	_macd_line_cache.resize(n)
+	_signal_line_cache.resize(n)
+	_indicator_seeded = false
+
+	if n == 0:
+		return
+
+	# Build close price array
+	var closes: Array[float] = []
+	closes.resize(n)
+	for i: int in range(n):
+		closes[i] = float(_candles[i]["close"])
+
+	# ── RSI (Wilder smoothing) ──
+	for i: int in range(n):
+		_rsi_cache[i] = 0.0
+	if n > RSI_PERIOD:
+		var gains: Array[float] = []
+		var losses: Array[float] = []
+		gains.resize(n)
+		losses.resize(n)
+		gains[0] = 0.0
+		losses[0] = 0.0
+		for i: int in range(1, n):
+			var diff: float = closes[i] - closes[i - 1]
+			gains[i] = maxf(diff, 0.0)
+			losses[i] = maxf(-diff, 0.0)
+		_rsi_avg_gain = 0.0
+		_rsi_avg_loss = 0.0
+		for i: int in range(1, RSI_PERIOD + 1):
+			_rsi_avg_gain += gains[i]
+			_rsi_avg_loss += losses[i]
+		_rsi_avg_gain /= float(RSI_PERIOD)
+		_rsi_avg_loss /= float(RSI_PERIOD)
+		var rs: float = _rsi_avg_gain / maxf(_rsi_avg_loss, 0.0001)
+		_rsi_cache[RSI_PERIOD] = 100.0 - (100.0 / (1.0 + rs))
+		for i: int in range(RSI_PERIOD + 1, n):
+			_rsi_avg_gain = (_rsi_avg_gain * float(RSI_PERIOD - 1) + gains[i]) / float(RSI_PERIOD)
+			_rsi_avg_loss = (_rsi_avg_loss * float(RSI_PERIOD - 1) + losses[i]) / float(RSI_PERIOD)
+			rs = _rsi_avg_gain / maxf(_rsi_avg_loss, 0.0001)
+			_rsi_cache[i] = 100.0 - (100.0 / (1.0 + rs))
+
+	# ── MACD (EMA 12/26/9) ──
+	for i: int in range(n):
+		_macd_line_cache[i] = 0.0
+		_signal_line_cache[i] = 0.0
+	if n >= MACD_SLOW + MACD_SIGNAL:
+		var ema_fast_arr: Array[float] = _calc_ema(closes, MACD_FAST)
+		var ema_slow_arr: Array[float] = _calc_ema(closes, MACD_SLOW)
+		for i: int in range(n):
+			if i < MACD_SLOW - 1:
+				_macd_line_cache[i] = 0.0
+			else:
+				_macd_line_cache[i] = ema_fast_arr[i] - ema_slow_arr[i]
+		var signal_start: int = MACD_SLOW - 1
+		var seed_end: int = signal_start + MACD_SIGNAL - 1
+		if seed_end < n:
+			var seed_sum: float = 0.0
+			for i: int in range(signal_start, seed_end + 1):
+				seed_sum += _macd_line_cache[i]
+			_sig_ema_state = seed_sum / float(MACD_SIGNAL)
+			_signal_line_cache[seed_end] = _sig_ema_state
+			var sig_k: float = 2.0 / float(MACD_SIGNAL + 1)
+			for i: int in range(seed_end + 1, n):
+				_sig_ema_state = _macd_line_cache[i] * sig_k + _sig_ema_state * (1.0 - sig_k)
+				_signal_line_cache[i] = _sig_ema_state
+		# Store EMA states for incremental updates
+		_ema_fast_state = ema_fast_arr[n - 1]
+		_ema_slow_state = ema_slow_arr[n - 1]
+		_indicator_seeded = true
+
+
+## Incremental update of indicator caches — only recomputes the last entry.
+## Called from _update_last_candle() when the partial candle changes.
+## Does NOT modify running state (_rsi_avg_gain etc.) — those only advance on complete candles.
+func _update_last_indicator() -> void:
+	var n: int = _candles.size()
+	if n == 0 or not _indicator_seeded:
+		return
+	# Resize if a new candle was appended
+	if _rsi_cache.size() < n:
+		_rsi_cache.resize(n)
+		_macd_line_cache.resize(n)
+		_signal_line_cache.resize(n)
+	var last: int = n - 1
+	var close_last: float = float(_candles[last]["close"])
+	var close_prev: float = float(_candles[last - 1]["close"]) if last > 0 else close_last
+
+	# RSI: recompute last value using running state + current close delta (no state mutation)
+	if last >= RSI_PERIOD:
+		var diff: float = close_last - close_prev
+		var g: float = maxf(diff, 0.0)
+		var l: float = maxf(-diff, 0.0)
+		var avg_g: float = (_rsi_avg_gain * float(RSI_PERIOD - 1) + g) / float(RSI_PERIOD)
+		var avg_l: float = (_rsi_avg_loss * float(RSI_PERIOD - 1) + l) / float(RSI_PERIOD)
+		var rs: float = avg_g / maxf(avg_l, 0.0001)
+		_rsi_cache[last] = 100.0 - (100.0 / (1.0 + rs))
+
+	# MACD: recompute last entry using running EMA states (no state mutation)
+	if last >= MACD_SLOW - 1:
+		var k_fast: float = 2.0 / float(MACD_FAST + 1)
+		var k_slow: float = 2.0 / float(MACD_SLOW + 1)
+		var ef: float = close_last * k_fast + _ema_fast_state * (1.0 - k_fast)
+		var es: float = close_last * k_slow + _ema_slow_state * (1.0 - k_slow)
+		_macd_line_cache[last] = ef - es
+		var sig_k: float = 2.0 / float(MACD_SIGNAL + 1)
+		_signal_line_cache[last] = _macd_line_cache[last] * sig_k + _sig_ema_state * (1.0 - sig_k)
 
 
 func _aggregate_range(start: int, end: int) -> Dictionary:
@@ -821,57 +970,11 @@ func _calc_ema(data: Array[float], period: int) -> Array[float]:
 	return result
 
 
-## Draw RSI(14) sub-panel in _rsi_rect.
-## Y range fixed 0–100; horizontal dashed lines at 70 (red) and 30 (blue).
-## Only draws the visible candle window (same vis_start_idx pattern as MAs).
+## Draw RSI(14) sub-panel. Uses _rsi_cache (pre-computed). O(visible) per draw.
 func _draw_rsi() -> void:
-	if _rsi_rect.size.y <= 0.0 or _candles.size() < RSI_PERIOD + 1:
+	if _rsi_rect.size.y <= 0.0 or _rsi_cache.size() < RSI_PERIOD + 1:
 		return
 
-	# Build full close price array
-	var closes: Array[float] = []
-	closes.resize(_candles.size())
-	for i: int in range(_candles.size()):
-		closes[i] = float(_candles[i]["close"])
-
-	# Calculate RSI over entire candle array
-	var gains: Array[float] = []
-	var losses: Array[float] = []
-	gains.resize(_candles.size())
-	losses.resize(_candles.size())
-	gains[0] = 0.0
-	losses[0] = 0.0
-	for i: int in range(1, _candles.size()):
-		var diff: float = closes[i] - closes[i - 1]
-		gains[i] = maxf(diff, 0.0)
-		losses[i] = maxf(-diff, 0.0)
-
-	# Wilder smoothing (equivalent to EMA with alpha = 1/period)
-	var rsi_values: Array[float] = []
-	rsi_values.resize(_candles.size())
-	for i: int in range(_candles.size()):
-		rsi_values[i] = 0.0
-
-	# Seed: simple average of first RSI_PERIOD gains/losses
-	if _candles.size() < RSI_PERIOD:
-		return
-	var avg_gain: float = 0.0
-	var avg_loss: float = 0.0
-	for i: int in range(1, RSI_PERIOD + 1):
-		avg_gain += gains[i]
-		avg_loss += losses[i]
-	avg_gain /= float(RSI_PERIOD)
-	avg_loss /= float(RSI_PERIOD)
-	var rs: float = avg_gain / maxf(avg_loss, 0.0001)
-	rsi_values[RSI_PERIOD] = 100.0 - (100.0 / (1.0 + rs))
-
-	for i: int in range(RSI_PERIOD + 1, _candles.size()):
-		avg_gain = (avg_gain * float(RSI_PERIOD - 1) + gains[i]) / float(RSI_PERIOD)
-		avg_loss = (avg_loss * float(RSI_PERIOD - 1) + losses[i]) / float(RSI_PERIOD)
-		rs = avg_gain / maxf(avg_loss, 0.0001)
-		rsi_values[i] = 100.0 - (100.0 / (1.0 + rs))
-
-	# Visible window indices
 	var total: int = _candles.size()
 	var vis_start_idx: int
 	if _auto_scroll:
@@ -882,11 +985,9 @@ func _draw_rsi() -> void:
 
 	var candle_width: float = _rsi_rect.size.x / float(_visible_count)
 
-	# Helper: RSI value → pixel Y inside _rsi_rect (range 0–100)
 	var rsi_to_y: Callable = func(v: float) -> float:
 		return _rsi_rect.position.y + _rsi_rect.size.y * (1.0 - v / 100.0)
 
-	# Dashed horizontal line helper (draws short segments)
 	var draw_dashed: Callable = func(y: float, col: Color) -> void:
 		var dash_len: float = 6.0
 		var gap_len: float = 4.0
@@ -897,25 +998,22 @@ func _draw_rsi() -> void:
 			draw_line(Vector2(x, y), Vector2(x_end, y), col, 1.0)
 			x += dash_len + gap_len
 
-	# Overbought / oversold dashed lines
 	draw_dashed.call(rsi_to_y.call(RSI_OVERBOUGHT), Color(0.85, 0.25, 0.25, 0.7))
 	draw_dashed.call(rsi_to_y.call(RSI_OVERSOLD), Color(0.25, 0.45, 0.85, 0.7))
 
-	# RSI line for visible window
 	var points: PackedVector2Array = PackedVector2Array()
 	for i: int in range(vis_start_idx, vis_end_idx):
-		if i < RSI_PERIOD:
+		if i < RSI_PERIOD or i >= _rsi_cache.size():
 			continue
 		var vis_i: int = i - vis_start_idx
 		var x: float = _rsi_rect.position.x + (float(vis_i) + 0.5) * candle_width
-		var y: float = rsi_to_y.call(rsi_values[i])
+		var y: float = rsi_to_y.call(_rsi_cache[i])
 		points.append(Vector2(x, y))
 
 	if points.size() >= 2:
 		draw_polyline(points, RSI_COLOR, 1.5, true)
 
-	# Label: "RSI(14)" + current value
-	var current_rsi: float = rsi_values[vis_end_idx - 1] if vis_end_idx > RSI_PERIOD else 0.0
+	var current_rsi: float = _rsi_cache[vis_end_idx - 1] if vis_end_idx > RSI_PERIOD and vis_end_idx <= _rsi_cache.size() else 0.0
 	var label: String = "RSI(%d)  %.1f" % [RSI_PERIOD, current_rsi]
 	draw_string(
 		ThemeDB.fallback_font,
@@ -925,52 +1023,11 @@ func _draw_rsi() -> void:
 	)
 
 
-## Draw MACD(12,26,9) sub-panel in _macd_rect.
-## MACD line (blue), Signal line (orange), Histogram bars (green/red), zero line (gray).
-## Y range auto-scaled to visible data.
+## Draw MACD(12,26,9) sub-panel. Uses _macd_line_cache/_signal_line_cache. O(visible) per draw.
 func _draw_macd() -> void:
-	if _macd_rect.size.y <= 0.0 or _candles.size() < MACD_SLOW + MACD_SIGNAL:
+	if _macd_rect.size.y <= 0.0 or _macd_line_cache.size() < MACD_SLOW + MACD_SIGNAL:
 		return
 
-	# Build full close price array
-	var closes: Array[float] = []
-	closes.resize(_candles.size())
-	for i: int in range(_candles.size()):
-		closes[i] = float(_candles[i]["close"])
-
-	# EMA arrays
-	var ema_fast: Array[float] = _calc_ema(closes, MACD_FAST)
-	var ema_slow: Array[float] = _calc_ema(closes, MACD_SLOW)
-
-	# MACD line = EMA_fast - EMA_slow (valid from index MACD_SLOW-1 onward)
-	var macd_line: Array[float] = []
-	macd_line.resize(_candles.size())
-	for i: int in range(_candles.size()):
-		if i < MACD_SLOW - 1:
-			macd_line[i] = 0.0
-		else:
-			macd_line[i] = ema_fast[i] - ema_slow[i]
-
-	# Signal line = EMA(MACD_line, MACD_SIGNAL) — seed from index MACD_SLOW-1
-	var signal_line: Array[float] = []
-	signal_line.resize(_candles.size())
-	for i: int in range(_candles.size()):
-		signal_line[i] = 0.0
-	var signal_start: int = MACD_SLOW - 1
-	var signal_seed_end: int = signal_start + MACD_SIGNAL - 1
-	if signal_seed_end >= _candles.size():
-		return
-	var seed_sum: float = 0.0
-	for i: int in range(signal_start, signal_seed_end + 1):
-		seed_sum += macd_line[i]
-	var sig_ema: float = seed_sum / float(MACD_SIGNAL)
-	signal_line[signal_seed_end] = sig_ema
-	var sig_k: float = 2.0 / float(MACD_SIGNAL + 1)
-	for i: int in range(signal_seed_end + 1, _candles.size()):
-		sig_ema = macd_line[i] * sig_k + sig_ema * (1.0 - sig_k)
-		signal_line[i] = sig_ema
-
-	# Visible window indices
 	var total: int = _candles.size()
 	var vis_start_idx: int
 	if _auto_scroll:
@@ -979,16 +1036,15 @@ func _draw_macd() -> void:
 		vis_start_idx = maxi(0, total - _visible_count - _scroll_offset)
 	var vis_end_idx: int = mini(total, vis_start_idx + _visible_count)
 
-	# Auto-scale Y to visible MACD/histogram values
-	var valid_start: int = signal_seed_end
+	var valid_start: int = MACD_SLOW - 1 + MACD_SIGNAL - 1
 	var y_min: float = INF
 	var y_max: float = -INF
 	for i: int in range(vis_start_idx, vis_end_idx):
-		if i < valid_start:
+		if i < valid_start or i >= _macd_line_cache.size():
 			continue
-		var hist: float = macd_line[i] - signal_line[i]
-		y_min = minf(y_min, minf(macd_line[i], minf(signal_line[i], hist)))
-		y_max = maxf(y_max, maxf(macd_line[i], maxf(signal_line[i], hist)))
+		var hist: float = _macd_line_cache[i] - _signal_line_cache[i]
+		y_min = minf(y_min, minf(_macd_line_cache[i], minf(_signal_line_cache[i], hist)))
+		y_max = maxf(y_max, maxf(_macd_line_cache[i], maxf(_signal_line_cache[i], hist)))
 
 	if y_min == INF or y_max == -INF:
 		return
@@ -1013,10 +1069,10 @@ func _draw_macd() -> void:
 
 	# Histogram bars
 	for i: int in range(vis_start_idx, vis_end_idx):
-		if i < valid_start:
+		if i < valid_start or i >= _macd_line_cache.size():
 			continue
 		var vis_i: int = i - vis_start_idx
-		var hist: float = macd_line[i] - signal_line[i]
+		var hist: float = _macd_line_cache[i] - _signal_line_cache[i]
 		var x_center: float = _macd_rect.position.x + (float(vis_i) + 0.5) * candle_width
 		var bar_top: float = minf(macd_to_y.call(hist), zero_y)
 		var bar_bot: float = maxf(macd_to_y.call(hist), zero_y)
@@ -1027,22 +1083,22 @@ func _draw_macd() -> void:
 	# MACD line
 	var macd_points: PackedVector2Array = PackedVector2Array()
 	for i: int in range(vis_start_idx, vis_end_idx):
-		if i < valid_start:
+		if i < valid_start or i >= _macd_line_cache.size():
 			continue
 		var vis_i: int = i - vis_start_idx
 		var x: float = _macd_rect.position.x + (float(vis_i) + 0.5) * candle_width
-		macd_points.append(Vector2(x, macd_to_y.call(macd_line[i])))
+		macd_points.append(Vector2(x, macd_to_y.call(_macd_line_cache[i])))
 	if macd_points.size() >= 2:
 		draw_polyline(macd_points, MACD_LINE_COLOR, 1.5, true)
 
 	# Signal line
 	var sig_points: PackedVector2Array = PackedVector2Array()
 	for i: int in range(vis_start_idx, vis_end_idx):
-		if i < valid_start:
+		if i < valid_start or i >= _signal_line_cache.size():
 			continue
 		var vis_i: int = i - vis_start_idx
 		var x: float = _macd_rect.position.x + (float(vis_i) + 0.5) * candle_width
-		sig_points.append(Vector2(x, macd_to_y.call(signal_line[i])))
+		sig_points.append(Vector2(x, macd_to_y.call(_signal_line_cache[i])))
 	if sig_points.size() >= 2:
 		draw_polyline(sig_points, MACD_SIGNAL_COLOR, 1.5, true)
 

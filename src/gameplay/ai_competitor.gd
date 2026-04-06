@@ -49,28 +49,28 @@ const LAZY_EVAL_ON_DEMAND: bool = true
 ## 이전 설계(r_min 계단 상승)는 "고티어가 항상 고수익"을 강제하는 부작용이 있어 수정.
 ## 수익률 분포 겹침(overlap)은 sigma로 자연 발생 — ADR 참고.
 const TIER_PARAMS: Array[Dictionary] = [
-	# TIER_BRONZE (0)
-	{ "mu": 100.0, "sigma": 60.0, "r_min": -60.0, "r_max": 600.0 },
+	# TIER_BRONZE (0) — mu 100→25: 0% 수익 플레이어가 하위 5%→37백분위로 개선
+	{ "mu": 25.0, "sigma": 55.0, "r_min": -60.0, "r_max": 600.0 },
 	# TIER_SILVER (1)
-	{ "mu": 130.0, "sigma": 55.0, "r_min": -60.0, "r_max": 650.0 },
+	{ "mu": 40.0, "sigma": 50.0, "r_min": -60.0, "r_max": 650.0 },
 	# TIER_GOLD (2)
-	{ "mu": 160.0, "sigma": 45.0, "r_min": -60.0, "r_max": 550.0 },
+	{ "mu": 60.0, "sigma": 45.0, "r_min": -60.0, "r_max": 550.0 },
 	# TIER_PLATINUM (3)
-	{ "mu": 190.0, "sigma": 40.0, "r_min": -60.0, "r_max": 500.0 },
+	{ "mu": 80.0, "sigma": 40.0, "r_min": -60.0, "r_max": 500.0 },
 	# TIER_EMERALD (4)
-	{ "mu": 215.0, "sigma": 35.0, "r_min": -60.0, "r_max": 450.0 },
+	{ "mu": 105.0, "sigma": 35.0, "r_min": -60.0, "r_max": 450.0 },
 	# TIER_DIAMOND (5)
-	{ "mu": 235.0, "sigma": 30.0, "r_min": -60.0, "r_max": 420.0 },
+	{ "mu": 130.0, "sigma": 30.0, "r_min": -60.0, "r_max": 420.0 },
 	# TIER_MASTER (6)
-	{ "mu": 250.0, "sigma": 25.0, "r_min": -60.0, "r_max": 380.0 },
+	{ "mu": 155.0, "sigma": 25.0, "r_min": -60.0, "r_max": 380.0 },
 	# TIER_GRANDMASTER (7)
-	{ "mu": 265.0, "sigma": 22.0, "r_min": -60.0, "r_max": 360.0 },
+	{ "mu": 180.0, "sigma": 22.0, "r_min": -60.0, "r_max": 360.0 },
 	# TIER_CHALLENGER (8)
-	{ "mu": 278.0, "sigma": 18.0, "r_min": -60.0, "r_max": 320.0 },
+	{ "mu": 205.0, "sigma": 18.0, "r_min": -60.0, "r_max": 320.0 },
 	# TIER_LEGEND (9)
-	{ "mu": 290.0, "sigma": 15.0, "r_min": -60.0, "r_max": 300.0 },
+	{ "mu": 225.0, "sigma": 15.0, "r_min": -60.0, "r_max": 300.0 },
 	# TIER_MASTER_OF_INVESTMENT (10)
-	{ "mu": 310.0, "sigma": 20.0, "r_min": -60.0, "r_max": 500.0 },
+	{ "mu": 250.0, "sigma": 20.0, "r_min": -60.0, "r_max": 500.0 },
 ]
 
 # ── Internal State ──

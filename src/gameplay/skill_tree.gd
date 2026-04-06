@@ -16,8 +16,8 @@ signal on_skill_unlocked(skill_id: String)
 # ── Config (Tuning Knobs) ──
 
 @export var SKILL_COST: int = 1
-@export var NEWS_DELAY_T0_MIN: int = 10  ## 10 game-minutes delay (no skill)
-@export var NEWS_DELAY_T1_MIN: int = 5   ## 5 game-minutes delay (S1 unlocked)
+@export var NEWS_DELAY_T0_MIN: int = 5   ## 5 game-minutes delay (no skill) — reduced from 10 per UX audit (40틱→20틱)
+@export var NEWS_DELAY_T1_MIN: int = 2   ## 2 game-minutes delay (S1 unlocked) — reduced from 5 to preserve S1 upgrade value
 @export var RUMOR_BASE_ACCURACY: float = 0.7
 @export var RUMOR_LEAD_MINUTES: int = 15  ## 15 game-minutes rumor lead time
 @export var LEVERAGE_RATIO: float = 2.0

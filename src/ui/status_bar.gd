@@ -42,7 +42,8 @@ func _ready() -> void:
 	_build_sp_alert()
 	GameClock.on_tick.connect(_on_tick)
 	CurrencySystem.sim_cash_changed.connect(func(_a: int, _d: int) -> void: _update_row2())
-	PortfolioManager.valuation_updated.connect(func(_t: int, _r: float) -> void: _update_row2())
+	# valuation_updated is intentionally NOT connected here — on_tick already fires _update_row2()
+	# after OrderEngine._on_tick() has updated valuation, so connecting both would fire twice per tick.
 
 
 func _build_row1() -> void:

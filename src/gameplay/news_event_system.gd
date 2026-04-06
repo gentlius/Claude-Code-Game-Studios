@@ -887,9 +887,10 @@ func _on_vi_triggered(stock_id: String, is_upper: bool, halt_ticks: int) -> void
 	var direction_text: String = "상승" if is_upper else "하락"
 	var halt_min: int = halt_ticks / GameClock.TICKS_PER_MINUTE
 	var headline: String = "⚠️ [VI발동] %s %s — %d분 거래정지" % [display_name, direction_text, halt_min]
+	var limit_type: String = "상한가" if is_upper else "하한가"
 	var entry: Dictionary = {
 		"headline": headline,
-		"body": "",
+		"body": "단기 급%s으로 VI가 발동됐다. %s 전후 %d분간 단일가 매매로 전환, 이후 거래 재개." % [direction_text, limit_type, halt_min],
 		"impact_hint": "⚠️",
 		"scope": "INDIVIDUAL",
 		"impact_tier": "LARGE",
@@ -908,7 +909,7 @@ func _on_vi_released(stock_id: String) -> void:
 	var headline: String = "ℹ️ [VI해제] %s 거래 재개" % display_name
 	var entry: Dictionary = {
 		"headline": headline,
-		"body": "",
+		"body": "변동성 완화 확인 후 VI가 해제됐다. %s 정규 연속 매매가 재개된다." % display_name,
 		"impact_hint": "ℹ️",
 		"scope": "INDIVIDUAL",
 		"impact_tier": "MEDIUM",
@@ -923,14 +924,17 @@ func _on_vi_released(stock_id: String) -> void:
 
 func _on_circuit_breaker(stage: int, halt_ticks: int) -> void:
 	var headline: String
+	var cb_body: String
 	if stage == 1:
 		var halt_min: int = halt_ticks / GameClock.TICKS_PER_MINUTE
 		headline = "🚨 [CB 1단계] 시장 지수 -8%% — %d분 전종목 거래정지" % halt_min
+		cb_body = "시장 지수가 전일 대비 8% 이상 하락해 서킷브레이커 1단계가 발동됐다. 전 종목 " + str(halt_min) + "분간 거래가 정지된다."
 	else:
 		headline = "🚨 [CB 2단계] 시장 지수 -15% — 당일 장 조기 마감"
+		cb_body = "시장 지수가 전일 대비 15% 이상 하락해 서킷브레이커 2단계가 발동됐다. 당일 장이 즉시 마감된다."
 	var entry: Dictionary = {
 		"headline": headline,
-		"body": "",
+		"body": cb_body,
 		"impact_hint": "🚨",
 		"scope": "MACRO",
 		"impact_tier": "MEGA",

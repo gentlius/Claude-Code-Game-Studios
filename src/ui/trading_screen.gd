@@ -273,7 +273,12 @@ func _handle_enter_key() -> void:
 	if _ui_state == UIState.PRE_MARKET:
 		GameClock.confirm_market_open()
 	elif _ui_state == UIState.SETTLEMENT:
-		_settlement_reporter.confirm_current()
+		# Guard: only confirm when panel is actually visible.
+		# If Enter fires before the deferred show_next() runs, the queue would be
+		# drained early and _pending_level_up would emit needs_level_up before
+		# the daily panel has ever shown.
+		if _settlement_reporter.is_showing():
+			_settlement_reporter.confirm_current()
 	elif _ui_state in [UIState.MARKET_OPEN, UIState.PAUSED]:
 		_order_panel.try_submit()
 

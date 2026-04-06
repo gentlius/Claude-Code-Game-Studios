@@ -37,6 +37,14 @@ var _lbl_weekly_prize_status: Label
 ## 우측 리더보드
 var _leaderboard_container: VBoxContainer
 var _global_rank_label: Label
+var _lbl_displayed_tier: Label
+var _btn_tier_prev: Button
+var _btn_tier_next: Button
+
+## 현재 리더보드에 표시 중인 티어 (플레이어 티어와 다를 수 있음)
+var _displayed_tier: int = 0
+## 틱 스로틀 카운터 — 매 4틱에 1회만 리더보드 재구성 (노드 생성 비용 절감)
+var _tick_counter: int = 0
 
 
 func _ready() -> void:
@@ -58,6 +66,10 @@ func _exit_tree() -> void:
 # ── Refresh ──
 
 func _on_tick(_tick: int, _day: int, _week: int) -> void:
+	_tick_counter += 1
+	# 4틱에 1회만 갱신 — 리더보드 노드 재생성은 비싸므로 스로틀
+	if _tick_counter % 4 != 0:
+		return
 	_refresh()
 
 
@@ -69,6 +81,11 @@ func _refresh() -> void:
 	if SeasonManager.get_is_free_market():
 		_show_state("free_market")
 		return
+
+	# 시즌 전환 시 내 티어로 리셋
+	var my_tier: int = SeasonManager.get_current_tier()
+	if _displayed_tier < 0 or _displayed_tier >= AiCompetitor.TIER_COUNT:
+		_displayed_tier = my_tier
 
 	_show_state("main")
 	_update_left_panel()
@@ -138,22 +155,31 @@ func _update_leaderboard() -> void:
 	for child in _leaderboard_container.get_children():
 		child.queue_free()
 
-	var tier: int    = SeasonManager.get_current_tier()
-	var my_rank: int = SeasonManager.get_tier_rank()
+	var my_tier: int = SeasonManager.get_current_tier()
+	var viewing_own_tier: bool = (_displayed_tier == my_tier)
+
+	# 티어 선택 UI 업데이트
+	var tier_name: String = SeasonManager.get_tier_name(_displayed_tier)
+	var own_marker: String = "  (내 티어)" if viewing_own_tier else ""
+	_lbl_displayed_tier.text = "%s%s" % [tier_name, own_marker]
+	_btn_tier_prev.disabled = (_displayed_tier <= 0)
+	_btn_tier_next.disabled = (_displayed_tier >= AiCompetitor.TIER_COUNT - 1)
 
 	# AC-08: 1~10위 고정
-	var fixed: Array = SeasonManager.get_leaderboard(tier, 1, LEADERBOARD_FIXED_ROWS)
+	var fixed: Array = SeasonManager.get_leaderboard(_displayed_tier, 1, LEADERBOARD_FIXED_ROWS)
 	for entry in fixed:
 		_add_row(entry)
 
-	# AC-09: 병합 여부 판단
-	if my_rank > MERGE_THRESHOLD:
-		_add_separator()
-		var ctx_from: int = maxi(LEADERBOARD_FIXED_ROWS + 1, my_rank - LEADERBOARD_CONTEXT_RANGE)
-		var ctx_to:   int = my_rank + LEADERBOARD_CONTEXT_RANGE
-		var context: Array = SeasonManager.get_leaderboard(tier, ctx_from, ctx_to)
-		for entry in context:
-			_add_row(entry)
+	# AC-09: 내 티어 볼 때만 컨텍스트 행 표시
+	if viewing_own_tier:
+		var my_rank: int = SeasonManager.get_tier_rank()
+		if my_rank > MERGE_THRESHOLD:
+			_add_separator()
+			var ctx_from: int = maxi(LEADERBOARD_FIXED_ROWS + 1, my_rank - LEADERBOARD_CONTEXT_RANGE)
+			var ctx_to:   int = my_rank + LEADERBOARD_CONTEXT_RANGE
+			var context: Array = SeasonManager.get_leaderboard(_displayed_tier, ctx_from, ctx_to)
+			for entry in context:
+				_add_row(entry)
 
 	# AC-12: 글로벌 순위 (항상 하단 고정)
 	_global_rank_label.text = "글로벌: 집계 전 / %s명" % _fmt_comma(SeasonManager.TOTAL_PARTICIPANTS)
@@ -468,8 +494,48 @@ func _build_right_panel() -> Control:
 
 
 func _build_leaderboard_header() -> Control:
+	var vbox: VBoxContainer = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 4)
+
+	# ── 티어 셀렉터 행 ──
+	var tier_row: HBoxContainer = HBoxContainer.new()
+	tier_row.add_theme_constant_override("separation", 6)
+	vbox.add_child(tier_row)
+
+	_btn_tier_prev = Button.new()
+	_btn_tier_prev.text = "◀"
+	_btn_tier_prev.custom_minimum_size = Vector2(28, 24)
+	_btn_tier_prev.add_theme_font_size_override("font_size", 11)
+	ThemeSetup.apply_button_theme(_btn_tier_prev)
+	_btn_tier_prev.pressed.connect(func() -> void:
+		_displayed_tier = maxi(0, _displayed_tier - 1)
+		_update_leaderboard()
+	)
+	tier_row.add_child(_btn_tier_prev)
+
+	_lbl_displayed_tier = Label.new()
+	_lbl_displayed_tier.text = "—"
+	_lbl_displayed_tier.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_lbl_displayed_tier.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_lbl_displayed_tier.add_theme_font_size_override("font_size", 13)
+	_lbl_displayed_tier.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3, 1.0))
+	tier_row.add_child(_lbl_displayed_tier)
+
+	_btn_tier_next = Button.new()
+	_btn_tier_next.text = "▶"
+	_btn_tier_next.custom_minimum_size = Vector2(28, 24)
+	_btn_tier_next.add_theme_font_size_override("font_size", 11)
+	ThemeSetup.apply_button_theme(_btn_tier_next)
+	_btn_tier_next.pressed.connect(func() -> void:
+		_displayed_tier = mini(AiCompetitor.TIER_COUNT - 1, _displayed_tier + 1)
+		_update_leaderboard()
+	)
+	tier_row.add_child(_btn_tier_next)
+
+	# ── 컬럼 헤더 행 ──
 	var hbox: HBoxContainer = HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 8)
+	vbox.add_child(hbox)
 
 	var cols: Array[Array] = [
 		["#",    48,  HORIZONTAL_ALIGNMENT_LEFT],
@@ -489,7 +555,7 @@ func _build_leaderboard_header() -> Control:
 			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		hbox.add_child(lbl)
 
-	return hbox
+	return vbox
 
 
 # ── Helpers ──

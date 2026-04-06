@@ -45,29 +45,32 @@ const LAZY_EVAL_ON_DEMAND: bool = true
 ## r_min도 단조 증가 → 고티어 AI는 저티어 AI보다 항상 높은 하한 수익률.
 ## 원래 GDD 공식(daily_r 복리)은 홀짝 교대 패턴이었으나,
 ## AC-02(인접 티어 중앙값 단조성) 보장을 위해 선형 보간 방식으로 재산정.
+## 단조성은 mu 단독 보장. r_min은 전 티어 동일(-60%) → 고티어도 손실 가능.
+## 이전 설계(r_min 계단 상승)는 "고티어가 항상 고수익"을 강제하는 부작용이 있어 수정.
+## 수익률 분포 겹침(overlap)은 sigma로 자연 발생 — ADR 참고.
 const TIER_PARAMS: Array[Dictionary] = [
 	# TIER_BRONZE (0)
-	{ "mu": 100.0, "sigma": 60.0, "r_min": -30.0, "r_max": 600.0 },
+	{ "mu": 100.0, "sigma": 60.0, "r_min": -60.0, "r_max": 600.0 },
 	# TIER_SILVER (1)
-	{ "mu": 130.0, "sigma": 55.0, "r_min": -25.0, "r_max": 650.0 },
+	{ "mu": 130.0, "sigma": 55.0, "r_min": -60.0, "r_max": 650.0 },
 	# TIER_GOLD (2)
-	{ "mu": 160.0, "sigma": 45.0, "r_min": -20.0, "r_max": 550.0 },
+	{ "mu": 160.0, "sigma": 45.0, "r_min": -60.0, "r_max": 550.0 },
 	# TIER_PLATINUM (3)
-	{ "mu": 190.0, "sigma": 40.0, "r_min": -15.0, "r_max": 500.0 },
+	{ "mu": 190.0, "sigma": 40.0, "r_min": -60.0, "r_max": 500.0 },
 	# TIER_EMERALD (4)
-	{ "mu": 215.0, "sigma": 35.0, "r_min": -10.0, "r_max": 450.0 },
+	{ "mu": 215.0, "sigma": 35.0, "r_min": -60.0, "r_max": 450.0 },
 	# TIER_DIAMOND (5)
-	{ "mu": 235.0, "sigma": 30.0, "r_min":  -5.0, "r_max": 420.0 },
+	{ "mu": 235.0, "sigma": 30.0, "r_min": -60.0, "r_max": 420.0 },
 	# TIER_MASTER (6)
-	{ "mu": 250.0, "sigma": 25.0, "r_min":   0.0, "r_max": 380.0 },
+	{ "mu": 250.0, "sigma": 25.0, "r_min": -60.0, "r_max": 380.0 },
 	# TIER_GRANDMASTER (7)
-	{ "mu": 265.0, "sigma": 22.0, "r_min":   5.0, "r_max": 360.0 },
+	{ "mu": 265.0, "sigma": 22.0, "r_min": -60.0, "r_max": 360.0 },
 	# TIER_CHALLENGER (8)
-	{ "mu": 278.0, "sigma": 18.0, "r_min":  10.0, "r_max": 320.0 },
+	{ "mu": 278.0, "sigma": 18.0, "r_min": -60.0, "r_max": 320.0 },
 	# TIER_LEGEND (9)
-	{ "mu": 290.0, "sigma": 15.0, "r_min":  15.0, "r_max": 300.0 },
+	{ "mu": 290.0, "sigma": 15.0, "r_min": -60.0, "r_max": 300.0 },
 	# TIER_MASTER_OF_INVESTMENT (10)
-	{ "mu": 310.0, "sigma": 20.0, "r_min":  50.0, "r_max": 500.0 },
+	{ "mu": 310.0, "sigma": 20.0, "r_min": -60.0, "r_max": 500.0 },
 ]
 
 # ── Internal State ──
@@ -291,7 +294,10 @@ func _generate_target_returns(tier: int, count: int, params: Dictionary) -> Arra
 
 
 ## GDD §3-3 단계 2: 특정 티어·참가자의 일별 cumulative_r 배열 생성.
-## 내부 cumulative_r 배열은 클램프 없이 유지 (Q3 결정).
+## 중간값은 PriceEngine.DAILY_LIMIT_PCT 기반 선형 누적 상한으로 클램프.
+## 이유: AI 수익률은 실제 가격 움직임에서 도출되므로 상/하한가(±30%/일)를
+##       초과하는 일별 누적 수익은 물리적으로 불가능.
+## day D 최대: ±DAILY_LIMIT_PCT×(D+1) = ±30%×1, ±60%×2, …, ±600%×20
 func _generate_cumulative_returns(tier: int, participant_id: int) -> Array[float]:
 	var td: Dictionary = _tier_data[tier]
 	var params: Dictionary = TIER_PARAMS[tier]
@@ -306,6 +312,9 @@ func _generate_cumulative_returns(tier: int, participant_id: int) -> Array[float
 	var rng := RandomNumberGenerator.new()
 	rng.seed = p_seed
 
+	# 일간 가격제한: PriceEngine.DAILY_LIMIT_PCT = 0.30 → 30%/일
+	var daily_limit_pct: float = PriceEngine.DAILY_LIMIT_PCT * 100.0
+
 	var cumulative: Array[float] = []
 	cumulative.resize(SEASON_DAYS)
 	var running: float = 0.0
@@ -313,8 +322,9 @@ func _generate_cumulative_returns(tier: int, participant_id: int) -> Array[float
 		# GDD §4-2: daily_return = drift + N(0, sigma_daily)
 		var daily: float = drift_per_day + rng.randfn(0.0, sigma_daily)
 		running += daily
-		# Q3 결정: cumulative_r 내부 클램프 없음 (외부 반환 시에만 클램프)
-		cumulative[d] = running
+		# day D 누적 수익은 D+1일치 상/하한가 이동량을 초과 불가
+		var day_max: float = daily_limit_pct * float(d + 1)
+		cumulative[d] = clampf(running, -day_max, day_max)
 
 	return cumulative
 
@@ -412,14 +422,14 @@ func _rebuild_player_tier_buckets() -> void:
 
 
 ## GDD §7-2: 단조성 검증. init_season 호출 시 TIER_PARAMS 유효성 검사.
-## 단조성은 r_min이 단계적으로 상승함으로써 보장된다 (GDD §4-1 주석).
-## mu는 ~5.6% / ~6.2% 교대 패턴이 의도적이므로 검증 대상 아님.
+## 단조성은 mu 단독으로 보장 — r_min은 전 티어 동일값(-60%)이므로 r_min 검증 불필요.
 func _validate_tier_monotonicity() -> void:
 	for t: int in range(TIER_COUNT - 1):
 		var curr: Dictionary = TIER_PARAMS[t]
 		var next: Dictionary = TIER_PARAMS[t + 1]
-		if next["r_min"] < curr["r_min"]:
-			push_error("AiCompetitor: 단조성 위반 — r_min[%d]=%.1f < r_min[%d]=%.1f" % [t + 1, next["r_min"], t, curr["r_min"]])
+		# mu 단조성 검증 (AC-02의 실제 보장 수단)
+		if next["mu"] <= curr["mu"]:
+			push_error("AiCompetitor: mu 단조성 위반 — mu[%d]=%.1f <= mu[%d]=%.1f" % [t + 1, next["mu"], t, curr["mu"]])
 		# EC-09: sigma_tier >= 5.0 하한 강제
 		if curr["sigma"] < 5.0:
 			push_error("AiCompetitor: EC-09 — sigma[%d]=%.1f < 5.0 하한" % [t, curr["sigma"]])

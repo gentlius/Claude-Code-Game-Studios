@@ -241,15 +241,25 @@ func _on_price_updated(_tick: int) -> void:
 	if _stock_id == "" or _chart_state != ChartState.LIVE:
 		return
 
-	# Render skip at high speed
+	# Render skip at high speed — more aggressive at 4x to reduce draw call pressure
 	var speed: float = GameClock.get_speed_multiplier()
-	if speed >= float(RENDER_SKIP_AT_SPEED) and _tick_counter % 2 != 0:
+	if speed >= 4.0 and _tick_counter % 4 != 0:
+		return
+	elif speed >= float(RENDER_SKIP_AT_SPEED) and _tick_counter % 2 != 0:
 		return
 
 	# Refresh data
-	_tick_prices = PriceEngine.get_tick_buffer(_stock_id)
-	_tick_volumes = PriceEngine.get_tick_volumes(_stock_id)
-	_aggregate_candles()
+	var new_prices: Array[int] = PriceEngine.get_tick_buffer(_stock_id)
+	var new_volumes: Array[float] = PriceEngine.get_tick_volumes(_stock_id)
+	# Day transition: buffer was reset — full rebuild required
+	if new_prices.size() < _tick_prices.size():
+		_tick_prices = new_prices
+		_tick_volumes = new_volumes
+		_aggregate_candles()
+	else:
+		_tick_prices = new_prices
+		_tick_volumes = new_volumes
+		_update_last_candle()
 	_update_header()
 	_dirty = true
 	queue_redraw()
@@ -348,6 +358,39 @@ func _aggregate_candles() -> void:
 		var candle: Dictionary = _aggregate_range(i, end)
 		_candles.append(candle)
 		i += tf
+
+
+## Incremental update — only rebuilds the last (in-progress) candle. O(1) per tick.
+## Called from _on_price_updated when the buffer grew (normal tick, no day boundary).
+func _update_last_candle() -> void:
+	if _timeframe == Timeframe.D1:
+		if _tick_prices.size() > 0:
+			var today: Dictionary = _aggregate_range(0, _tick_prices.size() - 1)
+			if _candles.size() > _ohlcv_daily.size():
+				_candles[_candles.size() - 1] = today
+			else:
+				_candles.append(today)
+		return
+
+	var tf: int = int(_timeframe)
+	var n: int = _tick_prices.size()
+	if n == 0:
+		return
+
+	# Append any newly completed candles (at most 1 per tick in steady state)
+	var complete: int = n / tf
+	while _candles.size() < complete:
+		var idx: int = _candles.size()
+		_candles.append(_aggregate_range(idx * tf, (idx + 1) * tf - 1))
+
+	# Update or append the in-progress partial candle
+	if n % tf != 0:
+		var start: int = complete * tf
+		var partial: Dictionary = _aggregate_range(start, n - 1)
+		if _candles.size() > complete:
+			_candles[complete] = partial
+		else:
+			_candles.append(partial)
 
 
 func _aggregate_range(start: int, end: int) -> Dictionary:

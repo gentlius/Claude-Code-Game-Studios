@@ -45,6 +45,8 @@ const DAYS_PER_WEEK: int = 5
 const WEEKS_PER_SEASON: int = 4
 const BASE_TICK_INTERVAL: float = 0.192  ## real seconds per tick at 1x speed (~5min/day)
 const SECONDS_PER_TICK: int = 15  ## game-world seconds each tick represents (4 ticks = 1 minute)
+## Max ticks fired per frame — prevents death spiral when a slow frame causes tick backlog.
+const MAX_TICKS_PER_FRAME: int = 3
 
 # ── State ──
 
@@ -197,9 +199,11 @@ func _process(delta: float) -> void:
 	var tick_interval := BASE_TICK_INTERVAL / _speed_multiplier
 	_tick_accumulator += delta
 
-	while _tick_accumulator >= tick_interval:
+	var ticks_this_frame: int = 0
+	while _tick_accumulator >= tick_interval and ticks_this_frame < MAX_TICKS_PER_FRAME:
 		_tick_accumulator -= tick_interval
 		_process_tick()
+		ticks_this_frame += 1
 
 
 func _process_tick() -> void:

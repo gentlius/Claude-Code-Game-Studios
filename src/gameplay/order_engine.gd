@@ -248,7 +248,8 @@ func get_order_history(limit: int = 50) -> Array[Dictionary]:
 
 # ── Tick Processing (GDD Rule 4, tick order: 3rd after PriceEngine) ──
 
-func _on_tick(tick_number: int, _day: int, _week: int) -> void:
+## Called by GameClock._process_tick() for deterministic News→Price→Order ordering.
+func process_tick(tick_number: int, _day: int, _week: int) -> void:
 	# Process queued market orders (from PAUSED state)
 	var market_queue: Array[Dictionary] = _market_order_queue.duplicate()
 	_market_order_queue.clear()

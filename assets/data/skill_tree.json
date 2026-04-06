@@ -1,0 +1,114 @@
+[
+  {
+    "id": "A1",
+    "branch": "analysis",
+    "tier": 1,
+    "name": "이동평균선",
+    "description": "5/20/60일 이동평균선 차트 오버레이",
+    "prerequisites": []
+  },
+  {
+    "id": "A2",
+    "branch": "analysis",
+    "tier": 2,
+    "name": "보조지표",
+    "description": "RSI(14), MACD(12,26,9) 하단 패널 표시",
+    "prerequisites": ["A1"]
+  },
+  {
+    "id": "A3",
+    "branch": "analysis",
+    "tier": 3,
+    "name": "재무제표",
+    "description": "PER, PBR, ROE 기업정보 패널 표시",
+    "prerequisites": ["A2"]
+  },
+  {
+    "id": "A4",
+    "branch": "analysis",
+    "tier": 4,
+    "name": "섹터 비교 분석",
+    "description": "업종별 상대강도 비교 뷰",
+    "prerequisites": ["A3"]
+  },
+  {
+    "id": "S1",
+    "branch": "sense",
+    "tier": 1,
+    "name": "빠른 뉴스",
+    "description": "뉴스 딜레이 15초로 단축",
+    "prerequisites": []
+  },
+  {
+    "id": "S2",
+    "branch": "sense",
+    "tier": 2,
+    "name": "실시간 뉴스",
+    "description": "뉴스 딜레이 0초",
+    "prerequisites": ["S1"]
+  },
+  {
+    "id": "S3",
+    "branch": "sense",
+    "tier": 3,
+    "name": "루머 채널",
+    "description": "뉴스 발생 전 확률적 힌트 (정확도 70%)",
+    "prerequisites": ["S2"]
+  },
+  {
+    "id": "TR1",
+    "branch": "trading",
+    "tier": 1,
+    "name": "지정가 주문",
+    "description": "목표가 설정, 조건 충족 시 자동 체결",
+    "prerequisites": []
+  },
+  {
+    "id": "TR2",
+    "branch": "trading",
+    "tier": 2,
+    "name": "손절/익절",
+    "description": "보유 종목에 자동 매도 조건 설정",
+    "prerequisites": ["TR1"]
+  },
+  {
+    "id": "TR3",
+    "branch": "trading",
+    "tier": 3,
+    "name": "공매도",
+    "description": "주가 하락 시 수익. 보유 없이 매도 후 매수로 청산",
+    "prerequisites": ["TR2", "A2"]
+  },
+  {
+    "id": "TR4",
+    "branch": "trading",
+    "tier": 4,
+    "name": "레버리지",
+    "description": "2x 배율 거래. 수익/손실 2배",
+    "prerequisites": ["TR3"]
+  },
+  {
+    "id": "P1",
+    "branch": "portfolio",
+    "tier": 1,
+    "name": "5종목 보유",
+    "description": "동시 보유 종목 수 5로 확장",
+    "prerequisites": []
+  },
+  {
+    "id": "P2",
+    "branch": "portfolio",
+    "tier": 2,
+    "name": "10종목 보유",
+    "description": "동시 보유 종목 수 10으로 확장",
+    "prerequisites": ["P1"]
+  },
+  {
+    "id": "P3",
+    "branch": "portfolio",
+    "tier": 3,
+    "name": "섹터 ETF",
+    "description": "섹터 단위 투자 가능",
+    "prerequisites": ["P2", "A4"]
+  }
+]

@@ -315,7 +315,7 @@ func test_vi_halt_decrements_each_tick() -> void:
 	PriceEngine._cb_halt_remaining = 0
 
 	# Act — call _on_tick once (tick_number > 0 to skip VI check on tick 0)
-	PriceEngine._on_tick(1, 1, 1)
+	PriceEngine.process_tick(1, 1, 1)
 
 	# Assert — halt_remaining decremented by 1
 	var vi: Dictionary = PriceEngine._vi_states[TEST_STOCK_ID]
@@ -332,7 +332,7 @@ func test_cb_halt_decrements_each_tick() -> void:
 	PriceEngine._engine_state = PriceEngine.EngineState.RUNNING
 
 	# Act — call _on_tick once
-	PriceEngine._on_tick(1, 1, 1)
+	PriceEngine.process_tick(1, 1, 1)
 
 	# Assert — CB halt_remaining decremented by 1
 	assert_eq(PriceEngine._cb_halt_remaining, 4, "CB halt should decrement by 1 per tick")

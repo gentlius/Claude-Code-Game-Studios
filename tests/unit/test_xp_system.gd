@@ -22,31 +22,73 @@ func test_trade_fill_does_not_grant_xp() -> void:
 	assert_eq(xp_after - xp_before, 0, "Trade fill should not grant XP")
 
 
-# ── AC-2: Daily bonus XP by return bracket ──
+# ── AC-2: Daily bonus XP by alpha bracket (GDD F1) ──
+# _calculate_daily_xp() now takes alpha_pct (player return − market return)
 
-func test_daily_xp_loss() -> void:
-	var xp: int = XpSystem._calculate_daily_xp(-5.0)
-	assert_eq(xp, 15, "Loss: 30 * 0.5 = 15")
+func test_daily_xp_alpha_large_loss() -> void:
+	var xp: int = XpSystem._calculate_daily_xp(-2.0)
+	assert_eq(xp, 15, "alpha -2%: 30 * 0.5 = 15")
 
 
-func test_daily_xp_zero_pct() -> void:
+func test_daily_xp_alpha_small_loss() -> void:
+	var xp: int = XpSystem._calculate_daily_xp(-0.5)
+	assert_eq(xp, 30, "alpha -0.5%: 30 * 1.0 = 30")
+
+
+func test_daily_xp_alpha_zero() -> void:
 	var xp: int = XpSystem._calculate_daily_xp(0.0)
-	assert_eq(xp, 30, "0%: 30 * 1.0 = 30")
+	assert_eq(xp, 45, "alpha 0%: 30 * 1.5 = 45")
 
 
-func test_daily_xp_moderate_gain() -> void:
+func test_daily_xp_alpha_moderate() -> void:
 	var xp: int = XpSystem._calculate_daily_xp(2.0)
-	assert_eq(xp, 45, "2%: 30 * 1.5 = 45")
+	assert_eq(xp, 60, "alpha 2%: 30 * 2.0 = 60")
 
 
-func test_daily_xp_good_gain() -> void:
-	var xp: int = XpSystem._calculate_daily_xp(4.0)
-	assert_eq(xp, 60, "4%: 30 * 2.0 = 60")
+func test_daily_xp_alpha_excellent() -> void:
+	var xp: int = XpSystem._calculate_daily_xp(3.0)
+	assert_eq(xp, 90, "alpha 3%: 30 * 3.0 = 90")
 
 
-func test_daily_xp_excellent_gain() -> void:
-	var xp: int = XpSystem._calculate_daily_xp(7.0)
-	assert_eq(xp, 90, "7%: 30 * 3.0 = 90")
+# ── AC-2: Alpha state stored on market close ──
+
+func test_daily_xp_alpha_state_on_market_close() -> void:
+	# Arrange — empty _stock_states → market_avg_return = 0.0
+	# player return = +2% → alpha = +2% → multiplier 2.0 → 60 XP
+	XpSystem._daily_has_trade = true
+	XpSystem._prev_close_assets = 1000000
+	PortfolioManager._cached_total_assets = 1020000  # +2%
+	PriceEngine._stock_states.clear()  # no stocks → market_avg_return = 0.0
+
+	# Act
+	XpSystem._on_market_close()
+
+	# Assert
+	assert_almost_eq(XpSystem._last_daily_return_pct, 2.0, 0.01, "Player return = +2%")
+	assert_almost_eq(XpSystem._last_market_return_pct, 0.0, 0.01, "Market return = 0% (no stocks)")
+	assert_almost_eq(XpSystem._last_alpha_pct, 2.0, 0.01, "Alpha = +2%")
+	assert_eq(XpSystem.get_total_xp(), 60, "alpha +2% (1~3% bracket) → 30 * 2.0 = 60 XP")
+
+
+func test_daily_xp_alpha_positive_when_cash_held_in_down_market() -> void:
+	# Arrange — player holds cash (total assets flat), market falls → alpha positive
+	# Inject one stock with prev_day_close=10000, current_price=9000 → market -10%
+	XpSystem._daily_has_trade = true
+	XpSystem._prev_close_assets = 1000000
+	PortfolioManager._cached_total_assets = 1000000  # 0% (full cash)
+	PriceEngine._stock_states["__TEST__"] = {
+		"prev_day_close": 10000, "current_price": 9000
+	}
+
+	# Act
+	XpSystem._on_market_close()
+
+	# Assert — alpha = 0% - (-10%) = +10% → max multiplier 3.0
+	assert_true(XpSystem._last_alpha_pct > 0.0, "Holding cash in down market → positive alpha")
+	assert_eq(XpSystem.get_total_xp(), 90, "alpha > +3% → 30 * 3.0 = 90 XP")
+
+	# Cleanup
+	PriceEngine._stock_states.erase("__TEST__")
 
 
 # ── AC-3: No trades → no daily XP ──

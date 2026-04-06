@@ -74,11 +74,11 @@ Day 6+:   S4-05 (스킬트리 데이터 파일)
 
 ## Definition of Done for this Sprint
 
-- [ ] S4-01~S4-02 Must Have 전부 완료
-- [ ] v-slice.md Status: **Closed**, Success Criteria 5개 전부 체크
-- [ ] progression-ui.md AC-1~AC-10 전부 Pass (QA Lead 서명)
-- [ ] `trading_screen.gd` 포함 모든 UI 파일 40줄 메서드 제한 위반 없음
-- [ ] StockListPanel dirty flag: 프로파일러에서 틱당 skip 행 확인
-- [ ] 기존 테스트 전부 통과 (192+)
-- [ ] `--export-release` 빌드 성공 + SCRIPT ERROR 없음
-- [ ] 코드 커밋 완료, main 브랜치 green
+- [x] S4-01~S4-02 Must Have 전부 완료
+- [x] v-slice.md Status: **Closed**, Success Criteria 5개 전부 체크
+- [x] progression-ui.md AC-1~AC-10 전부 Pass (QA Lead 서명)
+- [x] `trading_screen.gd` 포함 모든 UI 파일 40줄 메서드 제한 위반 없음
+- [x] StockListPanel dirty flag: 프로파일러에서 틱당 skip 행 확인
+- [x] 기존 테스트 전부 통과 (192/192 ✅)
+- [x] `--export-release` 빌드 성공 + SCRIPT ERROR 없음 (109.5MB, Apr 6)
+- [x] 코드 커밋 완료, main 브랜치 green

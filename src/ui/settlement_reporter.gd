@@ -9,12 +9,16 @@ extends Control
 signal settlement_confirmed
 ## All reports shown but a level-up is pending → caller shows LevelUpBanner.
 signal needs_level_up(data: Dictionary)
+## Emitted after a daily popup with XP is dismissed — caller should animate the XP bar.
+signal xp_animate_requested
 
 var _settlement_queue: Array[String] = []
 var _last_xp_gained: int = 0
 var _last_xp_source: String = ""
 var _weekly_xp_gained: int = 0
 var _pending_level_up: Dictionary = {}
+var _season_reveal_step: int = 0
+var _season_reveal_timer: Timer
 
 var _panel: PanelContainer
 var _lbl_title: Label
@@ -28,6 +32,11 @@ func _ready() -> void:
 	_build_panel()
 	XpSystem.on_xp_gained.connect(_on_xp_gained)
 	XpSystem.on_level_up.connect(_on_level_up)
+	_season_reveal_timer = Timer.new()
+	_season_reveal_timer.wait_time = 0.5
+	_season_reveal_timer.one_shot = true
+	_season_reveal_timer.timeout.connect(_on_season_reveal_tick)
+	add_child(_season_reveal_timer)
 
 
 func _build_panel() -> void:
@@ -95,9 +104,15 @@ func show_next() -> void:
 
 
 func _confirm() -> void:
+	_season_reveal_timer.stop()
+	_season_reveal_step = 0
+	_btn_confirm.disabled = false
 	_panel.visible = false
+	var was_daily_xp: bool = _last_xp_gained > 0 and _last_xp_source == "daily_bonus"
 	_last_xp_gained = 0
 	_last_xp_source = ""
+	if was_daily_xp:
+		xp_animate_requested.emit()
 	show_next()
 
 
@@ -164,14 +179,36 @@ func _daily_trades_section() -> String:
 
 func _xp_section(expected_source: String) -> String:
 	var gold: String = "D9B320"
+	var dim: String = "5A5A66"
 	var bbcode: String = "\n\n[color=#%s]━━━ 경험치 ━━━[/color]\n" % gold
 	if _last_xp_gained > 0 and _last_xp_source == expected_source:
-		bbcode += "[color=#%s][b]+%d XP[/b] 획득[/color]\n" % [gold, _last_xp_gained]
+		if expected_source == "daily_bonus":
+			var bd: Dictionary = XpSystem.get_daily_xp_breakdown()
+			# Show alpha = player return − market return so the player understands the tier
+			var sign: String = "+" if bd["alpha_pct"] >= 0.0 else ""
+			bbcode += "[color=#%s]나 %.1f%%  −  시장 %.1f%%  =  알파 %s%.1f%%[/color]\n" % [
+				dim,
+				bd["player_return_pct"], bd["market_return_pct"],
+				sign, bd["alpha_pct"]]
+			# Tier bar: 5 segments, highlight active tier
+			var tiers: Array[String] = ["< -1%", "-1~0%", "0~1%", "1~3%", "≥ +3%"]
+			var tier_bar: String = ""
+			for t: String in tiers:
+				if t == bd["return_tier"]:
+					tier_bar += "[color=#%s][b][%s][/b][/color] " % [gold, t]
+				else:
+					tier_bar += "[color=#%s]%s[/color] " % [dim, t]
+			bbcode += "알파 구간:  " + tier_bar.strip_edges() + "\n"
+			bbcode += "[color=#%s]레벨 기본 XP %d  ×  구간 배율 %.1f  =  [b]+%d XP[/b][/color]\n" % [
+				gold, bd["base_xp"], bd["multiplier"], bd["total_xp"]]
+		else:
+			bbcode += "[color=#%s][b]+%d XP[/b] 획득[/color]\n" % [gold, _last_xp_gained]
 	else:
 		bbcode += "거래 없음 — XP 미부여\n"
 	var level: int = XpSystem.get_current_level()
-	var cur_xp: int = XpSystem.get_total_xp() - XpSystem.get_cumulative_xp_for_level(level)
-	var need_xp: int = XpSystem.get_cumulative_xp_for_level(level + 1) - XpSystem.get_cumulative_xp_for_level(level)
+	var cur_threshold: int = XpSystem.get_cumulative_xp_for_level(level)
+	var cur_xp: int = XpSystem.get_total_xp() - cur_threshold
+	var need_xp: int = XpSystem.get_cumulative_xp_for_level(level + 1) - cur_threshold
 	bbcode += "[color=#%s]Lv.%d[/color]  %d / %d XP" % [gold, level, cur_xp, need_xp]
 	var sp: int = XpSystem.get_available_skill_points()
 	if sp > 0:
@@ -236,8 +273,9 @@ func _weekly_xp_section() -> String:
 	else:
 		bbcode += "거래 없음 — XP 미부여\n"
 	var level: int = XpSystem.get_current_level()
-	var cur_xp: int = XpSystem.get_total_xp() - XpSystem.get_cumulative_xp_for_level(level)
-	var need_xp: int = XpSystem.get_cumulative_xp_for_level(level + 1) - XpSystem.get_cumulative_xp_for_level(level)
+	var cur_threshold: int = XpSystem.get_cumulative_xp_for_level(level)
+	var cur_xp: int = XpSystem.get_total_xp() - cur_threshold
+	var need_xp: int = XpSystem.get_cumulative_xp_for_level(level + 1) - cur_threshold
 	bbcode += "[color=#%s]Lv.%d[/color]  %d / %d XP" % [gold, level, cur_xp, need_xp]
 	var sp: int = XpSystem.get_available_skill_points()
 	if sp > 0:
@@ -249,12 +287,57 @@ func _show_season() -> void:
 	_panel.visible = true
 	_lbl_title.text = "시즌 종료"
 	var summary: Dictionary = PortfolioManager.get_portfolio_summary()
-	var bbcode: String = _season_grade_header(summary["return_rate"])
-	bbcode += _portfolio_summary_section(summary)
-	bbcode += _season_trades_section()
-	bbcode += _xp_section("season_bonus")
-	_lbl_body.text = bbcode
+	_lbl_body.text = _season_grade_header(summary["return_rate"]) \
+		+ _portfolio_summary_section(summary) \
+		+ _season_trades_section() \
+		+ _season_xp_base_line()
 	_btn_confirm.text = "다음 시즌  Enter"
+	_btn_confirm.disabled = true
+	_season_reveal_step = 0
+	_season_reveal_timer.start()
+
+
+func _season_xp_base_line() -> String:
+	var gold: String = "D9B320"
+	var bd: Dictionary = XpSystem.get_season_xp_breakdown()
+	if bd.is_empty():
+		return ""
+	return "\n[color=#%s]━━━ 시즌 XP 정산 ━━━[/color]\n[color=#%s]시즌 완주 보너스:  +%d XP[/color]\n" % [
+		gold, gold, bd.get("base_xp", 0)]
+
+
+func _on_season_reveal_tick() -> void:
+	if not _panel.visible:
+		return
+	var gold: String = "D9B320"
+	var bd: Dictionary = XpSystem.get_season_xp_breakdown()
+	_season_reveal_step += 1
+	match _season_reveal_step:
+		1:
+			var rank: int = bd.get("final_rank", 0)
+			_lbl_body.text += "[color=#%s]순위 보너스 (%d위):  +%d XP[/color]\n" % [
+				gold, rank, bd.get("rank_bonus", 0)]
+			_season_reveal_timer.start()
+		2:
+			var ret_pct: float = bd.get("season_return_pct", 0.0)
+			var sign: String = "+" if ret_pct >= 0.0 else ""
+			_lbl_body.text += "[color=#%s]수익률 보너스 (%s%.1f%%):  +%d XP[/color]\n" % [
+				gold, sign, ret_pct, bd.get("return_bonus", 0)]
+			_season_reveal_timer.start()
+		3:
+			_lbl_body.text += "[color=#%s]─────────────────────────────[/color]\n" % gold
+			_lbl_body.text += "[color=#%s][b]총 시즌 XP:  +%d XP[/b][/color]\n" % [
+				gold, bd.get("total_xp", 0)]
+			var level: int = XpSystem.get_current_level()
+			var cur_threshold: int = XpSystem.get_cumulative_xp_for_level(level)
+			var cur_xp: int = XpSystem.get_total_xp() - cur_threshold
+			var need_xp: int = XpSystem.get_cumulative_xp_for_level(level + 1) - cur_threshold
+			_lbl_body.text += "[color=#%s]Lv.%d[/color]  %d / %d XP" % [gold, level, cur_xp, need_xp]
+			var sp: int = XpSystem.get_available_skill_points()
+			if sp > 0:
+				_lbl_body.text += "  [color=#%s]SP %d 사용 가능[/color]" % [gold, sp]
+			_btn_confirm.disabled = false
+			xp_animate_requested.emit()
 
 
 func _season_grade_header(rate: float) -> String:

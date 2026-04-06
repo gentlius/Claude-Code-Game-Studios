@@ -448,4 +448,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 빌드 검증
 
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 — 내부 감사 2026-04-06 (build/windows/SeedMoney.exe, Apr 6)

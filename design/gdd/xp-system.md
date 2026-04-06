@@ -2,15 +2,15 @@
 
 > **Status**: Approved
 > **Author**: user + agents
-> **Last Updated**: 2026-04-01
+> **Last Updated**: 2026-04-06
 > **Implements Pillar**: 체감있는 성장 (Feel the Growth)
 
 ## Overview
 
 경험치 시스템은 플레이어의 투자 성과를 XP로 변환하여 장기 성장을 구동하는
-Progression 시스템이다. 일일 장 마감 시 수익률(일일 보너스 XP)과 시즌 종료 시
-최종 순위와 성과(시즌 보너스 XP)의 2계층으로 경험치를 부여한다. 거래 횟수가 아닌
-판단의 품질(수익률, 순위)만이 성장을 결정한다.
+Progression 시스템이다. 일일 장 마감 시 시장 대비 초과 수익(Alpha, 일일 보너스 XP)과
+시즌 종료 시 최종 순위와 성과(시즌 보너스 XP)의 2계층으로 경험치를 부여한다.
+거래 횟수가 아닌 판단의 품질(알파, 순위)만이 성장을 결정한다.
 
 누적 XP가 임계값에 도달하면 레벨업하며, 레벨업 시 스킬 포인트를 획득한다. 스킬 포인트는
 스킬 트리 시스템에서 분석 도구, 시장 감지, 거래 스킬, 포트폴리오 확장을 해금하는 데
@@ -19,15 +19,16 @@ Progression 시스템이다. 일일 장 마감 시 수익률(일일 보너스 XP
 ## Player Fantasy
 
 시즌 첫 거래. 매수 버튼을 누르고 체결음이 울린다. 포트폴리오에 종목이 추가되고,
-실시간 손익이 움직이기 시작한다. 장이 끝나고 일일 정산 화면에서 "수익률 +3.2%
-→ 보너스 XP +45"가 빛난다. 내 판단이 맞았다는 보상.
+실시간 손익이 움직이기 시작한다. 장이 끝나고 일일 정산 화면에서 "시장 -1.0%,
+내 수익률 +2.2% → Alpha +3.2% → 보너스 XP +90"이 빛난다. 하락장에서도
+시장을 이겼다는 보상.
 
 시즌이 끝났다. 최종 순위 3위. "시즌 보너스 XP +800" — 레벨업 알림이 뜬다.
 "스킬 포인트 +1". 스킬 트리를 열고 이동평균선을 해금한다. 다음 시즌에는 더
 정확한 분석이 가능하다. 시즌은 리셋되지만 나의 실력은 남았다.
 
-필라 "판단이 곧 실력"에 따라, 거래 횟수가 아닌 투자 성과만이 XP를 결정한다.
-필라 "체감있는 성장"에 따라, 높은 수익률일수록 더 많은 XP를 받아 빠르게 성장한다.
+필라 "판단이 곧 실력"에 따라, 거래 횟수가 아닌 시장 대비 알파만이 XP를 결정한다.
+필라 "체감있는 성장"에 따라, 높은 알파일수록 더 많은 XP를 받아 빠르게 성장한다.
 
 ## Detailed Design
 
@@ -40,24 +41,31 @@ Progression 시스템이다. 일일 장 마감 시 수익률(일일 보너스 XP
 
 ##### 1-1. 일일 보너스 XP (Daily Bonus XP) — 장 마감 시
 
-당일 수익률 기반. 필라 "판단이 곧 실력" — 좋은 판단에 더 많은 보상.
+> **설계 변경 (2026-04-06)**: 시장 노이즈 제거 — 플레이어 알파만 측정.
+> 기존 "당일 수익률" 기준은 상승장에서 보유만 해도 XP가 과도하게 지급되고,
+> 하락장에서는 우수한 판단을 한 플레이어도 손해를 보는 문제가 있었다.
+> 시장 평균 대비 초과 수익(Alpha)으로 변경하여 플레이어의 판단력만 보상한다.
+
+시장 대비 알파(Alpha) 기반. 필라 "판단이 곧 실력" — 시장을 이기는 판단에 더 많은 보상.
 
 ```
-daily_return = (장 마감 총 자산 - 전일 장 마감 총 자산) / 전일 장 마감 총 자산 × 100 (%)
-daily_xp = floor(BASE_DAILY_XP × daily_return_multiplier)
+market_return_pct = 전체 종목 당일 단순 평균 등락률
+player_return_pct = (장 마감 총 자산 - 전일 장 마감 총 자산) / 전일 장 마감 총 자산 × 100
+alpha_pct = player_return_pct - market_return_pct
+daily_xp = floor(BASE_DAILY_XP × daily_alpha_multiplier(alpha_pct))
 ```
 
-| 당일 수익률 | daily_return_multiplier |
-|------------|----------------------|
-| < 0% (손실) | 0.5 (최소 보장) |
-| 0% ~ 1% | 1.0 |
-| 1% ~ 3% | 1.5 |
-| 3% ~ 5% | 2.0 |
-| 5%+ | 3.0 (상한) |
+| alpha_pct | daily_alpha_multiplier | daily_xp (BASE=30) |
+|-----------|----------------------|--------------------|
+| < -1% | 0.5 (최소 보장) | 15 |
+| -1% ~ 0% | 1.0 | 30 |
+| 0% ~ 1% | 1.5 | 45 |
+| +1% ~ +3% | 2.0 | 60 |
+| ≥ +3% | 3.0 (상한) | 90 |
 
 - `BASE_DAILY_XP` = 30 (튜닝 가능)
 - 거래 0건인 날: 일일 보너스 XP 없음 (활동 조건 — 체결(FILLED) 1건 이상 필요)
-- 손실 시에도 최소 XP 부여 — 손실에서 배우는 것도 성장
+- 시장 대비 언더퍼폼 시에도 최소 XP 부여 — 배움의 과정도 성장
 - 시즌 첫 거래일: 전일 장 마감 데이터 없으므로 `season_start_cash` 대비 산출 (→ Edge Cases: 시즌 첫 거래일 기준)
 
 ##### 1-2. 시즌 보너스 XP (Season Bonus XP) — 시즌 종료 시
@@ -127,7 +135,8 @@ required_xp(level) = BASE_LEVEL_XP × (level ^ LEVEL_EXPONENT)
 | 시스템 | 방향 | 인터페이스 |
 |--------|------|-----------|
 | 주문 엔진 | → XP | `on_order_filled` — 일일 거래 유무 판정용 (체결 1건 이상 시 일일 보너스 활성화) |
-| 포트폴리오 | → XP | `get_return_rate()` → 일일/시즌 수익률 산출 |
+| 포트폴리오 | → XP | `get_return_rate()` → 일일/시즌 수익률 산출 (player_return_pct) |
+| 가격 엔진 | → XP | `get_market_average_return()` → 전체 종목 단순 평균 등락률 산출 (market_return_pct) |
 | 게임 시계 | → XP | `on_market_close` → 일일 보너스 산출 |
 | 시즌 관리 | → XP | `on_season_end` → 시즌 보너스 산출 (※ 시즌 관리 GDD 미설계 — provisional). `final_rank: int` (1-indexed) |
 | 스킬 트리 | XP → | `get_available_skill_points()` 조회, `on_level_up` 시그널 |
@@ -136,23 +145,36 @@ required_xp(level) = BASE_LEVEL_XP × (level ^ LEVEL_EXPONENT)
 
 ### F1. 일일 보너스 XP
 
+> 시장 노이즈 제거 — 플레이어 알파만 측정 (2026-04-06 변경)
+
 ```
-daily_xp = floor(BASE_DAILY_XP × daily_return_multiplier)
+market_return_pct = mean(전체 종목 당일 등락률)   # 단순 평균
+player_return_pct = (close_assets - prev_close_assets) / prev_close_assets × 100
+alpha_pct = player_return_pct - market_return_pct
+daily_xp = floor(BASE_DAILY_XP × daily_alpha_multiplier(alpha_pct))
 ```
 
 | 변수 | 기본값 | 범위 | 설명 |
 |------|--------|------|------|
 | BASE_DAILY_XP | 30 | 10~100 | 일일 기본 XP |
-| daily_return_multiplier | 테이블 참조 | 0.5~3.0 | 당일 수익률 구간별 배율 |
+| daily_alpha_multiplier | 테이블 참조 | 0.5~3.0 | alpha_pct 구간별 배율 |
+| market_return_pct | 산출값 | −∞~+∞ | 전체 종목 단순 평균 등락률 (%) |
+| player_return_pct | 산출값 | −100~+∞ | 플레이어 당일 총자산 등락률 (%) |
+| alpha_pct | 산출값 | −∞~+∞ | 플레이어 수익률 − 시장 평균 |
 
-daily_return_multiplier 테이블 (Detailed Design 규칙 1-1 참조):
-- `< 0%`: 0.5 → `daily_xp = 15`
-- `0%~1%`: 1.0 → `daily_xp = 30`
-- `1%~3%`: 1.5 → `daily_xp = 45`
-- `3%~5%`: 2.0 → `daily_xp = 60`
-- `5%+`: 3.0 → `daily_xp = 90`
+daily_alpha_multiplier 테이블 (Detailed Design 규칙 1-1 참조):
+- `alpha_pct < -1%`: 0.5 → `daily_xp = 15`
+- `-1% ≤ alpha_pct < 0%`: 1.0 → `daily_xp = 30`
+- `0% ≤ alpha_pct < +1%`: 1.5 → `daily_xp = 45`
+- `+1% ≤ alpha_pct < +3%`: 2.0 → `daily_xp = 60`
+- `alpha_pct ≥ +3%`: 3.0 → `daily_xp = 90`
 
 조건: 당일 체결(FILLED) 1건 이상 필요. 미거래 시 0.
+
+예시 계산:
+- 시장 평균 등락률 +1.0%, 플레이어 수익률 +2.2% → alpha = +1.2% → multiplier 2.0 → daily_xp = 60
+- 시장 평균 등락률 −2.0%, 플레이어 수익률 0.0% → alpha = +2.0% → multiplier 2.0 → daily_xp = 60 (현금 보유 정답)
+- 시장 평균 등락률 +1.0%, 플레이어 수익률 −0.5% → alpha = −1.5% → multiplier 0.5 → daily_xp = 15
 
 ### F2. 시즌 보너스 XP
 
@@ -214,8 +236,8 @@ required_xp(level) = floor(BASE_LEVEL_XP × (level ^ LEVEL_EXPONENT))
 | 8→9 | 2,262 | 8,402 | ~5.3 시즌 |
 | 9→10 | 2,700 | 11,102 | ~6.9 시즌 |
 
-> **산출 기준**: `floor(100 × level^1.5)`. 예상 시즌 수는 시즌 평균 ~1,600 XP
-> (경쟁 플레이어 기준: 3위, 수익률 1~3%) 가정. 하위 플레이어는 시즌당 ~550 XP.
+> **산출 기준**: `floor(100 × level^1.5)`. 예상 시즌 수는 시즌 평균 ~1,900 XP
+> (경쟁 플레이어 기준: 3위, alpha +1~+3%) 가정. 하위 플레이어는 시즌당 ~550 XP.
 
 ### F4. 스킬 포인트
 
@@ -224,10 +246,11 @@ total_skill_points = current_level - 1
 available_skill_points = total_skill_points - spent_skill_points
 ```
 
-시즌 1회 평균 XP 추정 (20거래일, 3위 가정):
-- 일일 보너스: 20일 × 45 (평균 multiplier 1.5) = 900
+시즌 1회 평균 XP 추정 (20거래일, 3위 가정, alpha +1~+3% 유지):
+- 일일 보너스: 20일 × 60 (alpha +1~+3% → multiplier 2.0) = 1,200
 - 시즌 보너스: 200 + 250(3위) + 250(+25%) = 700
-- **합계: ~1,600 XP / 시즌** → 약 2시즌에 레벨 5 도달 (스킬 포인트 4개, T1 전체 해금 가능)
+- **합계: ~1,900 XP / 시즌** → 약 1~2시즌에 레벨 5 도달 (스킬 포인트 4개, T1 전체 해금 가능)
+- 주의: 기존 수익률 기준 대비 일일 XP 상한이 높아졌으나(90 vs 기존 90 동일), 중간 구간이 더 세분화됨
 
 ### F5. 누적 XP 조회
 
@@ -244,12 +267,15 @@ get_cumulative_xp_for_level(target_level) = Σ required_xp(lv) for lv = 1 to (ta
 | 장 중 체결(FILLED) 0건 | 일일 보너스 XP = 0 (활동 조건 미충족) |
 | 시즌 중도 이탈 (시즌 완주 안 함) | 시즌 보너스 XP = 0. 일일 XP는 이미 부여됨 |
 | 시즌 보너스로 2+ 레벨업 | 순차적으로 각 레벨마다 스킬 포인트 +1 부여 |
-| 수익률 정확히 0% | daily_return_multiplier = 1.0 (0%~1% 구간) |
-| 수익률 -100% (전액 손실) | daily_multiplier = 0.5, return_bonus = 0 |
+| alpha_pct 정확히 0% | daily_alpha_multiplier = 1.5 (0%~+1% 구간) |
+| 수익률 -100% (전액 손실), 시장 0% | alpha = -100% → multiplier = 0.5, return_bonus = 0 |
+| 현금 100% 보유, 시장 하락 | player_return_pct = 0.0%, market_return_pct < 0% → alpha > 0% → 올바른 판단 보상 (시장을 피한 것이 알파) |
+| 현금 100% 보유, 시장 상승 | player_return_pct = 0.0%, market_return_pct > 0% → alpha < 0% → 기회 비용 반영 |
+| 전 종목 가격 변동 없음 | market_return_pct = 0.0%. player_return_pct = alpha_pct. 정상 처리 |
+| 시즌 첫 거래일 기준 | prev_close_assets 없으므로 season_start_cash를 전일 자산으로 대체하여 player_return_pct를 산출. 첫 시즌: 1,000,000원. 이후 시즌: 이월된 season_start_cash. market_return_pct는 동일하게 당일 종목 평균으로 산출. |
 | 최대 레벨 | 제한 없음. XP와 레벨은 무한 성장 (스킬 포인트 잉여 누적) |
 | 저장 데이터 손상 | XP/레벨이 음수가 되면 0으로 클램프 |
 | 스팸 매매 | XP에 영향 없음. 거래 횟수는 XP 산출에 사용되지 않음 |
-| 시즌 첫 거래일 기준 | 전일 장 마감 자산이 없으므로 season_start_cash를 전일 자산으로 대체하여 daily_return을 산출. 첫 시즌: 1,000,000원. 이후 시즌: 이월된 season_start_cash. |
 
 ## Dependencies
 
@@ -258,7 +284,8 @@ get_cumulative_xp_for_level(target_level) = Σ required_xp(lv) for lv = 1 to (ta
 | 시스템 | 의존 유형 | 데이터 |
 |--------|----------|--------|
 | 주문 엔진 | Soft | `on_order_filled` — 일일 거래 유무 판정용 (체결 1건 이상 시 일일 보너스 활성화) |
-| 포트폴리오 관리 | Hard | `get_return_rate()` → 일일/시즌 수익률 |
+| 포트폴리오 관리 | Hard | `get_return_rate()` → 일일/시즌 수익률 (player_return_pct) |
+| 가격 엔진 | Hard | `get_market_average_return()` → 전체 종목 단순 평균 등락률 (market_return_pct) |
 | 게임 시계 | Hard | `on_market_close`, `on_season_end` 시그널 |
 | 시즌/대회 관리 | Soft | `final_rank: int` (1-indexed, 미설계 — MVP에서는 하드코딩 가능) |
 
@@ -279,21 +306,21 @@ get_cumulative_xp_for_level(target_level) = Σ required_xp(lv) for lv = 1 to (ta
 | RANK_XP_TABLE | [500,350,250,150,50] | — | 순위 경쟁 동기 | 1위와 꼴찌 격차가 너무 크면 좌절감 |
 | BASE_LEVEL_XP | 100 | 50~200 | 초반 레벨업 속도 | 너무 낮으면 의미 없음 |
 | LEVEL_EXPONENT | 1.5 | 1.2~2.0 | 후반 성장 속도 | 너무 높으면 후반 정체감 |
-| daily_return_multiplier 테이블 | 규칙 1-1 참조 | — | 수익률별 보상 차이 | 손실 배율이 0이면 손실 시 좌절 |
+| daily_alpha_multiplier 테이블 | 규칙 1-1 참조 | — | alpha 구간별 보상 차이 | 최소 배율이 0이면 언더퍼폼 시 좌절감 심화 |
 
 ## Acceptance Criteria
 
 | # | 기준 | 검증 방법 |
 |---|------|----------|
 | AC-1 | 거래 체결 자체는 XP를 부여하지 않음 | 유닛 테스트: 체결 전후 XP 변화 == 0 |
-| AC-2 | 장 마감 시 당일 수익률에 따른 일일 보너스 XP 부여 | 유닛 테스트: 각 수익률 구간별 expected XP 검증 |
+| AC-2 | 장 마감 시 시장 대비 alpha_pct에 따른 일일 보너스 XP 부여 | 유닛 테스트: 각 alpha 구간별 expected XP 검증 (market_return_pct mock 필요) |
 | AC-3 | 체결(FILLED) 0건인 날은 일일 보너스 XP = 0 | 유닛 테스트 |
 | AC-4 | 시즌 종료 시 순위 + 수익률 기반 시즌 보너스 XP 부여 | 유닛 테스트: 순위별, 수익률별 expected XP |
 | AC-5 | 누적 XP가 임계값 도달 시 레벨업 + 스킬 포인트 +1 | 유닛 테스트: XP 부여 후 레벨/포인트 검증 |
 | AC-6 | 한 번에 2+ 레벨업 시 각 레벨마다 포인트 부여 | 유닛 테스트: 대량 XP 부여 후 포인트 == 레벨-1 |
 | AC-7 | XP/레벨/스킬 포인트가 시즌 리셋 시 영구 유지 | 시즌 리셋 전후 값 비교 테스트 |
 | AC-8 | `on_level_up` 시그널이 레벨업 시 정확히 1회 발신 | 시그널 카운트 테스트 |
-| AC-9 | 시즌 1회 평균 XP가 ~1,400~1,800 범위 (경쟁 플레이어 기준, 20거래일, 수익률 1~3%, 3위 가정). 하위 플레이어 기준 ~550 XP 이상. | 시뮬레이션 테스트로 밸런스 확인 |
+| AC-9 | 시즌 1회 평균 XP가 ~1,400~1,800 범위 (경쟁 플레이어 기준, 20거래일, alpha +1~+3%, 3위 가정). 하위 플레이어 기준 ~550 XP 이상. | 시뮬레이션 테스트로 밸런스 확인 (market_return_pct mock 포함) |
 
 ## Open Questions
 

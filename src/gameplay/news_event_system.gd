@@ -210,7 +210,8 @@ func _on_market_state_changed(
 		_state = SystemState.READY
 
 
-func _on_tick(tick: int, _day: int, _week: int) -> void:
+## Called by GameClock._process_tick() for deterministic News→Price→Order ordering.
+func process_tick(tick: int, _day: int, _week: int) -> void:
 	if _state != SystemState.ACTIVE:
 		return
 

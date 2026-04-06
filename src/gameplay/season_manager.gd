@@ -262,45 +262,61 @@ func is_season_trade_eligible() -> bool:
 ## [br]to_rank: last rank to return inclusive (-1 = all). Default -1.
 ## [br]Returns: Array[Dictionary] — [{rank, nickname, return_pct, prize_preview, is_player}]
 ## [br]Returns [] in free-market mode or before season start.
+## 리더보드 상위 K행 반환. O(K) — pre-sorted 인덱스 + 행당 O(1) 보간.
+## 이전 구현(O(N log N) 매 4틱 정렬)을 ADR-008 캐시 방식으로 대체.
 func get_leaderboard(tier: int = -99, from_rank: int = 1, to_rank: int = -1) -> Array:
 	var target_tier: int = _current_tier if tier == -99 else tier
 
 	if not is_season_active() or target_tier == TIER_FREE_MARKET:
 		return []
 
-	var all_returns: Array = AiCompetitor.get_all_return_pcts(target_tier)
+	# O(1) — 전일 일별 스냅샷 정렬 인덱스 캐시 조회 (ADR-008)
+	var sorted_indices: Array = AiCompetitor.get_sorted_indices(target_tier)
+	var ai_count: int = sorted_indices.size()
+	var player_in_tier: bool = target_tier == _current_tier
+	var player_return: float = get_season_return_pct()
 
-	var entries: Array = []
+	# O(log N) — 버킷 이진 탐색으로 플레이어 순위 추정 (ADR-008)
+	var player_rank: int = 0
+	if player_in_tier:
+		player_rank = AiCompetitor.estimate_player_rank(player_return)
+		player_rank = clampi(player_rank, 1, ai_count + 1)
 
-	for i: int in range(all_returns.size()):
-		var meta: Dictionary = AiCompetitor.get_participant_meta(target_tier, i)
-		entries.append({
-			"nickname": meta["display_name"],
-			"return_pct": all_returns[i],
-			"is_player": false,
-			"is_grandmaster_ai": meta.get("is_master_of_investment", false),
-		})
+	var total_count: int = ai_count + (1 if player_in_tier else 0)
+	var start_rank: int = clampi(from_rank, 1, total_count)
+	var end_rank: int = total_count if to_rank == -1 else clampi(to_rank, 1, total_count)
 
-	if target_tier == _current_tier:
-		entries.append({
-			"nickname": "나",
-			"return_pct": get_season_return_pct(),
-			"is_player": true,
-			"is_grandmaster_ai": false,
-		})
+	var result: Array = []
+	for rank: int in range(start_rank, end_rank + 1):
+		if player_in_tier and rank == player_rank:
+			result.append({
+				"rank": rank,
+				"nickname": "나",
+				"return_pct": player_return,
+				"is_player": true,
+				"is_grandmaster_ai": false,
+				"prize_preview": _prize_for_rank(rank, target_tier),
+			})
+		else:
+			# 플레이어가 이 순위보다 앞이면 AI 위치 = rank - 1, 뒤면 rank - 2
+			var ai_pos: int = rank - 1
+			if player_in_tier and rank > player_rank:
+				ai_pos = rank - 2
+			if ai_pos < 0 or ai_pos >= ai_count:
+				continue
+			var ai_idx: int = sorted_indices[ai_pos]
+			var meta: Dictionary = AiCompetitor.get_participant_meta(target_tier, ai_idx)
+			result.append({
+				"rank": rank,
+				"nickname": meta["display_name"],
+				# O(1) 보간 — 전체 배열 불필요 (ADR-008)
+				"return_pct": AiCompetitor.get_interpolated_return(target_tier, ai_idx),
+				"is_player": false,
+				"is_grandmaster_ai": meta.get("is_master_of_investment", false),
+				"prize_preview": _prize_for_rank(rank, target_tier),
+			})
 
-	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return a["return_pct"] > b["return_pct"]
-	)
-
-	for i: int in range(entries.size()):
-		var rank: int = i + 1
-		entries[i]["rank"] = rank
-		entries[i]["prize_preview"] = _prize_for_rank(rank, target_tier)
-
-	var start_idx: int = clampi(from_rank - 1, 0, entries.size())
-	var end_idx: int = entries.size() if to_rank == -1 else clampi(to_rank, 0, entries.size())
-	return entries.slice(start_idx, end_idx)
+	return result
 
 
 ## Prize cash amount for a given finish rank in a given tier.
@@ -327,7 +343,7 @@ func _on_season_end() -> void:
 	OrderEngine.cancel_all_pending_orders()
 
 	# Step ②: Forced liquidation — sell all holdings at current price (GDD §3-1).
-	_force_liquidate_all()
+	PortfolioManager.force_liquidate()
 
 	# Step ③: Determine final rank.
 	var season_return_pct: float = get_season_return_pct()
@@ -365,7 +381,7 @@ func _on_week_end() -> void:
 		if player_is_weekly_top:
 			var prize: int = int(float(TIER_THRESHOLD[_current_tier]) * WEEKLY_PRIZE_RATE)
 			CurrencySystem.sim_add(prize)
-			XpSystem._grant_xp(50, "weekly_prize")
+			XpSystem.grant_weekly_prize_xp(50)
 
 	# Snapshot for next week's return calculation, then reset weekly counter (Q4 decision).
 	_last_week_trade_count = _weekly_trade_count
@@ -403,45 +419,23 @@ func _assign_tier(total_assets: int) -> int:
 
 
 ## Estimate player's rank within the current tier (GDD §4-3).
-## Delegates to AiCompetitor for the actual distribution.
+## O(log N) — AiCompetitor 버킷 이진 탐색 위임 (ADR-008). 시즌 종료 시 1회 호출.
 func _calculate_player_tier_rank(season_return_pct: float) -> int:
 	if _current_tier == TIER_FREE_MARKET:
 		return 0
-	# AiCompetitor provides sorted return pcts for the same tier.
-	# Count how many AI participants in the same tier beat the player's return_pct.
-	var tier_returns: Array[float] = AiCompetitor.get_all_return_pcts(_current_tier)
-	var players_beaten: int = 0
-	for ai_return: float in tier_returns:
-		if ai_return < season_return_pct:
-			players_beaten += 1
-	# Rank = total participants - beaten opponents (1-indexed)
-	var tier_participant_count: int = tier_returns.size() + 1  # +1 for the player
-	return tier_participant_count - players_beaten
+	return AiCompetitor.estimate_player_rank(season_return_pct)
 
 
 ## True if player's weekly return beats all AI in the same tier this week.
+## O(1) — 정렬 인덱스[0] (최고 AI 수익률)과 비교만 수행 (ADR-008).
 func _is_player_weekly_top(weekly_return_pct: float) -> bool:
 	if _current_tier == TIER_FREE_MARKET:
 		return false
-	var tier_returns: Array[float] = AiCompetitor.get_all_return_pcts(_current_tier)
-	for ai_return: float in tier_returns:
-		if ai_return >= weekly_return_pct:
-			return false
-	return true
-
-
-# ── Liquidation ──
-
-## Force-sell all holdings at current price (GDD §3-1 step ②).
-func _force_liquidate_all() -> void:
-	var holdings: Array = PortfolioManager.get_all_holdings()
-	for holding: Dictionary in holdings:
-		var stock_id: String = holding["stock_id"]
-		var quantity: int = holding["quantity"]
-		var price: int = PriceEngine.get_current_price(stock_id)
-		var proceeds: int = price * quantity
-		CurrencySystem.sim_add(proceeds)
-		PortfolioManager.remove_holding(stock_id, quantity, price)
+	var sorted_indices: Array = AiCompetitor.get_sorted_indices(_current_tier)
+	if sorted_indices.is_empty():
+		return true
+	var top_ai_return: float = AiCompetitor.get_interpolated_return(_current_tier, sorted_indices[0])
+	return weekly_return_pct > top_ai_return
 
 
 # ── Prize Distribution ──

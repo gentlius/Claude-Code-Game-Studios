@@ -377,8 +377,7 @@ func _make_pending_row(order: Dictionary) -> HBoxContainer:
 
 
 func _cancel_all_pending() -> void:
-	for order: Dictionary in OrderEngine.get_pending_orders():
-		OrderEngine.cancel_order(order["order_id"])
+	OrderEngine.cancel_all_pending_orders()
 	_update_pending_orders()
 
 

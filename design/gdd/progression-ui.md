@@ -338,8 +338,10 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `XpSystem.get_current_level()` 존재
 - [x] `XpSystem.get_xp_progress()` 존재
 - [x] `XpSystem.get_available_skill_points()` 존재
-- [x] `XpSystem.on_xp_gained(amount, source)` 시그널 존재
+- [x] `XpSystem.on_xp_gained(amount, new_total, source)` 시그널 존재 (3파라미터)
 - [x] `XpSystem.on_level_up(new_level, skill_points)` 시그널 존재
+- [x] `XpSystem.get_daily_xp_breakdown()` → `{base_xp, multiplier, total_xp, return_tier}` 존재 (S4-02)
+- [x] `XpSystem.get_season_xp_breakdown()` → `{base_xp, rank_bonus, return_bonus, total_xp, final_rank, season_return_pct}` 존재 (S4-02)
 - [x] `SkillTree.unlock_skill(skill_id)` 존재
 - [x] `SkillTree.can_unlock(skill_id)` 존재
 - [x] `SkillTreeOverlay.pause_toggle_requested` 시그널 존재 (S3-13)

@@ -77,6 +77,9 @@ const TIER_PARAMS: Array[Dictionary] = [
 
 ## 시즌 시작 여부 플래그. EC-01 가드에 사용.
 var _initialized: bool = false
+## 장이 최초 개시된 후 true. PRE_MARKET 구간에서 수익률 조회를 차단한다.
+## init_season() 시 false → on_market_open 수신 시 true (시즌 내 유지).
+var _season_active: bool = false
 
 ## 플레이어 배정 티어 (0~10).
 var _player_tier: int = 0
@@ -135,10 +138,13 @@ func init_season(player_tier: int, participant_counts: Dictionary, seed: int = 0
 		_rebuild_player_tier_buckets()
 
 	_initialized = true
+	_season_active = false  # 장 개시 전까지 수익률 미공개
 
 	# GDD §6: on_day_end → 실제: on_day_transition (GameClock에 존재하는 실제 시그널명)
 	GameClock.on_day_transition.connect(_on_day_transition)
 	GameClock.on_tick.connect(_on_tick)
+	if not GameClock.on_market_open.is_connected(_on_market_open):
+		GameClock.on_market_open.connect(_on_market_open)
 
 
 ## 매 틱 호출. 플레이어 소속 티어 내 특정 AI의 현재 return_pct를 반환한다.
@@ -146,6 +152,9 @@ func init_season(player_tier: int, participant_counts: Dictionary, seed: int = 0
 ## [br]반환값: float (%), 예) 12.4
 ## [br]Usage: var r := AiCompetitor.get_tier_return_pct(42)
 func get_tier_return_pct(participant_id: int) -> float:
+	# 장 개시 전 PRE_MARKET 구간: 수익률 미공개 (GDD §3-1 원칙 6)
+	if not _season_active:
+		return 0.0
 	# EC-01: init_season 미호출 가드
 	if not _initialized:
 		push_warning("AiCompetitor: init_season not called")
@@ -175,6 +184,9 @@ func get_tier_return_pct(participant_id: int) -> float:
 ## [br]반환값: Array[float], 인덱스 = participant_id
 ## [br]Usage: var all_r := AiCompetitor.get_all_return_pcts(AiCompetitor.TIER_BRONZE)
 func get_all_return_pcts(tier: int) -> Array:
+	# 장 개시 전 PRE_MARKET 구간: 수익률 미공개 (GDD §3-1 원칙 6)
+	if not _season_active:
+		return []
 	if not _initialized:
 		push_warning("AiCompetitor: init_season not called")
 		return []
@@ -189,18 +201,30 @@ func get_all_return_pcts(tier: int) -> Array:
 	if td["count"] == 0:
 		return []
 
-	# EC-12: lazy evaluation — 해당 일 스냅샷 없으면 즉시 생성
+	# EC-12: lazy evaluation — 당일 스냅샷 확보 (전일 스냅샷도 보간에 필요)
 	_ensure_daily_snapshot(tier, _current_day)
+	if _current_day > 0:
+		_ensure_daily_snapshot(tier, _current_day - 1)
 
 	var snapshots: Array = td["daily_snapshots"]
 	var params: Dictionary = TIER_PARAMS[tier]
 
-	# 당일 스냅샷 반환. 외부 반환값에만 clamp 적용 (Q3 결정: cumulative_r 내부 무클램프)
+	# 인트라데이 보간 적용 — 장 시작 시 0%에서 출발해 하루 동안 점진적으로 변화.
+	# _current_tick 기준으로 전일 종가(r_prev)와 당일 예상 종가(r_next) 사이를 선형 보간.
+	var ticks_per_day: int = GameClock.TICKS_PER_DAY if GameClock.TICKS_PER_DAY > 0 else 1
+	var progress: float = float(_current_tick) / float(ticks_per_day)
+
+	var day_snap: Array = snapshots[_current_day]
 	var result: Array[float] = []
 	result.resize(td["count"])
-	var day_snap: Array = snapshots[_current_day]
 	for i: int in range(td["count"]):
-		result[i] = clamp(day_snap[i], params["r_min"], params["r_max"])
+		var r_prev: float = 0.0
+		if _current_day > 0 and (_current_day - 1) < snapshots.size() \
+				and snapshots[_current_day - 1] != null:
+			r_prev = (snapshots[_current_day - 1] as Array[float])[i]
+		var r_next: float = day_snap[i]
+		var interpolated: float = r_prev + (r_next - r_prev) * progress
+		result[i] = clamp(interpolated, params["r_min"], params["r_max"])
 	return result
 
 
@@ -239,9 +263,42 @@ func estimate_player_rank(player_return_pct: float) -> int:
 	return int(float(count) * (1.0 - float(bucket_idx) / float(RANK_BUCKETS))) + 1
 
 
+## 당일 스냅샷 기준 내림차순 정렬 인덱스를 반환한다 (O(1) 캐시 조회).
+## 리더보드 상위 K개 행 구성 시 get_interpolated_return()과 함께 사용.
+## [br]반환값: Array[int] — 해당 티어의 participant_id를 종가 내림차순으로 정렬한 배열
+func get_sorted_indices(tier: int) -> Array:
+	if not _season_active or not _initialized:
+		return []
+	if not _tier_data.has(tier):
+		return []
+	_ensure_daily_snapshot(tier, _current_day)
+	var td: Dictionary = _tier_data[tier]
+	var si: Array = td.get("sorted_indices", [])
+	if _current_day < si.size() and si[_current_day] != null:
+		return si[_current_day]
+	return []
+
+
+## 지정 티어·참가자의 현재 틱 보간 수익률을 반환한다 (O(1)).
+## 리더보드 K행 구성 시 get_sorted_indices()와 조합하여 O(K) 접근 실현.
+## [br]tier: 대상 티어 번호
+## [br]participant_id: 0-based 인덱스
+## [br]반환값: float (%)
+func get_interpolated_return(tier: int, participant_id: int) -> float:
+	if not _season_active or not _initialized:
+		return 0.0
+	if not _tier_data.has(tier):
+		return 0.0
+	var td: Dictionary = _tier_data[tier]
+	if participant_id < 0 or participant_id >= td["count"]:
+		return 0.0
+	return _interpolate_return(tier, participant_id)
+
+
 ## Resets all AI competitor state for unit tests. Call in before_each.
 func reset_for_testing() -> void:
 	_initialized = false
+	_season_active = false
 	_player_tier = 0
 	_season_seed = 0
 	_current_day = 0
@@ -249,6 +306,12 @@ func reset_for_testing() -> void:
 	_tier_data.clear()
 
 # ── Signal Handlers ──
+
+## GameClock.on_market_open 핸들러. 시즌 내 첫 장 개시 시 수익률 공개 시작.
+## PRE_MARKET 구간에서 수익률이 표시되는 것을 막기 위해 이 시점부터 활성화.
+func _on_market_open() -> void:
+	_season_active = true
+
 
 ## GameClock.on_tick 연결 핸들러. 플레이어 티어 틱 내 보간 상태 갱신.
 func _on_tick(tick_number: int, _day: int, _week: int) -> void:
@@ -356,6 +419,19 @@ func _ensure_daily_snapshot(tier: int, day: int) -> void:
 
 	snapshots[day] = day_snap
 	td["daily_snapshots"] = snapshots
+
+	# 정렬 인덱스 캐시 — 종가 기준 내림차순. 리더보드 O(K) 접근에 사용.
+	# 선형 보간은 순서를 보존하므로 종가 기준 정렬 = 인트라데이 정렬과 근사적으로 동일.
+	var sorted_idx: Array[int] = []
+	sorted_idx.resize(count)
+	for j: int in range(count):
+		sorted_idx[j] = j
+	sorted_idx.sort_custom(func(a: int, b: int) -> bool: return day_snap[a] > day_snap[b])
+	var si: Array = td.get("sorted_indices", [])
+	while si.size() <= day:
+		si.append(null)
+	si[day] = sorted_idx
+	td["sorted_indices"] = si
 
 
 ## GDD §3-3 단계 3: 틱 내 보간. 플레이어 티어 AI에 한정.

@@ -147,7 +147,7 @@ func animate_xp_gain() -> void:
 
 # ── Signal Handlers ──
 
-func _on_xp_gained(amount: int, _source: String) -> void:
+func _on_xp_gained(amount: int, _new_total: int, _source: String) -> void:
 	_spawn_float_text("+%d XP" % amount)
 	if _reduced_motion():
 		update_display()

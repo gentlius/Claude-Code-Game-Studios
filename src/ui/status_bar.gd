@@ -34,6 +34,11 @@ var _lbl_weekly_return: Label
 var _lbl_sp_alert: Label
 var _ui_state: int = -1   ## mirrors TradingScreen.UIState (int)
 
+## Mirrors TradingScreen.UIState enum values — kept in sync with trading_screen.gd.
+const _STATE_PRE_MARKET: int = 1
+const _STATE_MARKET_OPEN: int = 2
+const _STATE_PAUSED: int = 3
+
 
 func _ready() -> void:
 	add_theme_constant_override("separation", 0)
@@ -204,7 +209,7 @@ func _update_row1() -> void:
 
 
 func _update_speed_label() -> void:
-	if _ui_state == 3:   ## UIState.PAUSED == 3
+	if _ui_state == _STATE_PAUSED:
 		_lbl_speed.text = "⏸ 일시정지"
 		return
 	var spd: float = GameClock.get_speed_multiplier()
@@ -281,15 +286,14 @@ func _apply_return_color(lbl: Label, value: float) -> void:
 ## Called by TradingScreen when UIState changes. Controls speed/pause visibility and SP alert.
 func set_ui_state(state: int) -> void:
 	_ui_state = state
-	## UIState: LOADING=0, PRE_MARKET=1, MARKET_OPEN=2, PAUSED=3, SETTLEMENT=4, SEASON_RESULT=5
-	var speed_visible: bool = state == 2 or state == 3   ## MARKET_OPEN or PAUSED
+	var speed_visible: bool = state == _STATE_MARKET_OPEN or state == _STATE_PAUSED
 	_btn_speed_1x.visible = speed_visible
 	_btn_speed_2x.visible = speed_visible
 	_btn_speed_4x.visible = speed_visible
 	_btn_pause.visible = speed_visible
 	_lbl_speed.visible = speed_visible
-	_btn_market_open.visible = (state == 1)   ## PRE_MARKET
-	if state == 1:
+	_btn_market_open.visible = (state == _STATE_PRE_MARKET)
+	if state == _STATE_PRE_MARKET:
 		_btn_market_open.text = "장 시작 Enter" if SeasonManager.is_season_active() else "시즌 시작 Enter"
 		_update_sp_alert()
 	else:

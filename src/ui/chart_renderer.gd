@@ -67,6 +67,13 @@ var _ohlcv_daily: Array[Dictionary] = []
 var _dirty: bool = true
 var _tick_counter: int = 0  ## For render skip
 
+## D1 running state — updated O(1) per tick instead of O(n) full scan.
+## Reset by _aggregate_candles() and _do_load_stock().
+var _d1_open: int = 0
+var _d1_high: int = 0
+var _d1_low: int = 0
+var _d1_volume: float = 0.0
+
 ## Indicator caches — computed in _rebuild_indicator_caches() (full) or
 ## _update_last_indicator() (incremental). _draw_rsi/_draw_macd read these directly.
 var _rsi_cache: Array[float] = []
@@ -273,17 +280,13 @@ func _on_price_updated(_tick: int) -> void:
 	if _stock_id == "" or _chart_state != ChartState.LIVE:
 		return
 
-	# Render skip at high speed — more aggressive at 4x to reduce draw call pressure
-	var speed: float = GameClock.get_speed_multiplier()
-	if speed >= 4.0 and _tick_counter % 4 != 0:
-		return
-	elif speed >= float(RENDER_SKIP_AT_SPEED) and _tick_counter % 2 != 0:
-		return
-
-	# Refresh data
+	# Candle data update — always runs every tick so OHLC values are never stale.
+	# Skipping this would cause candles to freeze as single-price dojis at high speed.
 	var new_prices: Array[int] = PriceEngine.get_tick_buffer(_stock_id)
 	var new_volumes: Array[float] = PriceEngine.get_tick_volumes(_stock_id)
-	# Day transition: buffer was reset — full rebuild required
+	# Safety guard: if buffer ever shrinks unexpectedly, do a full rebuild.
+	# Under normal operation (no daily reset), the buffer only grows → this branch
+	# should never fire. Kept as a defensive fallback.
 	if new_prices.size() < _tick_prices.size():
 		_tick_prices = new_prices
 		_tick_volumes = new_volumes
@@ -293,6 +296,15 @@ func _on_price_updated(_tick: int) -> void:
 		_tick_volumes = new_volumes
 		_update_last_candle()
 	_update_header()
+
+	# Render throttle — only queue a redraw at reduced frequency at high speed.
+	# Decoupled from data update above so candle OHLC stays current between redraws.
+	var speed: float = GameClock.get_speed_multiplier()
+	if speed >= 4.0 and _tick_counter % 4 != 0:
+		return
+	elif speed >= float(RENDER_SKIP_AT_SPEED) and _tick_counter % 2 != 0:
+		return
+
 	_dirty = true
 	queue_redraw()
 
@@ -303,6 +315,15 @@ func _on_market_state_changed(
 	match new_state:
 		GameClock.MarketState.MARKET_OPEN:
 			_chart_state = ChartState.LIVE
+			# Re-fetch references and rebuild candles each trading day so that
+			# 1m/5m/15m charts show full season history (GDD §5-1 max_tick_history=31200).
+			# Also required for D1: _candles must be rebuilt from ohlcv_daily after
+			# the previous day's data was appended during DAY_TRANSITION.
+			if _stock_id != "":
+				_tick_prices = PriceEngine.get_tick_buffer(_stock_id)
+				_tick_volumes = PriceEngine.get_tick_volumes(_stock_id)
+				_ohlcv_daily = PriceEngine.get_ohlcv_history(_stock_id)
+				_aggregate_candles()
 		GameClock.MarketState.PAUSED:
 			_chart_state = ChartState.PAUSED
 		GameClock.MarketState.MARKET_CLOSED, GameClock.MarketState.DAY_TRANSITION, \
@@ -371,12 +392,24 @@ func _aggregate_candles() -> void:
 	_candles.clear()
 
 	if _timeframe == Timeframe.D1:
-		# Use daily OHLCV from PriceEngine
+		# Use daily OHLCV from PriceEngine for completed days.
 		_candles = _ohlcv_daily.duplicate()
-		# Add today's intra-day candle if we have tick data
-		if _tick_prices.size() > 0:
-			var today_candle: Dictionary = _aggregate_range(0, _tick_prices.size() - 1)
+		# today_start: tick index where today begins in the continuous season buffer.
+		# _ohlcv_daily.size() = completed days; each day has TICKS_PER_DAY ticks.
+		var today_start: int = _ohlcv_daily.size() * GameClock.TICKS_PER_DAY
+		# Add today's intra-day candle and seed D1 running state from today's ticks only.
+		if _tick_prices.size() > today_start:
+			var today_candle: Dictionary = _aggregate_range(today_start, _tick_prices.size() - 1)
 			_candles.append(today_candle)
+			_d1_open = today_candle["open"]
+			_d1_high = today_candle["high"]
+			_d1_low = today_candle["low"]
+			_d1_volume = float(today_candle["volume"])
+		else:
+			_d1_open = 0
+			_d1_high = 0
+			_d1_low = 0
+			_d1_volume = 0.0
 		_rebuild_indicator_caches()
 		return
 
@@ -398,12 +431,36 @@ func _aggregate_candles() -> void:
 ## Called from _on_price_updated when the buffer grew (normal tick, no day boundary).
 func _update_last_candle() -> void:
 	if _timeframe == Timeframe.D1:
-		if _tick_prices.size() > 0:
-			var today: Dictionary = _aggregate_range(0, _tick_prices.size() - 1)
-			if _candles.size() > _ohlcv_daily.size():
-				_candles[_candles.size() - 1] = today
-			else:
-				_candles.append(today)
+		var n: int = _tick_prices.size()
+		if n == 0:
+			return
+		var p: int = _tick_prices[n - 1]
+		var v: float = _tick_volumes[n - 1] if n - 1 < _tick_volumes.size() else 0.0
+		# Detect first tick of today using the season-wide continuous tick buffer.
+		# today_start = number of completed days × ticks/day.
+		# Tick index (n-1) == today_start means this is the very first tick today.
+		# This replaces the old `n == 1` check which only worked when the buffer was reset daily.
+		var today_start: int = _ohlcv_daily.size() * GameClock.TICKS_PER_DAY
+		if n - 1 == today_start:
+			# First tick of today — seed running state
+			_d1_open = p
+			_d1_high = p
+			_d1_low = p
+			_d1_volume = v
+		else:
+			if p > _d1_high:
+				_d1_high = p
+			if p < _d1_low:
+				_d1_low = p
+			_d1_volume += v
+		var today: Dictionary = {
+			"open": _d1_open, "high": _d1_high, "low": _d1_low, "close": p,
+			"volume": int(_d1_volume), "tick_start": 0, "tick_end": n - 1
+		}
+		if _candles.size() > _ohlcv_daily.size():
+			_candles[_candles.size() - 1] = today
+		else:
+			_candles.append(today)
 		return
 
 	var tf: int = int(_timeframe)
@@ -417,8 +474,13 @@ func _update_last_candle() -> void:
 		var idx: int = _candles.size()
 		_candles.append(_aggregate_range(idx * tf, (idx + 1) * tf - 1))
 
-	# Update or append the in-progress partial candle
-	if n % tf != 0:
+	if n % tf == 0 and complete > 0:
+		# Exact candle boundary — finalize the last complete candle.
+		# Without this, the candle stored as a partial on the previous tick
+		# is never updated with the boundary tick's price (close/high/low gap).
+		_candles[complete - 1] = _aggregate_range((complete - 1) * tf, complete * tf - 1)
+	elif n % tf != 0:
+		# Update or append the in-progress partial candle
 		var start: int = complete * tf
 		var partial: Dictionary = _aggregate_range(start, n - 1)
 		if _candles.size() > complete:

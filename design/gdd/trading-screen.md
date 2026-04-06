@@ -450,7 +450,7 @@ estimated_amount = quantity × reference_price
 | 종목 DB | 트레이딩 스크린이 참조 | 종목 정보 표시. **Hard** |
 | `SeasonManager` | 트레이딩 스크린이 참조 | 상태 바 리그 HUD 데이터 (`get_tier_name()`, `get_tier_rank()`, `get_season_return_pct()`, `get_weekly_return_pct()`). **Hard** |
 | `MainScreen` | 트레이딩 스크린의 부모 | F1/F2/F3 탭바 및 탭 전환 로직 소유. `TradingScreen`은 F1 탭 자식 씬. `league-ui.md §3-1` 씬 구조 참조. **Hard** |
-| `league-ui.md` | 역참조 | 상태 바 행 2 리그 HUD 레이아웃 및 데이터 소스의 정본 (§3-2, §4-1). |
+| `league-ui.md` | 역참조 | 상태 바 행 2 리그 HUD 레이아웃 및 데이터 소스의 정본 (§3-2, §4-1). **F3 탭 전환 시 자동 일시정지 정책은 §3-1이 정본** — TradingScreen의 탭 전환 핸들러는 이 정책을 따름. |
 
 ## Tuning Knobs
 

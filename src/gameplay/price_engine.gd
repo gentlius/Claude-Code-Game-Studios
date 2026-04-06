@@ -336,7 +336,8 @@ func _initialize_season() -> void:
 
 # ── Tick Processing (GDD Rule 5) ──
 
-func _on_tick(tick_number: int, _day: int, _week: int) -> void:
+## Called by GameClock._process_tick() for deterministic News→Price→Order ordering.
+func process_tick(tick_number: int, _day: int, _week: int) -> void:
 	if _engine_state != EngineState.RUNNING:
 		return
 
@@ -726,11 +727,11 @@ func _end_trading_day() -> void:
 		# Update prev_day_close for next day's daily limit calculation
 		s["prev_day_close"] = close_price
 
-		# Reset tick buffers — OHLCV is now in ohlcv_daily; keeping all-time
-		# ticks would grow O(days × TICKS_PER_DAY) and make chart aggregation
-		# progressively slower each day (S3-10 perf fix).
-		s["tick_prices"] = [] as Array[int]
-		s["tick_volumes"] = [] as Array[float]
+		# tick_prices/tick_volumes는 리셋하지 않는다.
+		# GDD chart-renderer.md §5-1: max_tick_history = 31200 (시즌 전체 보관).
+		# 31200틱 × 46종목 × 12 bytes ≈ 17 MB — 허용 범위.
+		# chart_renderer는 MARKET_OPEN마다 _aggregate_candles()로 전체 재집계하여
+		# 1분/5분/15분봉에서 과거 일자 스크롤을 지원한다.
 
 	# Reset VI daily counters (GDD Rule 2-4: max 1 per day resets each day)
 	for stock_id: String in _vi_states:
@@ -779,6 +780,23 @@ func get_index_change_pct() -> float:
 	if _prev_day_index <= 0.0:
 		return 0.0
 	return (_current_index - _prev_day_index) / _prev_day_index * 100.0
+
+
+## Returns the equal-weighted average daily return (%) across all active stocks.
+## Used by XpSystem to compute player alpha (player_return − market_return).
+## Returns 0.0 if no stocks have a valid previous close.
+func get_market_avg_return_pct() -> float:
+	var total: float = 0.0
+	var count: int = 0
+	for stock_id: String in _stock_states:
+		var s: Dictionary = _stock_states[stock_id]
+		var prev_close: int = s.get("prev_day_close", 0)
+		if prev_close <= 0:
+			continue
+		var cur: int = s.get("current_price", prev_close)
+		total += float(cur - prev_close) / float(prev_close) * 100.0
+		count += 1
+	return total / float(count) if count > 0 else 0.0
 
 
 ## Returns the market cap of a stock (current_price × listed_shares).

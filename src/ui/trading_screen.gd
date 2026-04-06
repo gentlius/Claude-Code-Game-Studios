@@ -81,7 +81,9 @@ func _connect_signals() -> void:
 	_status_bar.xp_bar.skill_tree_requested.connect(_toggle_skill_tree)
 	_settlement_reporter.settlement_confirmed.connect(func() -> void: GameClock.confirm_transition())
 	_settlement_reporter.needs_level_up.connect(_on_settlement_needs_level_up)
+	_settlement_reporter.xp_animate_requested.connect(func() -> void: _status_bar.xp_bar.animate_xp_gain())
 	_toast_manager.news_received.connect(_on_news_received)
+	_level_up_banner.skill_tree_requested.connect(_toggle_skill_tree)
 	_level_up_banner.banner_closed.connect(func() -> void: GameClock.confirm_transition())
 	_skill_tree_overlay.pause_toggle_requested.connect(func() -> void: pause_toggle_requested.emit())
 	if _chart_renderer.has_signal("price_clicked"):

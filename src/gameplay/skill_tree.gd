@@ -1,5 +1,6 @@
 ## Autoload — Manages skill unlocks, prerequisite checks, and skill queries.
 ## Feature layer. Depends on: XpSystem.
+## Skill definitions loaded from assets/data/skill_tree.json.
 ## See: design/gdd/skill-tree.md
 extends Node
 
@@ -32,8 +33,10 @@ var _unlocked_skills: Dictionary = {}    ## skill_id -> true (only unlocked ones
 
 # ── Lifecycle ──
 
+const SKILL_DATA_PATH: String = "res://assets/data/skill_tree.json"
+
 func _ready() -> void:
-	_register_all_skills()
+	_load_skills_from_json()
 
 
 # ── Public API: Queries ──
@@ -156,57 +159,32 @@ func get_missing_prerequisites(skill_id: String) -> Array[String]:
 	return missing
 
 
-# ── Skill Registration (GDD Detailed Design) ──
+# ── Skill Loading ──
 
-func _register_all_skills() -> void:
-	# Branch 1: Analysis Tools
-	_register_skill("A1", "analysis", 1, "이동평균선",
-		"5/20/60일 이동평균선 차트 오버레이", [])
-	_register_skill("A2", "analysis", 2, "보조지표",
-		"RSI(14), MACD(12,26,9) 하단 패널 표시", ["A1"])
-	_register_skill("A3", "analysis", 3, "재무제표",
-		"PER, PBR, ROE 기업정보 패널 표시", ["A2"])
-	_register_skill("A4", "analysis", 4, "섹터 비교 분석",
-		"업종별 상대강도 비교 뷰", ["A3"])
-
-	# Branch 2: Market Sense
-	_register_skill("S1", "sense", 1, "빠른 뉴스",
-		"뉴스 딜레이 15초로 단축", [])
-	_register_skill("S2", "sense", 2, "실시간 뉴스",
-		"뉴스 딜레이 0초", ["S1"])
-	_register_skill("S3", "sense", 3, "루머 채널",
-		"뉴스 발생 전 확률적 힌트 (정확도 70%)", ["S2"])
-
-	# Branch 3: Trading Skills
-	_register_skill("TR1", "trading", 1, "지정가 주문",
-		"목표가 설정, 조건 충족 시 자동 체결", [])
-	_register_skill("TR2", "trading", 2, "손절/익절",
-		"보유 종목에 자동 매도 조건 설정", ["TR1"])
-	_register_skill("TR3", "trading", 3, "공매도",
-		"주가 하락 시 수익. 보유 없이 매도 후 매수로 청산", ["TR2", "A2"])
-	_register_skill("TR4", "trading", 4, "레버리지",
-		"2x 배율 거래. 수익/손실 2배", ["TR3"])
-
-	# Branch 4: Portfolio
-	_register_skill("P1", "portfolio", 1, "5종목 보유",
-		"동시 보유 종목 수 5로 확장", [])
-	_register_skill("P2", "portfolio", 2, "10종목 보유",
-		"동시 보유 종목 수 10으로 확장", ["P1"])
-	_register_skill("P3", "portfolio", 3, "섹터 ETF",
-		"섹터 단위 투자 가능", ["P2", "A4"])
-
-
-func _register_skill(id: String, branch: String, tier: int,
-		skill_name: String, description: String,
-		prerequisites: Array) -> void:
-	_skill_definitions[id] = {
-		"id": id,
-		"branch": branch,
-		"tier": tier,
-		"name": skill_name,
-		"description": description,
-		"prerequisites": prerequisites,
-	}
+func _load_skills_from_json() -> void:
+	var file: FileAccess = FileAccess.open(SKILL_DATA_PATH, FileAccess.READ)
+	if file == null:
+		push_error("SkillTree: cannot open %s — error %d" % [SKILL_DATA_PATH, FileAccess.get_open_error()])
+		return
+	var json_text: String = file.get_as_text()
+	file.close()
+	var parsed: Variant = JSON.parse_string(json_text)
+	if not parsed is Array:
+		push_error("SkillTree: %s must be a JSON array" % SKILL_DATA_PATH)
+		return
+	for entry: Variant in parsed:
+		if entry is Dictionary and entry.has("id"):
+			var prereqs: Array[String] = []
+			for p: Variant in entry.get("prerequisites", []):
+				prereqs.append(str(p))
+			_skill_definitions[entry["id"]] = {
+				"id": entry["id"],
+				"branch": entry.get("branch", ""),
+				"tier": entry.get("tier", 0),
+				"name": entry.get("name", ""),
+				"description": entry.get("description", ""),
+				"prerequisites": prereqs,
+			}
 
 
 # ── Serialization ──

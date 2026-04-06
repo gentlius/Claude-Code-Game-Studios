@@ -24,14 +24,14 @@ signal on_xp_gained(amount: int, new_total: int, source: String)
 ## Rank XP table: index 0 = 1st place (GDD F2)
 var RANK_XP_TABLE: Array[int] = [500, 350, 250, 150, 150, 50]
 
-## Daily return multiplier thresholds (GDD rule 1-1)
-## Array of [threshold_pct, multiplier] — checked in descending order
+## Alpha multiplier thresholds (GDD F1) — alpha = player daily return − market avg return.
+## Array of [alpha_threshold_pct, multiplier] — checked in descending order.
 var DAILY_RETURN_MULTIPLIERS: Array[Array] = [
-	[5.0, 3.0],
-	[3.0, 2.0],
-	[1.0, 1.5],
-	[0.0, 1.0],
-	[-INF, 0.5],
+	[3.0, 3.0],   # alpha ≥ +3%
+	[1.0, 2.0],   # alpha +1~3%
+	[0.0, 1.5],   # alpha 0~1%
+	[-1.0, 1.0],  # alpha -1~0%
+	[-INF, 0.5],  # alpha < -1%
 ]
 
 # ── State ──
@@ -41,6 +41,10 @@ var _current_level: int = 1
 var _spent_skill_points: int = 0
 var _daily_has_trade: bool = false  ## Tracks if at least 1 fill occurred today
 var _prev_close_assets: int = 0     ## Previous day's closing total assets
+var _last_daily_return_pct: float = 0.0  ## Player daily return % (before alpha adjustment)
+var _last_market_return_pct: float = 0.0 ## Market avg return % on last settlement day
+var _last_alpha_pct: float = 0.0         ## Alpha = player_return − market_return
+var _last_season_breakdown: Dictionary = {}  ## Breakdown from last grant_season_bonus()
 
 # ── Lifecycle ──
 
@@ -88,6 +92,12 @@ func get_available_skill_points() -> int:
 	return get_total_skill_points() - _spent_skill_points
 
 
+## Called by SeasonManager to grant weekly prize XP (ADR-005).
+## Use this instead of calling _grant_xp() directly.
+func grant_weekly_prize_xp(amount: int) -> void:
+	_grant_xp(amount, "weekly_prize")
+
+
 ## Called by SkillTree when a skill point is consumed
 func spend_skill_point() -> bool:
 	if get_available_skill_points() <= 0:
@@ -130,14 +140,34 @@ func _cumulative_xp_for_level(level: int) -> int:
 	return total
 
 
-## GDD F1: daily_xp = floor(BASE_DAILY_XP × daily_return_multiplier)
-func _calculate_daily_xp(daily_return_pct: float) -> int:
-	var multiplier: float = 0.5  # default fallback
-	for entry: Array in DAILY_RETURN_MULTIPLIERS:
-		if daily_return_pct >= entry[0]:
-			multiplier = entry[1]
+## Returns breakdown of last daily XP grant for settlement popup display (AC-2).
+## { base_xp, multiplier, total_xp, return_tier, alpha_pct, player_return_pct, market_return_pct }
+## Tier is based on alpha (player daily return − market avg return), not raw return.
+func get_daily_xp_breakdown() -> Dictionary:
+	var multiplier: float = 0.5
+	var tier: String = "< -1%"
+	var tiers: Array[String] = ["< -1%", "-1~0%", "0~1%", "1~3%", "≥ +3%"]
+	for i: int in range(DAILY_RETURN_MULTIPLIERS.size()):
+		if _last_alpha_pct >= DAILY_RETURN_MULTIPLIERS[i][0]:
+			multiplier = DAILY_RETURN_MULTIPLIERS[i][1]
+			tier = tiers[DAILY_RETURN_MULTIPLIERS.size() - 1 - i]
 			break
-	return int(floor(BASE_DAILY_XP * multiplier))
+	var total: int = int(floor(BASE_DAILY_XP * multiplier))
+	return {
+		"base_xp": BASE_DAILY_XP,
+		"multiplier": multiplier,
+		"total_xp": total,
+		"return_tier": tier,
+		"alpha_pct": _last_alpha_pct,
+		"player_return_pct": _last_daily_return_pct,
+		"market_return_pct": _last_market_return_pct,
+	}
+
+
+## Returns breakdown of last season XP grant for settlement popup sequential reveal (AC-9).
+## { base_xp, rank_bonus, return_bonus, total_xp, final_rank, season_return_pct }
+func get_season_xp_breakdown() -> Dictionary:
+	return _last_season_breakdown.duplicate()
 
 
 ## GDD F2: season_xp = BASE_SEASON_XP + rank_bonus + return_bonus
@@ -146,6 +176,16 @@ func _calculate_season_xp(final_rank: int, season_return_pct: float) -> int:
 	var rank_bonus: int = RANK_XP_TABLE[rank_index]
 	var return_bonus: int = int(floor(maxf(0.0, season_return_pct) * RETURN_XP_SCALE))
 	return BASE_SEASON_XP + rank_bonus + return_bonus
+
+
+## GDD F1: daily_xp = floor(BASE_DAILY_XP × daily_return_multiplier)
+func _calculate_daily_xp(daily_return_pct: float) -> int:
+	var multiplier: float = 0.5  # default fallback
+	for entry: Array in DAILY_RETURN_MULTIPLIERS:
+		if daily_return_pct >= entry[0]:
+			multiplier = entry[1]
+			break
+	return int(floor(BASE_DAILY_XP * multiplier))
 
 
 # ── Signal Handlers ──
@@ -174,8 +214,13 @@ func _on_market_close() -> void:
 	var current_assets: int = PortfolioManager.get_total_assets()
 	var base_assets: int = _prev_close_assets if _prev_close_assets > 0 else CurrencySystem.DEFAULT_SEASON_SEED
 	var daily_return_pct: float = float(current_assets - base_assets) / float(base_assets) * 100.0
+	var market_return_pct: float = PriceEngine.get_market_avg_return_pct()
+	var alpha_pct: float = daily_return_pct - market_return_pct
 
-	var daily_xp: int = _calculate_daily_xp(daily_return_pct)
+	_last_daily_return_pct = daily_return_pct
+	_last_market_return_pct = market_return_pct
+	_last_alpha_pct = alpha_pct
+	var daily_xp: int = _calculate_daily_xp(alpha_pct)
 	_grant_xp(daily_xp, "daily_bonus")
 
 	# Update previous close for next day's calculation
@@ -194,7 +239,18 @@ func grant_season_bonus(
 	# Free-market participants receive no rank bonus XP (no official ranking).
 	# Official league participants receive full season XP based on rank + return.
 	if not is_free_market:
+		var rank_index: int = clampi(final_rank - 1, 0, RANK_XP_TABLE.size() - 1)
+		var rank_bonus: int = RANK_XP_TABLE[rank_index]
+		var return_bonus: int = int(floor(maxf(0.0, season_return_pct) * RETURN_XP_SCALE))
 		var season_xp: int = _calculate_season_xp(final_rank, season_return_pct)
+		_last_season_breakdown = {
+			"base_xp": BASE_SEASON_XP,
+			"rank_bonus": rank_bonus,
+			"return_bonus": return_bonus,
+			"total_xp": season_xp,
+			"final_rank": final_rank,
+			"season_return_pct": season_return_pct,
+		}
 		_grant_xp(season_xp, "season_bonus")
 
 	# Completion bonus: 20 XP for any participant (free-market or official)
@@ -234,3 +290,7 @@ func reset_for_testing() -> void:
 	_spent_skill_points = 0
 	_daily_has_trade = false
 	_prev_close_assets = 0
+	_last_daily_return_pct = 0.0
+	_last_market_return_pct = 0.0
+	_last_alpha_pct = 0.0
+	_last_season_breakdown = {}

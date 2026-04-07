@@ -38,7 +38,7 @@
 | `GameClock.on_market_close` | 매일 장 마감 후 자동 저장 |
 | `SeasonManager.on_season_ended` | 시즌 종료 후 자동 저장 |
 
-### 3-3 직렬화 대상 시스템 (7개)
+### 3-3 직렬화 대상 시스템 (8개)
 
 | 시스템 | 저장 필드 |
 |--------|----------|
@@ -47,8 +47,9 @@
 | `SeasonManager` | current_tier, is_free_market, season_start_capital, weekly_start_capital, weekly_trade_count, **seasons_played** |
 | `CurrencySystem` | sim_cash, deposit, **season_active** |
 | `PortfolioManager` | holdings (stock_id→{quantity, avg_buy_price, total_invested}) |
-| `PriceEngine` | **closing_prices** (stock_id→int) |
+| `PriceEngine` | stocks (stock_id→{current_price, prev_day_close, season_bias, **ohlcv_daily**, **tick_prices**, **tick_volumes**}) |
 | `GameClock` | **current_day**, **current_week** |
+| `AiCompetitor` | season_seed, player_tier, participant_counts, current_day |
 
 **미저장 시스템 및 이유:**
 
@@ -56,60 +57,51 @@
 |--------|------------|--------------|--------------|
 | `GameClock._current_tick` | 장 마감 후 저장 → 로드 시 항상 0 (새 거래일 시작) | 0 | 없음 |
 | `GameClock.MarketState` | 로드 후 항상 PRE_MARKET에서 재개 | PRE_MARKET | 없음 |
-| `PriceEngine` 마코프 상태·OHLCV | 세션 초기화 허용 — 가격만 복원하면 충분 | 신선한 세션 | 차트 히스토리 사라짐(설계상 허용) |
+| `PriceEngine` 마코프 상태 | 세션 초기화 허용 — 가격·bias·차트 데이터는 복원됨 | SIDEWAYS | 없음 (Markov는 세션 스코프) |
 | `OrderEngine` 미체결 주문 | 장 마감 후 저장 → 미체결 주문 없음 | 빈 큐 | 없음 |
 | `NewsEventSystem` 딜레이 큐 | 장 마감 후 저장 → 큐 비어있음 | 빈 큐 | 없음 |
 
-> **seasons_played**: 픽션 날짜 계산(`get_fiction_date()`)에 사용. 미복원 시 항상 Q1(1월)로 표시됨.  
+> **ohlcv_daily / tick_prices / tick_volumes**: 차트 렌더러가 1시즌 전체 틱 버퍼를 유지하므로 (GDD chart-renderer §5-1 max_tick_history=31200) 전체를 저장·복원해야 봉차트·보조지표가 연속성을 유지한다.  
+> **season_seed**: AiCompetitor의 참가자 수익률은 시드+일수로 결정론적으로 계산되므로 시드만 저장하면 전체 순위를 재현할 수 있다.  
 > **season_active**: 잔고 0인 시즌(파산 직전) 상태를 잔고로 추론하면 비활성으로 오복원. 명시적 저장 필요.  
-> **closing_prices**: 세이브는 장 마감 후 발생하므로 current_price == prev_day_close. 로드 시 두 필드 모두 복원. 미저장 시 base_price로 폴백 — 보유 주식 가치가 매수가 기준이 아닌 base_price로 표시되고 세이브/로드로 가격 조작 가능한 익스플로잇 발생.  
 > **current_day / current_week**: 미복원 시 항상 week=0, day=0으로 리셋 → 3주차에 저장하면 로드 후 5일 뒤에 "1주차 종료" 이벤트 발생. 주간 보상·시즌 종료 타이밍 오작동.
 
 ### 3-4 저장 포맷 (JSON)
 
 ```json
 {
-  "save_version": 1,
+  "save_version": 2,
   "timestamp": 1712345678,
-  "xp": {
-    "total_xp": 1500,
-    "current_level": 4,
-    "spent_skill_points": 2
-  },
-  "skill_tree": {
-    "unlocked_skills": ["A1", "S1"]
-  },
+  "xp": { "total_xp": 1500, "current_level": 4, "spent_skill_points": 2 },
+  "skill_tree": { "unlocked_skills": ["A1", "S1"] },
   "season": {
-    "current_tier": 0,
-    "is_free_market": false,
-    "season_start_capital": 1000000,
-    "weekly_start_capital": 980000,
-    "weekly_trade_count": 3,
-    "seasons_played": 2
+    "current_tier": 0, "is_free_market": false,
+    "season_start_capital": 1000000, "weekly_start_capital": 980000,
+    "weekly_trade_count": 3, "seasons_played": 2
   },
-  "currency": {
-    "sim_cash": 850000,
-    "deposit": 1000000,
-    "season_active": true
-  },
+  "currency": { "sim_cash": 850000, "deposit": 1000000, "season_active": true },
   "portfolio": {
     "holdings": {
-      "005930": {
-        "quantity": 10,
-        "avg_buy_price": 72000,
-        "total_invested": 720000
-      }
+      "005930": { "quantity": 10, "avg_buy_price": 72000, "total_invested": 720000 }
     }
   },
   "prices": {
-    "closing_prices": {
-      "005930": 71500,
-      "000660": 138000
+    "stocks": {
+      "005930": {
+        "current_price": 71500, "prev_day_close": 71500, "season_bias": 0,
+        "ohlcv_daily": [
+          { "open": 72000, "high": 73500, "low": 70000, "close": 71500, "volume": 1234.5 }
+        ],
+        "tick_prices": [72000, 72050, "..."],
+        "tick_volumes": [0.8, 0.9, "..."]
+      }
     }
   },
-  "clock": {
-    "current_day": 9,
-    "current_week": 1
+  "clock": { "current_day": 9, "current_week": 1 },
+  "ai": {
+    "season_seed": 987654321, "player_tier": 0,
+    "participant_counts": { "0": 7600, "1": 3200 },
+    "current_day": 9
   }
 }
 ```
@@ -206,6 +198,8 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `SaveSystem.load_game()` → JSON 읽기 → 5개 시스템 `load_save_data()` 복원
 - [x] `CurrencySystem.get_save_data()` / `load_save_data()` — 이번 스프린트 추가
 - [x] `PortfolioManager.get_save_data()` / `load_save_data()` — 이번 스프린트 추가
+- [x] `PriceEngine.get_save_data()` / `initialize_for_load()` — ohlcv_daily + tick_prices + tick_volumes + season_bias 전체 복원 (단일 패스, _initialize_season() 미호출)
+- [x] `AiCompetitor.get_save_data()` / `load_save_data()` — seed 저장으로 순위 결정론적 재현
 - [x] `SaveSystem` autoload → `project.godot` 등록
 
 ### AC → 테스트 매핑
@@ -222,4 +216,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | AC-09 | `tests/unit/test_save_system.gd` | `test_load_game_version_mismatch_loads_known_fields()` |
 
 ### 빌드 검증
-- [x] 바이너리 실행 확인: QA Lead 서명 2026-04-07 (SCRIPT ERROR 0, AiCompetitor push_error는 시즌 미시작 예상 동작)
+- [x] 바이너리 실행 확인: QA Lead 서명 2026-04-07 (SCRIPT ERROR 0, AiCompetitor push_error는 시즌 미시작 예상 동작 — 기존과 동일)

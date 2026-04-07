@@ -6,7 +6,7 @@ extends Node
 
 # ── Constants ──
 
-const SAVE_VERSION: int = 1
+const SAVE_VERSION: int = 2
 const SAVE_PATH: String = "user://save_data.json"
 
 # ── State ──
@@ -41,6 +41,7 @@ func save_game() -> bool:
 		"portfolio": PortfolioManager.get_save_data(),
 		"prices": PriceEngine.get_save_data(),
 		"clock": GameClock.get_save_data(),
+		"ai": AiCompetitor.get_save_data(),
 	}
 
 	var json_text: String = JSON.stringify(data, "\t")
@@ -99,6 +100,7 @@ func load_game() -> bool:
 	if CurrencySystem.is_season_active():
 		PriceEngine.initialize_for_load(data.get("prices", {}))
 		GameClock.load_save_data(data.get("clock", {}))
+		AiCompetitor.load_save_data(data.get("ai", {}))
 
 	# Refresh valuation cache after prices are restored.
 	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)

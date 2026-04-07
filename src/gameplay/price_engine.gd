@@ -199,28 +199,106 @@ func _on_season_start() -> void:
 
 
 ## Called by SaveSystem after loading a save where a season was in progress.
-## Initialises _stock_states (base prices), then overlays saved closing prices.
-## Saves occur at market close, so saved prices == that session's prev_day_close.
-## OHLCV history and markov state are not persisted (fresh session by design).
+## Rebuilds _stock_states in one pass: StockDatabase for metadata, save_data for
+## dynamic fields (prices, season_bias, ohlcv_daily, tick_prices, tick_volumes).
+## Does NOT call _initialize_season() — that would reset fields we are restoring.
+## Backward-compat: old saves with "closing_prices" flat dict are still accepted.
 ## Engine enters READY state; transitions to RUNNING when player opens market.
-func initialize_for_load(save_data: Dictionary = {}) -> void:
-	_initialize_season()  # Populate _stock_states at base prices, engine = READY
-	var closing_prices: Dictionary = save_data.get("closing_prices", {})
-	for stock_id: String in closing_prices:
-		if _stock_states.has(stock_id):
-			var saved_price: int = closing_prices[stock_id]
-			if saved_price > 0:
-				_stock_states[stock_id]["current_price"] = saved_price
-				_stock_states[stock_id]["prev_day_close"] = saved_price
+func initialize_for_load(save_data: Dictionary) -> void:
+	_stock_states.clear()
+	_transition_matrices.clear()
 
+	var stocks_saved: Dictionary = save_data.get("stocks", {})
+	# Backward compat — pre-v2 saves stored a flat {stock_id: price} dict.
+	var legacy_prices: Dictionary = save_data.get("closing_prices", {})
 
-## Returns closing prices for all stocks at save time.
-## Saves happen at market close, so current_price == prev_day_close for all stocks.
-func get_save_data() -> Dictionary:
-	var closing_prices: Dictionary = {}
+	var stock_ids: Array[String] = StockDatabase.get_all_stock_ids()
+	for stock_id: String in stock_ids:
+		var stock: StockData = StockDatabase.get_stock(stock_id)
+		if stock == null:
+			continue
+
+		var saved: Dictionary = stocks_saved.get(stock_id, {})
+
+		# Prices — prefer new format, fall back to legacy, then base_price
+		var cur_price: int = saved.get("current_price",
+			legacy_prices.get(stock_id, stock.base_price))
+		var prev_close: int = saved.get("prev_day_close", cur_price)
+		if cur_price  <= 0: cur_price  = stock.base_price
+		if prev_close <= 0: prev_close = stock.base_price
+
+		# Season bias — restore if saved, else randomise
+		var bias: SeasonBias
+		var bias_val: int = saved.get("season_bias", -1)
+		if bias_val >= SeasonBias.BULL and bias_val <= SeasonBias.BEAR:
+			bias = bias_val as SeasonBias
+		else:
+			var r: float = randf()
+			if   r < BIAS_BULL_PROB:        bias = SeasonBias.BULL
+			elif r < BIAS_NEUTRAL_CUTOFF:   bias = SeasonBias.NEUTRAL
+			else:                            bias = SeasonBias.BEAR
+
+		# Tick history (full season) — chart renderer requires the complete buffer
+		var tick_prices: Array[int] = [] as Array[int]
+		for p: Variant in saved.get("tick_prices", []):
+			tick_prices.append(int(p))
+		var tick_volumes: Array[float] = [] as Array[float]
+		for v: Variant in saved.get("tick_volumes", []):
+			tick_volumes.append(float(v))
+		var ohlcv_daily: Array[Dictionary] = [] as Array[Dictionary]
+		for entry: Variant in saved.get("ohlcv_daily", []):
+			if entry is Dictionary:
+				ohlcv_daily.append(entry)
+
+		_stock_states[stock_id] = {
+			"stock_id":           stock_id,
+			"current_price":      cur_price,
+			"base_price":         stock.base_price,
+			"prev_day_close":     prev_close,
+			"volatility_profile": stock.volatility_profile,
+			"macro_sensitivity":  stock.macro_sensitivity,
+			"sector_sensitivity": stock.sector_sensitivity,
+			"markov_state":       MarkovState.SIDEWAYS,  # session-scoped, not persisted
+			"state_duration":     0,
+			"season_bias":        bias,
+			"tick_prices":        tick_prices,
+			"tick_volumes":       tick_volumes,
+			"ohlcv_daily":        ohlcv_daily,
+			"event_queue":        [] as Array,
+			"gradual_events":     [] as Array,
+		}
+		_transition_matrices[stock_id] = _build_transition_matrix(
+			stock.volatility_profile, bias
+		)
+
+	_vi_states.clear()
 	for stock_id: String in _stock_states:
-		closing_prices[stock_id] = _stock_states[stock_id].get("current_price", 0)
-	return {"closing_prices": closing_prices}
+		_vi_states[stock_id] = {"halt_remaining": 0, "count_today": 0, "cooldown": 0}
+
+	_cb_stage = 0
+	_cb_halt_remaining = 0
+	_base_market_cap = _compute_total_market_cap()
+	_current_index  = INDEX_BASE
+	_prev_day_index = INDEX_BASE
+	_index_history.clear()
+	_engine_state = EngineState.READY
+
+
+## Returns full per-stock dynamic state for save system.
+## tick_prices/tick_volumes are the full-season buffers (GDD chart-renderer §5-1).
+func get_save_data() -> Dictionary:
+	var stocks_data: Dictionary = {}
+	for stock_id: String in _stock_states:
+		var s: Dictionary = _stock_states[stock_id]
+		stocks_data[stock_id] = {
+			"current_price":  s.get("current_price",  0),
+			"prev_day_close": s.get("prev_day_close", 0),
+			"season_bias":    int(s.get("season_bias", SeasonBias.NEUTRAL)),
+			"ohlcv_daily":    s.get("ohlcv_daily",    []),
+			"tick_prices":    s.get("tick_prices",     []),
+			"tick_volumes":   s.get("tick_volumes",    []),
+		}
+	return {"stocks": stocks_data}
 
 
 ## Resets all price engine state for unit tests. Call in before_each.

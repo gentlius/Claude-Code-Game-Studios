@@ -292,6 +292,39 @@ func get_interpolated_return(tier: int, participant_id: int) -> float:
 	return _interpolate_return(tier, participant_id)
 
 
+## Returns serializable state for save system.
+## The seed + tier counts fully determine all participant returns (deterministic).
+func get_save_data() -> Dictionary:
+	if not _initialized:
+		return {}
+	var counts: Dictionary = {}
+	for tier: int in _tier_data:
+		counts[str(tier)] = _tier_data[tier]["count"]
+	return {
+		"season_seed":        _season_seed,
+		"player_tier":        _player_tier,
+		"participant_counts": counts,
+		"current_day":        _current_day,
+	}
+
+
+## Restores AI competitor state from save. Calls init_season() once with the
+## saved seed so all returns are deterministic, then overrides day counter and
+## marks the season active (the player was mid-season when the save was made).
+func load_save_data(data: Dictionary) -> void:
+	if data.is_empty():
+		return
+	var counts_raw: Dictionary = data.get("participant_counts", {})
+	if counts_raw.is_empty():
+		return
+	var counts: Dictionary = {}
+	for key: String in counts_raw:
+		counts[int(key)] = counts_raw[key]
+	init_season(data.get("player_tier", 0), counts, data.get("season_seed", 0))
+	_current_day  = data.get("current_day", 0)
+	_season_active = true  # Season was active at save time
+
+
 ## Resets all AI competitor state for unit tests. Call in before_each.
 func reset_for_testing() -> void:
 	_initialized = false

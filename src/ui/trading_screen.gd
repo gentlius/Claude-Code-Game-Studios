@@ -127,43 +127,66 @@ func _sync_ui_state_from_clock() -> void:
 # ── Input Handling (GDD Rule 7) ──
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not event is InputEventKey:
-		return
-	var key: InputEventKey = event as InputEventKey
-	if not key.pressed or key.echo:
-		return
+	if event is InputEventKey:
+		var key: InputEventKey = event as InputEventKey
+		if not key.pressed or key.echo:
+			return
+		match key.keycode:
+			KEY_B:
+				if not key.shift_pressed:
+					_order_panel.set_order_side("BUY")
+					get_viewport().set_input_as_handled()
+			KEY_S:
+				if not key.shift_pressed:
+					_order_panel.set_order_side("SELL")
+					get_viewport().set_input_as_handled()
+			KEY_SPACE:
+				_handle_pause_toggle()
+				get_viewport().set_input_as_handled()
+			KEY_ENTER, KEY_KP_ENTER:
+				_handle_enter_key()
+				get_viewport().set_input_as_handled()
+			KEY_TAB:
+				_toggle_bottom_tab()
+				get_viewport().set_input_as_handled()
+			KEY_K:
+				if not key.shift_pressed:
+					_toggle_skill_tree()
+					get_viewport().set_input_as_handled()
+			KEY_ESCAPE:
+				_handle_escape()
+				get_viewport().set_input_as_handled()
+		if key.shift_pressed:
+			match key.keycode:
+				KEY_1: _set_speed(1.0); get_viewport().set_input_as_handled()
+				KEY_2: _set_speed(2.0); get_viewport().set_input_as_handled()
+				KEY_3: _set_speed(4.0); get_viewport().set_input_as_handled()
 
-	match key.keycode:
-		KEY_B:
-			if not key.shift_pressed:
-				_order_panel.set_order_side("BUY")
-				get_viewport().set_input_as_handled()
-		KEY_S:
-			if not key.shift_pressed:
-				_order_panel.set_order_side("SELL")
-				get_viewport().set_input_as_handled()
-		KEY_SPACE:
+	elif event is InputEventJoypadButton:
+		# S5-05: 게임패드 입력 지원. InputMap 액션 사용 — 리맵 지원.
+		if not event.is_pressed():
+			return
+		if event.is_action("game_buy"):
+			_order_panel.set_order_side("BUY")
+			get_viewport().set_input_as_handled()
+		elif event.is_action("game_sell"):
+			_order_panel.set_order_side("SELL")
+			get_viewport().set_input_as_handled()
+		elif event.is_action("game_pause"):
 			_handle_pause_toggle()
 			get_viewport().set_input_as_handled()
-		KEY_ENTER, KEY_KP_ENTER:
+		elif event.is_action("game_confirm"):
 			_handle_enter_key()
 			get_viewport().set_input_as_handled()
-		KEY_TAB:
+		elif event.is_action("game_tab_switch"):
 			_toggle_bottom_tab()
 			get_viewport().set_input_as_handled()
-		KEY_K:
-			if not key.shift_pressed:
-				_toggle_skill_tree()
-				get_viewport().set_input_as_handled()
-		KEY_ESCAPE:
+		elif event.is_action("game_skill_tree"):
+			_toggle_skill_tree()
+			get_viewport().set_input_as_handled()
+		elif event.is_action("game_cancel"):
 			_handle_escape()
 			get_viewport().set_input_as_handled()
-
-	if key.shift_pressed:
-		match key.keycode:
-			KEY_1: _set_speed(1.0); get_viewport().set_input_as_handled()
-			KEY_2: _set_speed(2.0); get_viewport().set_input_as_handled()
-			KEY_3: _set_speed(4.0); get_viewport().set_input_as_handled()
 
 # ── State Management ──
 
@@ -172,7 +195,7 @@ func _set_ui_state(new_state: UIState) -> void:
 	_pause_overlay.visible = (new_state == UIState.PAUSED)
 	_status_bar.set_ui_state(int(new_state))
 	var submit_enabled: bool = new_state not in [UIState.SETTLEMENT, UIState.SEASON_RESULT, UIState.LOADING]
-	var submit_text: String = "주문 예약 Enter" if new_state == UIState.PRE_MARKET else "주문 실행 Enter"
+	var submit_text: String = tr("주문 예약 Enter") if new_state == UIState.PRE_MARKET else tr("주문 실행 Enter")
 	_order_panel.set_ui_state_submit_enabled(submit_enabled, submit_text)
 	if new_state == UIState.PRE_MARKET:
 		_order_panel.refresh_limit_price_bounds()
@@ -214,7 +237,7 @@ func _on_order_filled(_order: Dictionary) -> void:
 	## OrderPanel handles flash + pending list. TradingScreen tracks portfolio badge.
 	if _active_tab != 2:
 		_portfolio_unread += 1
-		_btn_tab_portfolio.text = "포트폴리오 (%d)" % _portfolio_unread
+		_btn_tab_portfolio.text = tr("포트폴리오 (%d)") % _portfolio_unread
 
 
 func _on_settlement_needs_level_up(data: Dictionary) -> void:
@@ -224,13 +247,13 @@ func _on_settlement_needs_level_up(data: Dictionary) -> void:
 func _on_news_received() -> void:
 	if _active_tab != 0:
 		_news_unread += 1
-		_btn_tab_news.text = "뉴스 (%d)" % _news_unread
+		_btn_tab_news.text = tr("뉴스 (%d)") % _news_unread
 
 
 func _on_skill_unlocked(skill_id: String) -> void:
 	if skill_id == "TR1":
 		var enabled: bool = _ui_state not in [UIState.SETTLEMENT, UIState.SEASON_RESULT, UIState.LOADING]
-		var text: String = "주문 예약 Enter" if _ui_state == UIState.PRE_MARKET else "주문 실행 Enter"
+		var text: String = tr("주문 예약 Enter") if _ui_state == UIState.PRE_MARKET else tr("주문 실행 Enter")
 		_order_panel.set_ui_state_submit_enabled(enabled, text)
 
 
@@ -320,12 +343,12 @@ func _switch_bottom_tab(index: int) -> void:
 	_portfolio_panel.visible = (index == 2)
 	if index == 0:
 		_news_unread = 0
-		_btn_tab_news.text = "뉴스"
+		_btn_tab_news.text = tr("뉴스")
 	elif index == 1:
-		_btn_tab_alerts.text = "VI/CB"
+		_btn_tab_alerts.text = tr("VI/CB")
 	elif index == 2:
 		_portfolio_unread = 0
-		_btn_tab_portfolio.text = "포트폴리오"
+		_btn_tab_portfolio.text = tr("포트폴리오")
 	var tabs: Array[Button] = [_btn_tab_news, _btn_tab_alerts, _btn_tab_portfolio]
 	for i: int in range(tabs.size()):
 		tabs[i].remove_theme_color_override("font_color")
@@ -344,7 +367,7 @@ func _build_alerts_panel() -> VBoxContainer:
 	header.add_theme_constant_override("separation", 8)
 	panel.add_child(header)
 	var title: Label = Label.new()
-	title.text = "VI / CB 알림"
+	title.text = tr("VI / CB 알림")
 	title.add_theme_font_size_override("font_size", 14)
 	ThemeSetup.style_label_primary(title)
 	header.add_child(title)
@@ -356,7 +379,7 @@ func _build_alerts_panel() -> VBoxContainer:
 	_alerts_container.add_theme_constant_override("separation", 2)
 	scroll.add_child(_alerts_container)
 	var empty: Label = Label.new()
-	empty.text = "VI / CB 이벤트가 없습니다"
+	empty.text = tr("VI / CB 이벤트가 없습니다")
 	empty.name = "EmptyLabel"
 	ThemeSetup.style_label_dim(empty)
 	_alerts_container.add_child(empty)
@@ -392,7 +415,7 @@ func _add_alert_card(headline: String, body: String, severity: String, stock_id:
 		ThemeSetup.style_label_dim(lbl_body)
 		vbox.add_child(lbl_body)
 	var lbl_time: Label = Label.new()
-	lbl_time.text = "틱 %d" % GameClock.get_current_tick()
+	lbl_time.text = tr("틱 %d") % GameClock.get_current_tick()
 	ThemeSetup.style_label_dim(lbl_time)
 	vbox.add_child(lbl_time)
 	_alerts_container.add_child(card)
@@ -406,7 +429,7 @@ func _add_alert_card(headline: String, body: String, severity: String, stock_id:
 					_select_stock(stock_id)
 		)
 	if _active_tab != 1:
-		_btn_tab_alerts.text = "VI/CB ●"
+		_btn_tab_alerts.text = tr("VI/CB ●")
 
 
 func _clear_alerts() -> void:
@@ -415,11 +438,11 @@ func _clear_alerts() -> void:
 	for child: Node in _alerts_container.get_children():
 		child.queue_free()
 	var empty: Label = Label.new()
-	empty.text = "VI / CB 이벤트가 없습니다"
+	empty.text = tr("VI / CB 이벤트가 없습니다")
 	empty.name = "EmptyLabel"
 	ThemeSetup.style_label_dim(empty)
 	_alerts_container.add_child(empty)
-	_btn_tab_alerts.text = "VI/CB"
+	_btn_tab_alerts.text = tr("VI/CB")
 
 # ── UI Construction ──
 
@@ -446,7 +469,7 @@ func _build_ui() -> void:
 	stock_vbox.add_theme_constant_override("separation", 2)
 	stock_panel.add_child(stock_vbox)
 	var stock_title: Label = Label.new()
-	stock_title.text = "종목 리스트"
+	stock_title.text = tr("종목 리스트")
 	stock_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	stock_title.add_theme_font_size_override("font_size", 13)
 	ThemeSetup.style_label_secondary(stock_title)
@@ -492,15 +515,15 @@ func _build_bottom_panel(parent: VBoxContainer) -> void:
 	parent.add_child(bottom)
 	var tab_bar: HBoxContainer = HBoxContainer.new()
 	bottom.add_child(tab_bar)
-	_btn_tab_news = Button.new(); _btn_tab_news.text = "뉴스"
+	_btn_tab_news = Button.new(); _btn_tab_news.text = tr("뉴스")
 	ThemeSetup.apply_tab_active(_btn_tab_news)
 	_btn_tab_news.pressed.connect(func() -> void: _switch_bottom_tab(0))
 	tab_bar.add_child(_btn_tab_news)
-	_btn_tab_alerts = Button.new(); _btn_tab_alerts.text = "VI/CB"
+	_btn_tab_alerts = Button.new(); _btn_tab_alerts.text = tr("VI/CB")
 	ThemeSetup.apply_tab_inactive(_btn_tab_alerts)
 	_btn_tab_alerts.pressed.connect(func() -> void: _switch_bottom_tab(1))
 	tab_bar.add_child(_btn_tab_alerts)
-	_btn_tab_portfolio = Button.new(); _btn_tab_portfolio.text = "포트폴리오"
+	_btn_tab_portfolio = Button.new(); _btn_tab_portfolio.text = tr("포트폴리오")
 	ThemeSetup.apply_tab_inactive(_btn_tab_portfolio)
 	_btn_tab_portfolio.pressed.connect(func() -> void: _switch_bottom_tab(2))
 	tab_bar.add_child(_btn_tab_portfolio)
@@ -529,7 +552,7 @@ func _build_overlays() -> void:
 	pause_style.bg_color = Color(0.0, 0.0, 0.0, 0.3)
 	_pause_overlay.add_theme_stylebox_override("panel", pause_style)
 	var pause_lbl: Label = Label.new()
-	pause_lbl.text = "⏸ 일시정지"
+	pause_lbl.text = tr("⏸ 일시정지")
 	pause_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	pause_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	pause_lbl.set_anchors_and_offsets_preset(Control.PRESET_CENTER)

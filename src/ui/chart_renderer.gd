@@ -92,6 +92,13 @@ var _indicator_seeded: bool = false  ## True once full seed calculation done
 var _pending_stock_id: String = ""
 var _load_debounce_timer: Timer
 
+## Pre-allocated draw buffers — cleared and reused each frame to avoid per-draw allocation.
+## S5-03: 프레임당 PackedVector2Array 신규 할당 → 0 (zero-alloc hot path, engine-code.md)
+var _draw_rsi_points: PackedVector2Array = PackedVector2Array()
+var _draw_macd_points: PackedVector2Array = PackedVector2Array()
+var _draw_sig_points: PackedVector2Array = PackedVector2Array()
+var _draw_ma_points: PackedVector2Array = PackedVector2Array()
+
 # ── Crosshair ──
 
 var _crosshair_pos: Vector2 = Vector2(-1, -1)
@@ -147,7 +154,7 @@ func _build_header() -> void:
 	add_child(_header_bar)
 
 	_lbl_stock_name = Label.new()
-	_lbl_stock_name.text = "종목 선택"
+	_lbl_stock_name.text = tr("종목 선택")
 	_lbl_stock_name.add_theme_font_size_override("font_size", 15)
 	ThemeSetup.style_label_primary(_lbl_stock_name)
 	_header_bar.add_child(_lbl_stock_name)
@@ -169,32 +176,32 @@ func _build_header() -> void:
 
 	# Timeframe buttons
 	_btn_tf_1t = Button.new()
-	_btn_tf_1t.text = "1분"
+	_btn_tf_1t.text = tr("1분")
 	ThemeSetup.apply_button_theme(_btn_tf_1t)
 	_btn_tf_1t.pressed.connect(func() -> void: set_timeframe(Timeframe.M1))
 	_header_bar.add_child(_btn_tf_1t)
 
 	_btn_tf_5t = Button.new()
-	_btn_tf_5t.text = "5분"
+	_btn_tf_5t.text = tr("5분")
 	ThemeSetup.apply_button_theme(_btn_tf_5t)
 	_btn_tf_5t.pressed.connect(func() -> void: set_timeframe(Timeframe.M5))
 	_header_bar.add_child(_btn_tf_5t)
 
 	_btn_tf_15t = Button.new()
-	_btn_tf_15t.text = "15분"
+	_btn_tf_15t.text = tr("15분")
 	ThemeSetup.apply_button_theme(_btn_tf_15t)
 	_btn_tf_15t.pressed.connect(func() -> void: set_timeframe(Timeframe.M15))
 	_header_bar.add_child(_btn_tf_15t)
 
 	_btn_tf_1d = Button.new()
-	_btn_tf_1d.text = "1일"
+	_btn_tf_1d.text = tr("일봉")
 	ThemeSetup.apply_button_theme(_btn_tf_1d)
 	_btn_tf_1d.pressed.connect(func() -> void: set_timeframe(Timeframe.D1))
 	_header_bar.add_child(_btn_tf_1d)
 
 	# Go-to-latest button (hidden by default)
 	_btn_go_latest = Button.new()
-	_btn_go_latest.text = "현재로 이동 →"
+	_btn_go_latest.text = tr("현재로 이동 →")
 	_btn_go_latest.visible = false
 	ThemeSetup.apply_accent_button(_btn_go_latest)
 	_btn_go_latest.pressed.connect(func() -> void:
@@ -324,6 +331,8 @@ func _on_market_state_changed(
 				_tick_volumes = PriceEngine.get_tick_volumes(_stock_id)
 				_ohlcv_daily = PriceEngine.get_ohlcv_history(_stock_id)
 				_aggregate_candles()
+				_dirty = true
+				queue_redraw()
 		GameClock.MarketState.PAUSED:
 			_chart_state = ChartState.PAUSED
 		GameClock.MarketState.MARKET_CLOSED, GameClock.MarketState.DAY_TRANSITION, \
@@ -635,7 +644,7 @@ func _aggregate_range(start: int, end: int) -> Dictionary:
 
 func _update_header() -> void:
 	if _stock_id == "":
-		_lbl_stock_name.text = "종목 선택"
+		_lbl_stock_name.text = tr("종목 선택")
 		_lbl_current_price.text = ""
 		_lbl_change.text = ""
 		return
@@ -915,8 +924,8 @@ func _draw_moving_averages() -> void:
 		var period: int = MA_PERIODS[ma_idx]
 		var color: Color = MA_COLORS[ma_idx]
 
-		# Build points for this MA line across visible candles
-		var points: PackedVector2Array = PackedVector2Array()
+		# Reuse pre-allocated buffer (S5-03: zero-alloc draw path)
+		_draw_ma_points.clear()
 		for i: int in range(visible.size()):
 			var global_i: int = vis_start_idx + i
 			# Need at least `period` candles ending at global_i
@@ -928,10 +937,10 @@ func _draw_moving_averages() -> void:
 			var ma_val: float = ma_sum / float(period)
 			var x: float = _chart_rect.position.x + (float(i) + 0.5) * candle_width
 			var y: float = _price_to_y(ma_val)
-			points.append(Vector2(x, y))
+			_draw_ma_points.append(Vector2(x, y))
 
-		if points.size() >= 2:
-			draw_polyline(points, color, 1.5, true)
+		if _draw_ma_points.size() >= 2:
+			draw_polyline(_draw_ma_points, color, 1.5, true)
 
 	# Legend in top-left corner of chart
 	var legend_x: float = _chart_rect.position.x + 8.0
@@ -1047,33 +1056,33 @@ func _draw_rsi() -> void:
 
 	var candle_width: float = _rsi_rect.size.x / float(_visible_count)
 
-	var rsi_to_y: Callable = func(v: float) -> float:
-		return _rsi_rect.position.y + _rsi_rect.size.y * (1.0 - v / 100.0)
+	# Dashed overbought/oversold lines (inlined to avoid Callable allocation per frame)
+	var dash_len: float = 6.0
+	var gap_len: float = 4.0
+	var rsi_right: float = _rsi_rect.position.x + _rsi_rect.size.x
+	for _dashed_info: Array in [
+		[_rsi_rect.position.y + _rsi_rect.size.y * (1.0 - RSI_OVERBOUGHT / 100.0), Color(0.85, 0.25, 0.25, 0.7)],
+		[_rsi_rect.position.y + _rsi_rect.size.y * (1.0 - RSI_OVERSOLD / 100.0),   Color(0.25, 0.45, 0.85, 0.7)],
+	]:
+		var dy: float = _dashed_info[0]
+		var dc: Color = _dashed_info[1]
+		var dx: float = _rsi_rect.position.x
+		while dx < rsi_right:
+			draw_line(Vector2(dx, dy), Vector2(minf(dx + dash_len, rsi_right), dy), dc, 1.0)
+			dx += dash_len + gap_len
 
-	var draw_dashed: Callable = func(y: float, col: Color) -> void:
-		var dash_len: float = 6.0
-		var gap_len: float = 4.0
-		var x: float = _rsi_rect.position.x
-		var right: float = _rsi_rect.position.x + _rsi_rect.size.x
-		while x < right:
-			var x_end: float = minf(x + dash_len, right)
-			draw_line(Vector2(x, y), Vector2(x_end, y), col, 1.0)
-			x += dash_len + gap_len
-
-	draw_dashed.call(rsi_to_y.call(RSI_OVERBOUGHT), Color(0.85, 0.25, 0.25, 0.7))
-	draw_dashed.call(rsi_to_y.call(RSI_OVERSOLD), Color(0.25, 0.45, 0.85, 0.7))
-
-	var points: PackedVector2Array = PackedVector2Array()
+	# Reuse pre-allocated buffer (S5-03: zero-alloc draw path)
+	_draw_rsi_points.clear()
 	for i: int in range(vis_start_idx, vis_end_idx):
 		if i < RSI_PERIOD or i >= _rsi_cache.size():
 			continue
 		var vis_i: int = i - vis_start_idx
 		var x: float = _rsi_rect.position.x + (float(vis_i) + 0.5) * candle_width
-		var y: float = rsi_to_y.call(_rsi_cache[i])
-		points.append(Vector2(x, y))
+		var y: float = _rsi_rect.position.y + _rsi_rect.size.y * (1.0 - _rsi_cache[i] / 100.0)
+		_draw_rsi_points.append(Vector2(x, y))
 
-	if points.size() >= 2:
-		draw_polyline(points, RSI_COLOR, 1.5, true)
+	if _draw_rsi_points.size() >= 2:
+		draw_polyline(_draw_rsi_points, RSI_COLOR, 1.5, true)
 
 	var current_rsi: float = _rsi_cache[vis_end_idx - 1] if vis_end_idx > RSI_PERIOD and vis_end_idx <= _rsi_cache.size() else 0.0
 	var label: String = "RSI(%d)  %.1f" % [RSI_PERIOD, current_rsi]
@@ -1115,14 +1124,15 @@ func _draw_macd() -> void:
 	y_min -= y_pad
 	y_max += y_pad
 
-	var macd_to_y: Callable = func(v: float) -> float:
-		return _macd_rect.position.y + _macd_rect.size.y * (1.0 - (v - y_min) / (y_max - y_min))
+	# Inline y-mapping constants (avoids Callable allocation per frame, S5-03)
+	var macd_y_scale: float = _macd_rect.size.y / (y_max - y_min)
+	var macd_y_base: float  = _macd_rect.position.y + _macd_rect.size.y
 
 	var candle_width: float = _macd_rect.size.x / float(_visible_count)
 	var bar_width: float = maxf(candle_width * 0.6, 1.0)
 
 	# Zero line (thin gray)
-	var zero_y: float = macd_to_y.call(0.0)
+	var zero_y: float = macd_y_base - (0.0 - y_min) * macd_y_scale
 	draw_line(
 		Vector2(_macd_rect.position.x, zero_y),
 		Vector2(_macd_rect.position.x + _macd_rect.size.x, zero_y),
@@ -1136,33 +1146,34 @@ func _draw_macd() -> void:
 		var vis_i: int = i - vis_start_idx
 		var hist: float = _macd_line_cache[i] - _signal_line_cache[i]
 		var x_center: float = _macd_rect.position.x + (float(vis_i) + 0.5) * candle_width
-		var bar_top: float = minf(macd_to_y.call(hist), zero_y)
-		var bar_bot: float = maxf(macd_to_y.call(hist), zero_y)
+		var hist_y: float = macd_y_base - (hist - y_min) * macd_y_scale
+		var bar_top: float = minf(hist_y, zero_y)
+		var bar_bot: float = maxf(hist_y, zero_y)
 		var bar_h: float = maxf(bar_bot - bar_top, 1.0)
 		var hist_color: Color = Color(0.20, 0.70, 0.30, 0.6) if hist >= 0.0 else Color(0.85, 0.25, 0.25, 0.6)
 		draw_rect(Rect2(x_center - bar_width * 0.5, bar_top, bar_width, bar_h), hist_color, true)
 
-	# MACD line
-	var macd_points: PackedVector2Array = PackedVector2Array()
+	# MACD line — reuse pre-allocated buffer (S5-03: zero-alloc draw path)
+	_draw_macd_points.clear()
 	for i: int in range(vis_start_idx, vis_end_idx):
 		if i < valid_start or i >= _macd_line_cache.size():
 			continue
 		var vis_i: int = i - vis_start_idx
 		var x: float = _macd_rect.position.x + (float(vis_i) + 0.5) * candle_width
-		macd_points.append(Vector2(x, macd_to_y.call(_macd_line_cache[i])))
-	if macd_points.size() >= 2:
-		draw_polyline(macd_points, MACD_LINE_COLOR, 1.5, true)
+		_draw_macd_points.append(Vector2(x, macd_y_base - (_macd_line_cache[i] - y_min) * macd_y_scale))
+	if _draw_macd_points.size() >= 2:
+		draw_polyline(_draw_macd_points, MACD_LINE_COLOR, 1.5, true)
 
-	# Signal line
-	var sig_points: PackedVector2Array = PackedVector2Array()
+	# Signal line — reuse pre-allocated buffer
+	_draw_sig_points.clear()
 	for i: int in range(vis_start_idx, vis_end_idx):
 		if i < valid_start or i >= _signal_line_cache.size():
 			continue
 		var vis_i: int = i - vis_start_idx
 		var x: float = _macd_rect.position.x + (float(vis_i) + 0.5) * candle_width
-		sig_points.append(Vector2(x, macd_to_y.call(_signal_line_cache[i])))
-	if sig_points.size() >= 2:
-		draw_polyline(sig_points, MACD_SIGNAL_COLOR, 1.5, true)
+		_draw_sig_points.append(Vector2(x, macd_y_base - (_signal_line_cache[i] - y_min) * macd_y_scale))
+	if _draw_sig_points.size() >= 2:
+		draw_polyline(_draw_sig_points, MACD_SIGNAL_COLOR, 1.5, true)
 
 	# Label "MACD" in top-left
 	draw_string(

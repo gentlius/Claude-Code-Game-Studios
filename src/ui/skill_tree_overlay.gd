@@ -75,9 +75,10 @@ func open() -> void:
 	visible = true
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
-	# Pause game (track if already paused)
-	_was_paused_before = GameClock.get_market_state() == GameClock.MarketState.PAUSED
-	if not _was_paused_before:
+	# Pause only if market is actively running — PRE_MARKET/STATIC states don't need a pause
+	var state: GameClock.MarketState = GameClock.get_market_state()
+	_was_paused_before = state == GameClock.MarketState.PAUSED
+	if state == GameClock.MarketState.MARKET_OPEN:
 		pause_toggle_requested.emit()
 
 	_refresh_all()
@@ -93,8 +94,8 @@ func close() -> void:
 
 	_stop_pulse_tweens()
 
-	# Resume if we paused it
-	if not _was_paused_before:
+	# Resume only if we were the ones who paused it
+	if not _was_paused_before and GameClock.get_market_state() == GameClock.MarketState.PAUSED:
 		pause_toggle_requested.emit()
 
 	closed.emit()
@@ -167,7 +168,7 @@ func _build_header(parent: VBoxContainer) -> void:
 	parent.add_child(hbox)
 
 	var title: Label = Label.new()
-	title.text = "스킬 트리"
+	title.text = tr("스킬 트리")
 	title.add_theme_font_size_override("font_size", 20)
 	ThemeSetup.style_label_primary(title)
 	hbox.add_child(title)
@@ -187,7 +188,7 @@ func _build_header(parent: VBoxContainer) -> void:
 	hbox.add_child(_header_sp_lbl)
 
 	_btn_close = Button.new()
-	_btn_close.text = "닫기 Esc"
+	_btn_close.text = tr("닫기 Esc")
 	_btn_close.pressed.connect(close)
 	ThemeSetup.apply_button_theme(_btn_close)
 	hbox.add_child(_btn_close)
@@ -203,7 +204,7 @@ func _build_branches() -> void:
 
 		# Branch title
 		var title: Label = Label.new()
-		title.text = BRANCH_LABELS.get(branch, branch)
+		title.text = tr(BRANCH_LABELS.get(branch, branch))
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		title.add_theme_font_size_override("font_size", 13)
 		ThemeSetup.style_label_secondary(title)
@@ -256,7 +257,7 @@ func _build_detail_panel(parent: VBoxContainer) -> void:
 	detail_vbox.add_child(btn_row)
 
 	_btn_unlock = Button.new()
-	_btn_unlock.text = "해금하기 — 1 SP"
+	_btn_unlock.text = tr("해금하기 — 1 SP")
 	_btn_unlock.visible = false
 	_btn_unlock.pressed.connect(_on_unlock_pressed)
 	var unlock_style: StyleBoxFlat = ThemeSetup.make_button_style(GOLD_COLOR, 6)
@@ -270,7 +271,7 @@ func _build_detail_panel(parent: VBoxContainer) -> void:
 	btn_row.add_child(_btn_unlock)
 
 	# Default text
-	_detail_name.text = "스킬을 선택하세요"
+	_detail_name.text = tr("스킬을 선택하세요")
 	_detail_desc.text = ""
 	_detail_prereq.text = ""
 
@@ -310,7 +311,7 @@ func _update_all_nodes() -> void:
 
 func _update_detail() -> void:
 	if _selected_skill_id == "":
-		_detail_name.text = "스킬을 선택하세요"
+		_detail_name.text = tr("스킬을 선택하세요")
 		_detail_desc.text = ""
 		_detail_prereq.text = ""
 		_btn_unlock.visible = false
@@ -330,13 +331,13 @@ func _update_detail() -> void:
 	var state_label: String
 	match state:
 		"UNLOCKED":
-			state_label = "✓ 해금됨"
+			state_label = tr("✓ 해금됨")
 		"AVAILABLE":
-			state_label = "■ 해금 가능"
+			state_label = tr("■ 해금 가능")
 		"LOCKED":
-			state_label = "□ SP 부족"
+			state_label = tr("□ SP 부족")
 		"PREREQ_MISSING":
-			state_label = "○ 잠김"
+			state_label = tr("○ 잠김")
 		_:
 			state_label = state
 
@@ -349,7 +350,7 @@ func _update_detail() -> void:
 		var names: PackedStringArray = PackedStringArray()
 		for mid: String in missing:
 			names.append(mid)
-		_detail_prereq.text = "선행 조건 미충족: %s" % ", ".join(names)
+		_detail_prereq.text = tr("선행 조건 미충족: %s") % ", ".join(names)
 	else:
 		_detail_prereq.text = ""
 

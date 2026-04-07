@@ -1,0 +1,490 @@
+# Korean translations — Seed Money
+# Sprint S5-04
+# Localization-Lead: all player-facing strings extracted from src/ui/
+# Context annotations included per i18n architecture standard.
+msgid ""
+msgstr ""
+"Language: ko\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+# ── trading_screen.gd ──
+
+# Left stock list panel header. Max ~8 chars.
+msgid "종목 리스트"
+msgstr "종목 리스트"
+
+# Submit button text in PRE_MARKET state. Max ~12 chars.
+msgid "주문 예약 Enter"
+msgstr "주문 예약 Enter"
+
+# Submit button text in MARKET_OPEN state. Max ~12 chars.
+msgid "주문 실행 Enter"
+msgstr "주문 실행 Enter"
+
+# Bottom tab label when portfolio has unread items. %d = unread count.
+msgid "포트폴리오 (%d)"
+msgstr "포트폴리오 (%d)"
+
+# Bottom tab label when news has unread items. %d = unread count.
+msgid "뉴스 (%d)"
+msgstr "뉴스 (%d)"
+
+# Bottom tab: news feed tab label. Max ~4 chars.
+msgid "뉴스"
+msgstr "뉴스"
+
+# Bottom tab: VI/CB alerts tab label. Max ~5 chars.
+msgid "VI/CB"
+msgstr "VI/CB"
+
+# Bottom tab: portfolio tab label. Max ~6 chars.
+msgid "포트폴리오"
+msgstr "포트폴리오"
+
+# VI/CB alerts panel section header. Max ~10 chars.
+msgid "VI / CB 알림"
+msgstr "VI / CB 알림"
+
+# VI/CB alerts panel empty state. Max ~16 chars.
+msgid "VI / CB 이벤트가 없습니다"
+msgstr "VI / CB 이벤트가 없습니다"
+
+# Pause overlay label shown center-screen. Max ~8 chars.
+msgid "⏸ 일시정지"
+msgstr "⏸ 일시정지"
+
+# VI/CB tab label when new alert arrives. Max ~8 chars.
+msgid "VI/CB ●"
+msgstr "VI/CB ●"
+
+# Alert card timestamp. %d = tick number.
+msgid "틱 %d"
+msgstr "틱 %d"
+
+# ── order_panel.gd ──
+
+# Order panel header when no stock selected. Max ~6 chars.
+msgid "종목 선택"
+msgstr "종목 선택"
+
+# Order panel current price label initial value. Max ~8 chars.
+msgid "현재가 ₩0"
+msgstr "현재가 ₩0"
+
+# Buy side tab button. Max ~6 chars.
+msgid "매수 B"
+msgstr "매수 B"
+
+# Sell side tab button. Max ~6 chars.
+msgid "매도 S"
+msgstr "매도 S"
+
+# Market order type radio button. Max ~4 chars.
+msgid "시장가"
+msgstr "시장가"
+
+# Limit order type radio button (skill unlocked). Max ~4 chars.
+msgid "지정가"
+msgstr "지정가"
+
+# Limit order type radio button (skill locked). Max ~8 chars.
+msgid "지정가 🔒"
+msgstr "지정가 🔒"
+
+# Quantity row label. Max ~2 chars.
+msgid "수량"
+msgstr "수량"
+
+# Max quantity button. Max ~2 chars.
+msgid "최대"
+msgstr "최대"
+
+# Estimated amount label initial value. Max ~12 chars.
+msgid "예상 금액: ₩0"
+msgstr "예상 금액: ₩0"
+
+# Submit order button default text. Max ~12 chars.
+msgid "주문실행 Enter"
+msgstr "주문실행 Enter"
+
+# Pending orders section header. Max ~6 chars.
+msgid "미체결 주문"
+msgstr "미체결 주문"
+
+# Cancel all pending orders button. Max ~12 chars.
+msgid "전체 취소 Esc"
+msgstr "전체 취소 Esc"
+
+# Pending orders empty state. Max ~10 chars.
+msgid "미체결 주문 없음"
+msgstr "미체결 주문 없음"
+
+# Cancel individual pending order button. Max ~2 chars.
+msgid "취소"
+msgstr "취소"
+
+# Error: quantity not entered. Max ~10 chars.
+msgid "수량을 입력하세요"
+msgstr "수량을 입력하세요"
+
+# Error: limit price not entered. Max ~10 chars.
+msgid "지정가를 입력하세요"
+msgstr "지정가를 입력하세요"
+
+# Error: TR1 skill required for limit orders. Max ~20 chars.
+msgid "지정가 주문은 TR1 스킬이 필요합니다"
+msgstr "지정가 주문은 TR1 스킬이 필요합니다"
+
+# Error: order rejected (fallback text). Max ~6 chars.
+msgid "주문 거부됨"
+msgstr "주문 거부됨"
+
+# Pending order row buy side label. Max ~2 chars.
+msgid "매수"
+msgstr "매수"
+
+# Pending order row sell side label. Max ~2 chars.
+msgid "매도"
+msgstr "매도"
+
+# ── status_bar.gd ──
+
+# Season info initial display text. Max ~8 chars.
+msgid "1주차 월요일"
+msgstr "1주차 월요일"
+
+# Market open button in pre-season. Max ~12 chars.
+msgid "시즌 시작 Enter"
+msgstr "시즌 시작 Enter"
+
+# Market open button during active season PRE_MARKET. Max ~12 chars.
+msgid "장 시작 Enter"
+msgstr "장 시작 Enter"
+
+# League HUD label in free market mode. Max ~6 chars.
+msgid "프리마켓"
+msgstr "프리마켓"
+
+# League HUD season return placeholder. Max ~6 chars.
+msgid "시즌 -"
+msgstr "시즌 -"
+
+# League HUD weekly return placeholder. Max ~6 chars.
+msgid "주간 -"
+msgstr "주간 -"
+
+# SP alert banner. %d = skill points available. Max ~24 chars.
+msgid "미사용 스킬 포인트 %d개 — 스킬 트리 열기 K"
+msgstr "미사용 스킬 포인트 %d개 — 스킬 트리 열기 K"
+
+# ── portfolio_view.gd ──
+
+# Portfolio tab section header. Max ~8 chars.
+msgid "포트폴리오 요약"
+msgstr "포트폴리오 요약"
+
+# Portfolio summary total assets initial. Max ~8 chars.
+msgid "총 자산: ₩0"
+msgstr "총 자산: ₩0"
+
+# Portfolio holdings empty state. Max ~20 chars.
+msgid "보유 종목 없음. 첫 매수를 시작하세요!"
+msgstr "보유 종목 없음. 첫 매수를 시작하세요!"
+
+# Transaction history empty state. Max ~10 chars.
+msgid "거래 내역 없음"
+msgstr "거래 내역 없음"
+
+# Transaction history section header. Max ~6 chars.
+msgid "최근 거래"
+msgstr "최근 거래"
+
+# Holdings table column header: stock name. Max ~2 chars.
+msgid "종목"
+msgstr "종목"
+
+# Holdings table column header: quantity. Max ~2 chars.
+msgid "수량"
+msgstr "수량"
+
+# Holdings table column header: current price. Max ~4 chars.
+msgid "현재가"
+msgstr "현재가"
+
+# Holdings table column header: return rate. Max ~4 chars.
+msgid "수익률"
+msgstr "수익률"
+
+# Holdings table column header: valuation. Max ~6 chars.
+msgid "평가금액"
+msgstr "평가금액"
+
+# ── league_screen.gd ──
+
+# Left panel section header. Max ~6 chars.
+msgid "내 현황"
+msgstr "내 현황"
+
+# Pre-season state panel heading. Max ~8 chars.
+msgid "시즌 시작 전"
+msgstr "시즌 시작 전"
+
+# Pre-season state panel subtitle. Max ~24 chars.
+msgid "F1 거래 탭에서 시즌을 시작하세요."
+msgstr "F1 거래 탭에서 시즌을 시작하세요."
+
+# Free market state panel heading. Max ~16 chars.
+msgid "현재 프리마켓 참여 중"
+msgstr "현재 프리마켓 참여 중"
+
+# Free market state panel body. Max ~40 chars. Contains newline.
+msgid "공식 리그 순위 없음\n₩1,000,000 이상으로 시즌을 시작하면 리그에 참가할 수 있습니다."
+msgstr "공식 리그 순위 없음\n₩1,000,000 이상으로 시즌을 시작하면 리그에 참가할 수 있습니다."
+
+# Leaderboard column header: rank. Max ~1 char.
+msgid "#"
+msgstr "#"
+
+# Leaderboard column header: nickname. Max ~4 chars.
+msgid "닉네임"
+msgstr "닉네임"
+
+# Leaderboard column header: prize estimate. Max ~6 chars.
+msgid "상금예상"
+msgstr "상금예상"
+
+# Leaderboard displayed tier marker for player's own tier. Max ~6 chars.
+msgid "  (내 티어)"
+msgstr "  (내 티어)"
+
+# Global rank label initial static text (before leaderboard loads). Max ~8 chars.
+msgid "글로벌: 집계 전"
+msgstr "글로벌: 집계 전"
+
+# Global rank label when not yet computed. Variables: %s = total participant count.
+msgid "글로벌: 집계 전 / %s명"
+msgstr "글로벌: 집계 전 / %s명"
+
+# Leaderboard prize cell when player has insufficient trades. Max ~6 chars.
+msgid "체결 부족"
+msgstr "체결 부족"
+
+# Left panel section label: season return. Max ~8 chars.
+msgid "시즌 수익률"
+msgstr "시즌 수익률"
+
+# Left panel section label: weekly return. Max ~8 chars.
+msgid "주간 수익률"
+msgstr "주간 수익률"
+
+# Left panel section label: weekly prize eligibility. Max ~8 chars.
+msgid "주간 수익률상"
+msgstr "주간 수익률상"
+
+# Weekly prize status eligible. %d = fill count, %s = check mark. Max ~12 chars.
+msgid "체결 %d회 %s"
+msgstr "체결 %d회 %s"
+
+# Weekly prize status not eligible. %d = fills, %s = x-mark, %d = minimum. Max ~20 chars.
+msgid "체결 %d회 %s (최소 %d회 필요)"
+msgstr "체결 %d회 %s (최소 %d회 필요)"
+
+# ── news_feed.gd ──
+
+# News feed title (no skill). Max ~6 chars.
+msgid "뉴스 피드"
+msgstr "뉴스 피드"
+
+# News feed title with S2 skill (real-time). Max ~12 chars.
+msgid "뉴스 피드 ⚡실시간"
+msgstr "뉴스 피드 ⚡실시간"
+
+# News feed title with S1 skill (fast news). Max ~14 chars.
+msgid "뉴스 피드 ⏱빠른뉴스"
+msgstr "뉴스 피드 ⏱빠른뉴스"
+
+# Pre-market bundle heading. %d = day number. Max ~20 chars.
+msgid "오늘의 시장 전망 (Day %d)"
+msgstr "오늘의 시장 전망 (Day %d)"
+
+# Pre-market bundle empty state. Max ~20 chars.
+msgid "오늘은 특별한 시장 전망이 없습니다"
+msgstr "오늘은 특별한 시장 전망이 없습니다"
+
+# News card timestamp for pre-market news. Max ~2 chars.
+msgid "장전"
+msgstr "장전"
+
+# News card timestamp format. %d = tick, %s = period name. Max ~12 chars.
+msgid "틱 %d (%s)"
+msgstr "틱 %d (%s)"
+
+# Tick period: first third of trading day. Max ~4 chars.
+msgid "장 초반"
+msgstr "장 초반"
+
+# Tick period: middle third of trading day. Max ~4 chars.
+msgid "장 중반"
+msgstr "장 중반"
+
+# Tick period: last third of trading day. Max ~4 chars.
+msgid "장 후반"
+msgstr "장 후반"
+
+# News card scope badge: market-wide. Max ~6 chars.
+msgid "시장 전체"
+msgstr "시장 전체"
+
+# News card scope badge: sector. Max ~2 chars.
+msgid "업종"
+msgstr "업종"
+
+# News card scope badge: individual stock. Max ~2 chars.
+msgid "개별"
+msgstr "개별"
+
+# ── main_screen.gd ──
+
+# F1 tab button label. Max ~6 chars.
+msgid "F1  거래"
+msgstr "F1  거래"
+
+# F2 tab button label. Max ~6 chars.
+msgid "F2  리그"
+msgstr "F2  리그"
+
+# F3 tab button label. Max ~6 chars.
+msgid "F3  성장"
+msgstr "F3  성장"
+
+# F3 placeholder title. Max ~8 chars.
+msgid "F3  성장 화면"
+msgstr "F3  성장 화면"
+
+# F3 placeholder subtitle. Max ~4 chars.
+msgid "준비 중"
+msgstr "준비 중"
+
+# ── skill_tree_overlay.gd ──
+
+# Skill tree overlay header title. Max ~6 chars.
+msgid "스킬 트리"
+msgstr "스킬 트리"
+
+# Skill tree close button. Max ~8 chars.
+msgid "닫기 Esc"
+msgstr "닫기 Esc"
+
+# Branch column title: analysis tools. Max ~6 chars.
+msgid "분석 도구"
+msgstr "분석 도구"
+
+# Branch column title: market sense. Max ~6 chars.
+msgid "시장 감지"
+msgstr "시장 감지"
+
+# Branch column title: trading skills. Max ~6 chars.
+msgid "거래 스킬"
+msgstr "거래 스킬"
+
+# Skill detail default prompt when nothing selected. Max ~10 chars.
+msgid "스킬을 선택하세요"
+msgstr "스킬을 선택하세요"
+
+# Skill state label: unlocked. Max ~6 chars.
+msgid "✓ 해금됨"
+msgstr "✓ 해금됨"
+
+# Skill state label: available to unlock. Max ~8 chars.
+msgid "■ 해금 가능"
+msgstr "■ 해금 가능"
+
+# Skill state label: locked (SP needed). Max ~6 chars.
+msgid "□ SP 부족"
+msgstr "□ SP 부족"
+
+# Skill state label: prerequisites missing. Max ~4 chars.
+msgid "○ 잠김"
+msgstr "○ 잠김"
+
+# Unlock button text. Max ~12 chars.
+msgid "해금하기 — 1 SP"
+msgstr "해금하기 — 1 SP"
+
+# Missing prerequisites label. %s = comma-separated skill IDs. Max ~20 chars.
+msgid "선행 조건 미충족: %s"
+msgstr "선행 조건 미충족: %s"
+
+# ── level_up_banner.gd ──
+
+# Skill tree CTA button in level-up banner. Max ~14 chars.
+msgid "스킬 트리 열기  K"
+msgstr "스킬 트리 열기  K"
+
+# Close button in level-up banner. Max ~8 chars.
+msgid "닫기  Esc"
+msgstr "닫기  Esc"
+
+# Detail text showing skill points gained. %d = SP count. Max ~16 chars.
+msgid "스킬 포인트 +%d 획득"
+msgstr "스킬 포인트 +%d 획득"
+
+# ── chart_renderer.gd ──
+
+# Chart header when no stock is selected. Max ~6 chars.
+msgid "차트 데이터 없음"
+msgstr "차트 데이터 없음"
+
+# Timeframe button: 1-minute candles. Max ~3 chars.
+msgid "1분"
+msgstr "1분"
+
+# Timeframe button: 5-minute candles. Max ~3 chars.
+msgid "5분"
+msgstr "5분"
+
+# Timeframe button: 15-minute candles. Max ~4 chars.
+msgid "15분"
+msgstr "15분"
+
+# Timeframe button: daily candles. Max ~3 chars.
+msgid "일봉"
+msgstr "일봉"
+
+# Chart header when no stock selected (order panel duplicate key reuse). Max ~6 chars.
+# Note: "종목 선택" also registered under order_panel.gd section above.
+
+# Go-to-latest button in chart header. Shows when user has scrolled back in history.
+msgid "현재로 이동 →"
+msgstr "현재로 이동 →"
+
+# ── intro_sequence.gd ──
+
+# Intro card 1 — protagonist leaves the orphanage.
+msgid "오늘, 퇴소했다.\n\n보육원 문이 닫혔다.\n뒤돌아보지 않았다.\n\n손에 쥔 건 전부다.\n정착지원금 1,000,000원.\n\n이게 시작이다."
+msgstr "오늘, 퇴소했다.\n\n보육원 문이 닫혔다.\n뒤돌아보지 않았다.\n\n손에 쥔 건 전부다.\n정착지원금 1,000,000원.\n\n이게 시작이다."
+
+# Intro card 2 — the investment league announcement.
+msgid "같은 날, 공고 하나가 올라왔다.\n\n제1회 시드머니 투자 대회\n기간: 20거래일  /  참가자: 20,000명  /  무기: 당신의 판단\n\n19,999명이 이미 접속 중이다.\n모두 같은 돈으로 시작한다.\n모두 같은 시장을 본다.\n\n결과는 다를 것이다."
+msgstr "같은 날, 공고 하나가 올라왔다.\n\n제1회 시드머니 투자 대회\n기간: 20거래일  /  참가자: 20,000명  /  무기: 당신의 판단\n\n19,999명이 이미 접속 중이다.\n모두 같은 돈으로 시작한다.\n모두 같은 시장을 본다.\n\n결과는 다를 것이다."
+
+# Intro card 3 — the stakes: housing and game-over condition.
+msgid "오늘 밤은 쪽방이다.\n\n벽이 얇다. 창이 없다.\n괜찮다. 여기가 출발선이다.\n\n자산이 오르면, 거처가 바뀐다.\n고층이 보이고, 나중엔 수평선이 보인다.\n개인 섬을 가진 사람들이 있다. 당신도 갈 수 있다.\n\n반대 방향도 있다.\n자산이 10,000원 아래로 떨어지면 — 끝이다.\n\n그러니까, 오르는 방향으로만 간다."
+msgstr "오늘 밤은 쪽방이다.\n\n벽이 얇다. 창이 없다.\n괜찮다. 여기가 출발선이다.\n\n자산이 오르면, 거처가 바뀐다.\n고층이 보이고, 나중엔 수평선이 보인다.\n개인 섬을 가진 사람들이 있다. 당신도 갈 수 있다.\n\n반대 방향도 있다.\n자산이 10,000원 아래로 떨어지면 — 끝이다.\n\n그러니까, 오르는 방향으로만 간다."
+
+# Intro card 4 — skills and progression as weapons.
+msgid "무기가 없다고 생각하지 마라.\n\n거래할수록 배운다.\n차트를 읽는 눈이 열리고,\n뉴스보다 빨리 움직이는 법을 익힌다.\n\n판단이 무기다. 분석이 수익이다.\n시즌 수익은 다음 시드머니가 된다.\n\n복리는 당신 편이다 — 방향이 맞다면."
+msgstr "무기가 없다고 생각하지 마라.\n\n거래할수록 배운다.\n차트를 읽는 눈이 열리고,\n뉴스보다 빨리 움직이는 법을 익힌다.\n\n판단이 무기다. 분석이 수익이다.\n시즌 수익은 다음 시드머니가 된다.\n\n복리는 당신 편이다 — 방향이 맞다면."
+
+# Intro card 5 — the journey from bronze to grandmaster.
+msgid "브론즈에서 거장까지.\n\n1,000,000원에서 1,000억까지.\n\n쪽방에서 수평선까지.\n\n시장이 열린다."
+msgstr "브론즈에서 거장까지.\n\n1,000,000원에서 1,000억까지.\n\n쪽방에서 수평선까지.\n\n시장이 열린다."
+
+# Click prompt label at bottom-right. Max ~8 chars.
+msgid "클릭하여 계속"
+msgstr "클릭하여 계속"
+
+# Skip button label. Max ~6 chars.
+msgid "건너뛰기"
+msgstr "건너뛰기"

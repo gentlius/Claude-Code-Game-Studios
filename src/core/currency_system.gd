@@ -93,3 +93,23 @@ func award_prize(amount: int) -> void:
 func reset_for_testing() -> void:
 	_sim_cash = 0
 	_season_active = false
+
+
+# ── Serialization ──
+
+## Returns serializable state for save system (GDD: save-load.md)
+func get_save_data() -> Dictionary:
+	return {
+		"sim_cash": _sim_cash,
+		"deposit": _deposit,
+		"season_active": _season_active,
+	}
+
+
+## Restores state from save data. Skips init_first_season side-effects.
+func load_save_data(data: Dictionary) -> void:
+	_sim_cash = maxi(data.get("sim_cash", DEFAULT_SEASON_SEED), 0)
+	_deposit = maxi(data.get("deposit", INITIAL_DEPOSIT), 0)
+	_season_active = data.get("season_active", _sim_cash > 0)  # fallback for old saves
+	sim_cash_changed.emit(_sim_cash, 0)
+	deposit_changed.emit(_deposit, 0)

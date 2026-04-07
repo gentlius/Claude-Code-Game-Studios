@@ -45,6 +45,9 @@ var _btn_tier_next: Button
 var _displayed_tier: int = 0
 ## 틱 스로틀 카운터 — 매 4틱에 1회만 리더보드 재구성 (노드 생성 비용 절감)
 var _tick_counter: int = 0
+## Stored Callable refs for lambda disconnect (lambdas are unique per-instance)
+var _on_season_started_cb: Callable
+var _on_season_ended_cb: Callable
 
 
 func _ready() -> void:
@@ -54,13 +57,19 @@ func _ready() -> void:
 	_refresh()
 
 	GameClock.on_tick.connect(_on_tick)
-	SeasonManager.on_season_started.connect(func(_t, _f) -> void: _refresh())
-	SeasonManager.on_season_ended.connect(func(_r, _f, _p) -> void: _refresh())
+	_on_season_started_cb = func(_tier: int, _is_free: bool) -> void: _refresh()
+	_on_season_ended_cb = func(_rank: int, _is_free: bool, _pct: float) -> void: _refresh()
+	SeasonManager.on_season_started.connect(_on_season_started_cb)
+	SeasonManager.on_season_ended.connect(_on_season_ended_cb)
 
 
 func _exit_tree() -> void:
 	if GameClock.on_tick.is_connected(_on_tick):
 		GameClock.on_tick.disconnect(_on_tick)
+	if SeasonManager.on_season_started.is_connected(_on_season_started_cb):
+		SeasonManager.on_season_started.disconnect(_on_season_started_cb)
+	if SeasonManager.on_season_ended.is_connected(_on_season_ended_cb):
+		SeasonManager.on_season_ended.disconnect(_on_season_ended_cb)
 
 
 # ── Refresh ──
@@ -111,7 +120,7 @@ func _update_left_panel() -> void:
 	_lbl_tier_name.text = tier_name
 
 	var tier_participants: int = _estimate_tier_participants(tier)
-	_lbl_tier_rank.text = "%d위 / %s명" % [tier_rank, _fmt_comma(tier_participants)]
+	_lbl_tier_rank.text = tr("%d위 / %s명") % [tier_rank, _fmt_comma(tier_participants)]
 
 	_lbl_season_return.text = _fmt_pct(season_pct)
 	_lbl_season_return.add_theme_color_override("font_color",
@@ -130,10 +139,10 @@ func _update_left_panel() -> void:
 	var check: String  = "✓" if eligible else "✗"
 	var min_t: int     = SeasonManager.MIN_WEEKLY_TRADES
 	if eligible:
-		_lbl_weekly_prize_status.text = "체결 %d회 %s" % [weekly_fills, check]
+		_lbl_weekly_prize_status.text = tr("체결 %d회 %s") % [weekly_fills, check]
 		_lbl_weekly_prize_status.add_theme_color_override("font_color", COLOR_POSITIVE)
 	else:
-		_lbl_weekly_prize_status.text = "체결 %d회 %s (최소 %d회 필요)" % [weekly_fills, check, min_t]
+		_lbl_weekly_prize_status.text = tr("체결 %d회 %s (최소 %d회 필요)") % [weekly_fills, check, min_t]
 		_lbl_weekly_prize_status.add_theme_color_override("font_color", COLOR_NEGATIVE)
 
 
@@ -160,7 +169,7 @@ func _update_leaderboard() -> void:
 
 	# 티어 선택 UI 업데이트
 	var tier_name: String = SeasonManager.get_tier_name(_displayed_tier)
-	var own_marker: String = "  (내 티어)" if viewing_own_tier else ""
+	var own_marker: String = tr("  (내 티어)") if viewing_own_tier else ""
 	_lbl_displayed_tier.text = "%s%s" % [tier_name, own_marker]
 	_btn_tier_prev.disabled = (_displayed_tier <= 0)
 	_btn_tier_next.disabled = (_displayed_tier >= AiCompetitor.TIER_COUNT - 1)
@@ -181,8 +190,13 @@ func _update_leaderboard() -> void:
 			for entry in context:
 				_add_row(entry)
 
-	# AC-12: 글로벌 순위 (항상 하단 고정)
-	_global_rank_label.text = "글로벌: 집계 전 / %s명" % _fmt_comma(SeasonManager.TOTAL_PARTICIPANTS)
+	# AC-12: 글로벌 순위 — 내 티어 위의 모든 참가자 수 + 내 티어 순위 (ADR-007)
+	var tier_rank_val: int = SeasonManager.get_tier_rank()
+	var players_above: int = 0
+	for t: int in range(my_tier + 1, AiCompetitor.TIER_COUNT):
+		players_above += _estimate_tier_participants(t)
+	var global_rank: int = players_above + tier_rank_val
+	_global_rank_label.text = tr("글로벌: %d위 / %s명") % [global_rank, _fmt_comma(SeasonManager.TOTAL_PARTICIPANTS)]
 	_global_rank_label.visible = true
 
 
@@ -245,7 +259,7 @@ func _add_row(entry: Dictionary) -> void:
 	if rank > LEADERBOARD_FIXED_ROWS:
 		lbl_prize.text = "—"
 	elif is_player and not SeasonManager.is_season_trade_eligible():
-		lbl_prize.text = "체결 부족"
+		lbl_prize.text = tr("체결 부족")
 		lbl_prize.add_theme_color_override("font_color", COLOR_NEGATIVE)
 	elif prize_raw is int and prize_raw > 0:
 		lbl_prize.text = "₩%s" % _fmt_comma(prize_raw)
@@ -300,18 +314,31 @@ func _build_pre_season_panel() -> Control:
 	panel.add_child(vbox)
 
 	var lbl: Label = Label.new()
-	lbl.text = "시즌 시작 전"
+	lbl.text = tr("시즌 시작 전")
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.add_theme_font_size_override("font_size", 24)
 	lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6, 1.0))
 	vbox.add_child(lbl)
 
 	var sub: Label = Label.new()
-	sub.text = "F1 거래 탭에서 시즌을 시작하세요."
+	sub.text = tr("₩1,000,000 이상을 보유하면 공식 리그에 참가할 수 있습니다.")
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sub.add_theme_font_size_override("font_size", 14)
 	sub.add_theme_color_override("font_color", Color(0.4, 0.4, 0.4, 1.0))
+	sub.autowrap_mode = TextServer.AUTOWRAP_WORD
 	vbox.add_child(sub)
+
+	# AC-14: [시즌 시작] 버튼
+	var btn_start: Button = Button.new()
+	btn_start.text = tr("시즌 시작")
+	btn_start.add_theme_font_size_override("font_size", 16)
+	ThemeSetup.apply_accent_button(btn_start)
+	btn_start.custom_minimum_size = Vector2(160, 44)
+	btn_start.pressed.connect(func() -> void:
+		if not SeasonManager.is_season_active():
+			SeasonManager.start_season()
+	)
+	vbox.add_child(btn_start)
 
 	return panel
 
@@ -330,14 +357,14 @@ func _build_free_market_panel() -> Control:
 	panel.add_child(vbox)
 
 	var lbl: Label = Label.new()
-	lbl.text = "현재 프리마켓 참여 중"
+	lbl.text = tr("현재 프리마켓 참여 중")
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.add_theme_font_size_override("font_size", 22)
 	lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6, 1.0))
 	vbox.add_child(lbl)
 
 	var sub: Label = Label.new()
-	sub.text = "공식 리그 순위 없음\n₩1,000,000 이상으로 시즌을 시작하면 리그에 참가할 수 있습니다."
+	sub.text = tr("공식 리그 순위 없음\n₩1,000,000 이상으로 시즌을 시작하면 리그에 참가할 수 있습니다.")
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sub.add_theme_font_size_override("font_size", 13)
 	sub.add_theme_color_override("font_color", Color(0.4, 0.4, 0.4, 1.0))
@@ -389,7 +416,7 @@ func _build_left_panel() -> Control:
 
 	# 내 현황 헤더
 	var header: Label = Label.new()
-	header.text = "내 현황"
+	header.text = tr("내 현황")
 	header.add_theme_font_size_override("font_size", 15)
 	header.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9, 1.0))
 	vbox.add_child(header)
@@ -411,7 +438,7 @@ func _build_left_panel() -> Control:
 	vbox.add_child(_lbl_tier_rank)
 
 	vbox.add_child(_make_spacer(12))
-	vbox.add_child(_make_section_label("시즌 수익률"))
+	vbox.add_child(_make_section_label(tr("시즌 수익률")))
 
 	_lbl_season_return = Label.new()
 	_lbl_season_return.text = "—"
@@ -425,7 +452,7 @@ func _build_left_panel() -> Control:
 	vbox.add_child(_lbl_season_value)
 
 	vbox.add_child(_make_spacer(12))
-	vbox.add_child(_make_section_label("주간 수익률"))
+	vbox.add_child(_make_section_label(tr("주간 수익률")))
 
 	_lbl_weekly_return = Label.new()
 	_lbl_weekly_return.text = "—"
@@ -439,7 +466,7 @@ func _build_left_panel() -> Control:
 	vbox.add_child(_lbl_weekly_rank)
 
 	vbox.add_child(_make_spacer(12))
-	vbox.add_child(_make_section_label("주간 수익률상"))
+	vbox.add_child(_make_section_label(tr("주간 수익률상")))
 
 	_lbl_weekly_prize_status = Label.new()
 	_lbl_weekly_prize_status.text = "—"
@@ -484,7 +511,7 @@ func _build_right_panel() -> Control:
 	vbox.add_child(global_sep)
 
 	_global_rank_label = Label.new()
-	_global_rank_label.text = "글로벌: 집계 전"
+	_global_rank_label.text = tr("글로벌: 집계 전")
 	_global_rank_label.add_theme_font_size_override("font_size", 11)
 	_global_rank_label.add_theme_color_override("font_color", Color(0.45, 0.45, 0.45, 1.0))
 	_global_rank_label.add_theme_constant_override("margin_top", 4)
@@ -545,7 +572,7 @@ func _build_leaderboard_header() -> Control:
 	]
 	for col in cols:
 		var lbl: Label = Label.new()
-		lbl.text = col[0]
+		lbl.text = tr(col[0])
 		lbl.add_theme_font_size_override("font_size", 11)
 		lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5, 1.0))
 		lbl.horizontal_alignment = col[2]

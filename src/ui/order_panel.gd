@@ -332,6 +332,7 @@ func _show_order_error(msg: String) -> void:
 
 
 func _flash_order_panel(side: String) -> void:
+	AudioManager.play_order_sfx()  # Sound fires with visual flash start
 	var flash_color: Color = ThemeSetup.PROFIT_RED if side == "BUY" else ThemeSetup.LOSS_BLUE
 	var panel: Control = _btn_submit_order.get_parent()
 	panel.modulate = flash_color

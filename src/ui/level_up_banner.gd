@@ -173,6 +173,7 @@ func show_level_up(old_level: int, new_level: int, skill_points: int) -> void:
 		return
 
 	# Phase 1: Golden flash burst
+	AudioManager.play_level_up_sfx()  # Sound fires with visual flash start
 	_flash_rect.modulate.a = 1.0
 	var flash_tween: Tween = create_tween()
 	flash_tween.tween_property(_flash_rect, "modulate:a", 0.0, 0.6)

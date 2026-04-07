@@ -34,6 +34,7 @@ func _on_news_display(entry: Dictionary) -> void:
 
 
 func _show_toast(text: String) -> void:
+	AudioManager.play_news_sfx()  # Sound fires when toast animation starts
 	while get_child_count() >= TOAST_MAX:
 		var oldest: Node = get_child(0)
 		remove_child(oldest)

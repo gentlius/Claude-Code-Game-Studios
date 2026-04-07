@@ -180,36 +180,42 @@ func is_muted() -> bool:
 	return _muted
 
 
-# ── Event Connections ──
+# ── Public SFX API ──
+## Called directly by UI components at the moment the visual effect starts,
+## so sound and animation are frame-accurate. AudioManager no longer connects
+## to engine-level signals; the UI is the authoritative trigger source.
 
-func _connect_events() -> void:
-	OrderEngine.on_order_filled.connect(_on_order_filled)
-	XpSystem.on_level_up.connect(_on_level_up)
-	PriceEngine.on_vi_triggered.connect(_on_vi_triggered)
-	NewsEventSystem.on_news_display.connect(_on_news_display)
-
-
-# ── Signal Handlers ──
-
-func _on_order_filled(_order: Dictionary) -> void:
+## Play order-fill SFX. Call from OrderPanel._flash_order_panel().
+func play_order_sfx() -> void:
 	if _muted:
 		return  # EC-02
 	_player_order.play()
 
 
-func _on_level_up(_level: int, _skill_points: int) -> void:
+## Play level-up SFX. Call from LevelUpBanner.show_level_up() at Phase 1 flash.
+func play_level_up_sfx() -> void:
 	if _muted:
 		return
 	_player_level.play()
 
 
-func _on_vi_triggered(_stock_id: String, _is_upper: bool, _halt_ticks: int) -> void:
+## Play VI/CB alert SFX. Call from TradingScreen._on_system_event_alert().
+func play_vi_sfx() -> void:
 	if _muted:
 		return
 	_player_vi.play()
 
 
-func _on_news_display(_entry: Dictionary) -> void:
+## Play news toast SFX. Call from ToastManager._show_toast().
+func play_news_sfx() -> void:
 	if _muted:
 		return
 	_player_news.play()
+
+
+# ── Event Connections ──
+# Intentionally empty — sounds are triggered by UI components via the public
+# SFX API above, not by engine-level signals. This ensures sound fires at the
+# same frame as the visual effect, not one or more ticks earlier.
+func _connect_events() -> void:
+	pass

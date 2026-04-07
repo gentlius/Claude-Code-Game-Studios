@@ -260,6 +260,7 @@ func _on_skill_unlocked(skill_id: String) -> void:
 func _on_system_event_alert(entry: Dictionary) -> void:
 	if not entry.get("is_system_event", false):
 		return
+	AudioManager.play_vi_sfx()  # Sound fires when VI/CB tab indicator updates
 	var headline: String = str(entry.get("headline", ""))
 	var body: String = str(entry.get("body", ""))
 	var severity: String = str(entry.get("impact_tier", "MEDIUM"))

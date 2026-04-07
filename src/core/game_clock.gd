@@ -179,6 +179,23 @@ func confirm_transition() -> void:
 			on_new_season_requested.emit()
 
 
+## Returns serializable clock state for save system.
+## Saves day and week counters so week-end/season-end fire at the correct time after load.
+## _current_tick is NOT saved — saves occur at market close (tick = end of day = 0 on next open).
+func get_save_data() -> Dictionary:
+	return {
+		"current_day": _current_day,
+		"current_week": _current_week,
+	}
+
+
+## Restores clock counters from save data.
+## Called by SaveSystem before the player opens the market.
+func load_save_data(data: Dictionary) -> void:
+	_current_day  = maxi(data.get("current_day",  0), 0)
+	_current_week = maxi(data.get("current_week", 0), 0)
+
+
 ## Resets all runtime state to initial values for unit tests. Call in before_each.
 func reset_for_testing() -> void:
 	_market_state = MarketState.PRE_MARKET

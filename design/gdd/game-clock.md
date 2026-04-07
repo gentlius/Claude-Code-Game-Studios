@@ -93,6 +93,13 @@ on_market_state_changed(new_state: MarketState, prev_state: MarketState)
 
 on_season_start()       # 시즌 최초 시작 시 (시즌 초기화용). SEASON_END 후 새 시즌 진입 시점
                         # 플레이어가 시즌 결과 확인 후 발행. 시즌 정산 완료 후에만 발행되므로 새 시즌 초기화에 안전.
+                        # 구독자 (초기화 책임):
+                        #   PriceEngine  — _stock_states 초기화 (base_price, 마코프 상태)
+                        #   PortfolioManager — holdings·거래 기록 초기화
+                        #   OrderEngine  — 미체결 주문·체결 카운터 초기화
+                        #   NewsEventSystem — 딜레이 큐·이벤트 스케줄 초기화
+                        #   XpSystem     — 시즌 XP 누적값 초기화
+                        #   SeasonManager — 내부 처리 (start_season 흐름의 일부)
 on_market_open()        # MARKET_OPEN 진입 시
 on_market_close()       # MARKET_CLOSED 진입 시
 on_day_transition()     # DAY_TRANSITION 진입 시

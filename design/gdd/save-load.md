@@ -38,7 +38,7 @@
 | `GameClock.on_market_close` | 매일 장 마감 후 자동 저장 |
 | `SeasonManager.on_season_ended` | 시즌 종료 후 자동 저장 |
 
-### 3-3 직렬화 대상 시스템 (6개)
+### 3-3 직렬화 대상 시스템 (7개)
 
 | 시스템 | 저장 필드 |
 |--------|----------|
@@ -48,10 +48,22 @@
 | `CurrencySystem` | sim_cash, deposit, **season_active** |
 | `PortfolioManager` | holdings (stock_id→{quantity, avg_buy_price, total_invested}) |
 | `PriceEngine` | **closing_prices** (stock_id→int) |
+| `GameClock` | **current_day**, **current_week** |
+
+**미저장 시스템 및 이유:**
+
+| 시스템 | 미저장 이유 | 로드 시 기본값 | 게임플레이 영향 |
+|--------|------------|--------------|--------------|
+| `GameClock._current_tick` | 장 마감 후 저장 → 로드 시 항상 0 (새 거래일 시작) | 0 | 없음 |
+| `GameClock.MarketState` | 로드 후 항상 PRE_MARKET에서 재개 | PRE_MARKET | 없음 |
+| `PriceEngine` 마코프 상태·OHLCV | 세션 초기화 허용 — 가격만 복원하면 충분 | 신선한 세션 | 차트 히스토리 사라짐(설계상 허용) |
+| `OrderEngine` 미체결 주문 | 장 마감 후 저장 → 미체결 주문 없음 | 빈 큐 | 없음 |
+| `NewsEventSystem` 딜레이 큐 | 장 마감 후 저장 → 큐 비어있음 | 빈 큐 | 없음 |
 
 > **seasons_played**: 픽션 날짜 계산(`get_fiction_date()`)에 사용. 미복원 시 항상 Q1(1월)로 표시됨.  
 > **season_active**: 잔고 0인 시즌(파산 직전) 상태를 잔고로 추론하면 비활성으로 오복원. 명시적 저장 필요.  
-> **closing_prices**: 세이브는 장 마감 후 발생하므로 current_price == prev_day_close. 로드 시 두 필드 모두 복원. 마코프 상태·OHLCV 히스토리는 미저장(세션 초기화). 미저장 시 base_price로 폴백 — 보유 주식 가치가 매수가 기준이 아닌 base_price로 표시되는 버그 발생.
+> **closing_prices**: 세이브는 장 마감 후 발생하므로 current_price == prev_day_close. 로드 시 두 필드 모두 복원. 미저장 시 base_price로 폴백 — 보유 주식 가치가 매수가 기준이 아닌 base_price로 표시되고 세이브/로드로 가격 조작 가능한 익스플로잇 발생.  
+> **current_day / current_week**: 미복원 시 항상 week=0, day=0으로 리셋 → 3주차에 저장하면 로드 후 5일 뒤에 "1주차 종료" 이벤트 발생. 주간 보상·시즌 종료 타이밍 오작동.
 
 ### 3-4 저장 포맷 (JSON)
 
@@ -94,6 +106,10 @@
       "005930": 71500,
       "000660": 138000
     }
+  },
+  "clock": {
+    "current_day": 9,
+    "current_week": 1
   }
 }
 ```
@@ -139,6 +155,7 @@
 | EC-04 | save_version 불일치 | 알려진 필드만 로드, push_warning |
 | EC-05 | 포트폴리오 빈 상태로 저장 | holdings: {} 정상 복원 |
 | EC-06 | 저장 중 디스크 공간 부족 | push_warning, 기존 파일 유지 |
+| EC-07 | 세이브 파일 변조 — 선행조건 없는 스킬 해금 | SkillTree.load_save_data()가 선행조건 미충족 스킬을 탐지·제거. 연쇄 무효화(A2 의존 A3도 제거). push_warning 로그. 정상 해금된 스킬은 영향 없음 |
 
 ---
 

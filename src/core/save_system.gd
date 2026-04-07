@@ -40,6 +40,7 @@ func save_game() -> bool:
 		"currency": CurrencySystem.get_save_data(),
 		"portfolio": PortfolioManager.get_save_data(),
 		"prices": PriceEngine.get_save_data(),
+		"clock": GameClock.get_save_data(),
 	}
 
 	var json_text: String = JSON.stringify(data, "\t")
@@ -94,8 +95,10 @@ func load_game() -> bool:
 
 	# If a season was active, restore PriceEngine closing prices so holdings are
 	# valued at the actual saved close — not snapped to base_price (GDD §3-3).
+	# Also restore GameClock day/week counters so week-end/season-end fire on time.
 	if CurrencySystem.is_season_active():
 		PriceEngine.initialize_for_load(data.get("prices", {}))
+		GameClock.load_save_data(data.get("clock", {}))
 
 	# Refresh valuation cache after prices are restored.
 	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)

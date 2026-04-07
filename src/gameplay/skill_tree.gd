@@ -198,14 +198,27 @@ func get_save_data() -> Dictionary:
 	}
 
 
-## Restores state from save data. Ignores skill IDs no longer in definitions.
+## Restores state from save data.
+## Validates prerequisite chains — removes skills whose prerequisites are unmet.
+## Repeat until stable to cascade-invalidate multi-level chains (tamper protection).
 func load_save_data(data: Dictionary) -> void:
 	_unlocked_skills.clear()
 	var skill_ids: Array = data.get("unlocked_skills", [])
 	for skill_id: String in skill_ids:
-		# Only load skills that still exist in definitions (GDD edge case)
 		if _skill_definitions.has(skill_id):
 			_unlocked_skills[skill_id] = true
+
+	# Prerequisite validation: detect tampered saves where a skill is present
+	# but its prerequisites are absent (impossible via normal unlock flow).
+	var changed: bool = true
+	while changed:
+		changed = false
+		for skill_id: String in _unlocked_skills.keys():
+			if not _are_prerequisites_met(skill_id):
+				_unlocked_skills.erase(skill_id)
+				push_warning("SkillTree: 선행조건 미충족 스킬 '%s' 제거 — 세이브 파일 변조 감지" % skill_id)
+				changed = true
+				break  # _unlocked_skills modified — restart iteration
 
 
 ## Resets all unlocked skills for unit tests. Call in before_each.

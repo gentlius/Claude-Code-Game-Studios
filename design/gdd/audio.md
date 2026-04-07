@@ -28,7 +28,7 @@ Phase 1 (Alpha): 4개 핵심 이벤트 SFX + 볼륨/음소거 설정 저장.
 
 - 파일: `src/core/audio_manager.gd`
 - 클래스: `AudioManager` (autoload)
-- 채널: `AudioStreamPlayer` 4개 (UI bus)
+- 채널: `AudioStreamPlayer` 4개 (Master bus; Beta 단계에서 UI/SFX 버스 분리 예정)
 
 ### 3-2 SFX 이벤트 4종
 
@@ -68,7 +68,7 @@ db = linear_to_db(volume_linear)   # Godot built-in
 | EC-01 | SFX 파일 없음 / placeholder 생성 실패 | push_warning, 무음 재생 |
 | EC-02 | 음소거 상태 | 재생 호출 자체를 스킵 (CPU 절약) |
 | EC-03 | 설정 파일 읽기 실패 | 기본값(볼륨 1.0, 음소거 false) 사용 |
-| EC-04 | on_vi_triggered 시그널 없는 경우 | 해당 이벤트 연결 skip, 경고 없음 |
+| EC-04 | (해소됨) on_vi_triggered 시그널 확인됨 | `PriceEngine`에 시그널 존재. EC-04 방어 분기 불필요. |
 
 ---
 
@@ -77,7 +77,7 @@ db = linear_to_db(volume_linear)   # Godot built-in
 - `OrderEngine.on_order_filled` 시그널
 - `XpSystem.on_level_up` 시그널
 - `PriceEngine` — on_vi_triggered 시그널 (미구현 시 EC-04 적용)
-- `NewsEventSystem.on_news_published` 시그널
+- `NewsEventSystem.on_news_display` 시그널
 - `SaveSystem` — 설정 저장과는 별도 (ConfigFile 사용)
 
 ---
@@ -120,7 +120,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 ### 호출 경로
 - [x] `OrderEngine.on_order_filled` → `AudioManager._on_order_filled()`
 - [x] `XpSystem.on_level_up` → `AudioManager._on_level_up()`
-- [x] `NewsEventSystem.on_news_published` → `AudioManager._on_news_published()`
+- [x] `NewsEventSystem.on_news_display` → `AudioManager._on_news_display()`
 - [x] `PriceEngine.on_vi_triggered` → `AudioManager._on_vi_triggered()` (시그널 존재 시)
 - [x] `AudioManager` → `project.godot` autoload 등록
 

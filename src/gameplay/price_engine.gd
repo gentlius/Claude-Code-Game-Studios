@@ -198,6 +198,14 @@ func _on_season_start() -> void:
 	_initialize_season()
 
 
+## Called by SaveSystem after loading a save where a season was in progress.
+## Populates _stock_states at base prices so prices are non-zero and trading can resume.
+## OHLCV history from before the save is not restored (not persisted by design).
+## Engine enters READY state; transitions to RUNNING when market opens normally.
+func initialize_for_load() -> void:
+	_initialize_season()
+
+
 ## Resets all price engine state for unit tests. Call in before_each.
 func reset_for_testing() -> void:
 	_stock_states.clear()

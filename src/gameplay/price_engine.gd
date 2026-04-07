@@ -199,11 +199,28 @@ func _on_season_start() -> void:
 
 
 ## Called by SaveSystem after loading a save where a season was in progress.
-## Populates _stock_states at base prices so prices are non-zero and trading can resume.
-## OHLCV history from before the save is not restored (not persisted by design).
-## Engine enters READY state; transitions to RUNNING when market opens normally.
-func initialize_for_load() -> void:
-	_initialize_season()
+## Initialises _stock_states (base prices), then overlays saved closing prices.
+## Saves occur at market close, so saved prices == that session's prev_day_close.
+## OHLCV history and markov state are not persisted (fresh session by design).
+## Engine enters READY state; transitions to RUNNING when player opens market.
+func initialize_for_load(save_data: Dictionary = {}) -> void:
+	_initialize_season()  # Populate _stock_states at base prices, engine = READY
+	var closing_prices: Dictionary = save_data.get("closing_prices", {})
+	for stock_id: String in closing_prices:
+		if _stock_states.has(stock_id):
+			var saved_price: int = closing_prices[stock_id]
+			if saved_price > 0:
+				_stock_states[stock_id]["current_price"] = saved_price
+				_stock_states[stock_id]["prev_day_close"] = saved_price
+
+
+## Returns closing prices for all stocks at save time.
+## Saves happen at market close, so current_price == prev_day_close for all stocks.
+func get_save_data() -> Dictionary:
+	var closing_prices: Dictionary = {}
+	for stock_id: String in _stock_states:
+		closing_prices[stock_id] = _stock_states[stock_id].get("current_price", 0)
+	return {"closing_prices": closing_prices}
 
 
 ## Resets all price engine state for unit tests. Call in before_each.

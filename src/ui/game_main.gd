@@ -15,15 +15,11 @@ func _ready() -> void:
 	var save_loaded: bool = SaveSystem.load_game()
 	if not save_loaded:
 		CurrencySystem.init_first_season()
-	elif CurrencySystem.is_season_active():
-		# A season was active when saved. PriceEngine._stock_states is empty (not saved by design).
-		# Initialize prices at base values so holdings valuation and chart are non-zero.
-		# Engine enters READY state; transitions to RUNNING when player opens the market.
-		PriceEngine.initialize_for_load()
 
 	# 2. Prime PortfolioManager cache so SeasonManager can read total_assets
 	#    when the player presses "시즌 시작" (cache is 0 until first tick otherwise).
-	#    This must run AFTER PriceEngine.initialize_for_load() so holdings have non-zero prices.
+	#    SaveSystem.load_game() already calls update_valuation internally after price restore,
+	#    but call again here to cover the no-save (new game) path.
 	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)
 
 	# 3. 최초 실행 시 인트로 시퀀스 표시. GDD: design/gdd/intro-sequence.md (S5-06)

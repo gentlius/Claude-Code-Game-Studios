@@ -38,7 +38,7 @@
 | `GameClock.on_market_close` | 매일 장 마감 후 자동 저장 |
 | `SeasonManager.on_season_ended` | 시즌 종료 후 자동 저장 |
 
-### 3-3 직렬화 대상 시스템 (5개)
+### 3-3 직렬화 대상 시스템 (6개)
 
 | 시스템 | 저장 필드 |
 |--------|----------|
@@ -47,9 +47,11 @@
 | `SeasonManager` | current_tier, is_free_market, season_start_capital, weekly_start_capital, weekly_trade_count, **seasons_played** |
 | `CurrencySystem` | sim_cash, deposit, **season_active** |
 | `PortfolioManager` | holdings (stock_id→{quantity, avg_buy_price, total_invested}) |
+| `PriceEngine` | **closing_prices** (stock_id→int) |
 
 > **seasons_played**: 픽션 날짜 계산(`get_fiction_date()`)에 사용. 미복원 시 항상 Q1(1월)로 표시됨.  
-> **season_active**: 잔고 0인 시즌(파산 직전) 상태를 잔고로 추론하면 비활성으로 오복원. 명시적 저장 필요.
+> **season_active**: 잔고 0인 시즌(파산 직전) 상태를 잔고로 추론하면 비활성으로 오복원. 명시적 저장 필요.  
+> **closing_prices**: 세이브는 장 마감 후 발생하므로 current_price == prev_day_close. 로드 시 두 필드 모두 복원. 마코프 상태·OHLCV 히스토리는 미저장(세션 초기화). 미저장 시 base_price로 폴백 — 보유 주식 가치가 매수가 기준이 아닌 base_price로 표시되는 버그 발생.
 
 ### 3-4 저장 포맷 (JSON)
 
@@ -85,6 +87,12 @@
         "avg_buy_price": 72000,
         "total_invested": 720000
       }
+    }
+  },
+  "prices": {
+    "closing_prices": {
+      "005930": 71500,
+      "000660": 138000
     }
   }
 }

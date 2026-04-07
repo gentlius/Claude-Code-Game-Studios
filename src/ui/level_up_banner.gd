@@ -121,7 +121,7 @@ func _ready() -> void:
 	bottom_row.add_child(spacer)
 
 	_btn_skill_tree = Button.new()
-	_btn_skill_tree.text = "스킬 트리 열기  K"
+	_btn_skill_tree.text = tr("스킬 트리 열기  K")
 	_btn_skill_tree.add_theme_font_size_override("font_size", 12)
 	_btn_skill_tree.pressed.connect(func() -> void:
 		hide_banner()
@@ -138,7 +138,7 @@ func _ready() -> void:
 	bottom_row.add_child(_btn_skill_tree)
 
 	_btn_close = Button.new()
-	_btn_close.text = "닫기  Esc"
+	_btn_close.text = tr("닫기  Esc")
 	_btn_close.add_theme_font_size_override("font_size", 12)
 	_btn_close.pressed.connect(hide_banner)
 	ThemeSetup.apply_button_theme(_btn_close)
@@ -157,7 +157,7 @@ func show_level_up(old_level: int, new_level: int, skill_points: int) -> void:
 		_lbl_title.text = "LEVEL UP  ×%d" % levels_gained
 	else:
 		_lbl_title.text = "LEVEL UP"
-	_lbl_detail.text = "스킬 포인트 +%d 획득" % skill_points
+	_lbl_detail.text = tr("스킬 포인트 +%d 획득") % skill_points
 
 	visible = true
 	mouse_filter = Control.MOUSE_FILTER_STOP

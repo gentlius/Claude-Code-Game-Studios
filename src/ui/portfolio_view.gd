@@ -34,7 +34,7 @@ func _build_ui() -> void:
 	add_child(_summary_bar)
 
 	var title: Label = Label.new()
-	title.text = "포트폴리오 요약"
+	title.text = tr("포트폴리오 요약")
 	title.add_theme_font_size_override("font_size", 14)
 	ThemeSetup.style_label_primary(title)
 	_summary_bar.add_child(title)
@@ -70,7 +70,7 @@ func _build_ui() -> void:
 	header.add_theme_constant_override("separation", 8)
 	scroll_vbox.add_child(header)
 
-	for col: String in ["종목", "수량", "현재가", "수익률", "평가금액"]:
+	for col: String in [tr("종목"), tr("수량"), tr("현재가"), tr("수익률"), tr("평가금액")]:
 		var lbl: Label = Label.new()
 		lbl.text = col
 		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -86,7 +86,7 @@ func _build_ui() -> void:
 	scroll_vbox.add_child(tx_sep)
 
 	var tx_title: Label = Label.new()
-	tx_title.text = "최근 거래"
+	tx_title.text = tr("최근 거래")
 	tx_title.add_theme_color_override("font_color", ThemeSetup.TEXT_DIM)
 	scroll_vbox.add_child(tx_title)
 
@@ -127,7 +127,7 @@ func _refresh() -> void:
 	var holding_count: int = summary["holding_count"]
 	var max_holdings: int = summary["max_holdings"]
 
-	_lbl_total_assets.text = "총 자산: ₩%s" % _format_number(total)
+	_lbl_total_assets.text = tr("총 자산: ₩%s") % _format_number(total)
 
 	_lbl_return_rate.text = "(%+.1f%%)" % rate
 	if rate > 0.0:
@@ -138,12 +138,12 @@ func _refresh() -> void:
 		_lbl_return_rate.add_theme_color_override("font_color", ThemeSetup.NEUTRAL_GRAY)
 
 	if reserved > 0:
-		_lbl_cash_info.text = "현금: ₩%s | 예약: ₩%s | %d/%d종목" % [
+		_lbl_cash_info.text = tr("현금: ₩%s | 예약: ₩%s | %d/%d종목") % [
 			_format_number(cash), _format_number(reserved),
 			holding_count, max_holdings
 		]
 	else:
-		_lbl_cash_info.text = "현금: ₩%s | %d/%d종목" % [
+		_lbl_cash_info.text = tr("현금: ₩%s | %d/%d종목") % [
 			_format_number(cash), holding_count, max_holdings
 		]
 
@@ -159,7 +159,7 @@ func _refresh_holdings() -> void:
 
 	if holdings.size() == 0:
 		var empty: Label = Label.new()
-		empty.text = "보유 종목 없음. 첫 매수를 시작하세요!"
+		empty.text = tr("보유 종목 없음. 첫 매수를 시작하세요!")
 		ThemeSetup.style_label_dim(empty)
 		_holdings_container.add_child(empty)
 		return
@@ -179,7 +179,7 @@ func _refresh_holdings() -> void:
 
 		# Quantity
 		var lbl_qty: Label = Label.new()
-		lbl_qty.text = "%d주" % h["quantity"]
+		lbl_qty.text = tr("%d주") % h["quantity"]
 		lbl_qty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		ThemeSetup.style_label_secondary(lbl_qty)
 		row.add_child(lbl_qty)
@@ -233,7 +233,7 @@ func _refresh_transactions() -> void:
 
 	if tx_list.size() == 0:
 		var empty: Label = Label.new()
-		empty.text = "거래 내역 없음"
+		empty.text = tr("거래 내역 없음")
 		ThemeSetup.style_label_dim(empty)
 		_tx_container.add_child(empty)
 		return
@@ -242,11 +242,11 @@ func _refresh_transactions() -> void:
 	for i: int in range(tx_list.size() - 1, -1, -1):
 		var tx: Dictionary = tx_list[i]
 		var lbl: Label = Label.new()
-		var type_str: String = "매수" if tx["type"] == "BUY" else "매도"
+		var type_str: String = tr("매수") if tx["type"] == "BUY" else tr("매도")
 		var pnl_str: String = ""
 		if tx["type"] == "SELL" and tx.get("realized_pnl", 0) != 0:
 			pnl_str = " (손익: %+d)" % tx["realized_pnl"]
-		lbl.text = "틱 %d | %s | %s %d주 @ ₩%s%s" % [
+		lbl.text = tr("틱 %d | %s | %s %d주 @ ₩%s%s") % [
 			tx.get("tick", 0), type_str, tx["stock_id"],
 			tx["quantity"], _format_number(tx["price"]), pnl_str
 		]

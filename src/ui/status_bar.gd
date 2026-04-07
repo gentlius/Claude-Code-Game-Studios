@@ -198,34 +198,34 @@ func _on_tick(_tick: int, _day: int, _week: int) -> void:
 func _update_row1() -> void:
 	var day: int = GameClock.get_current_day()
 	var week: int = GameClock.get_current_week()
-	var day_names: Array[String] = ["월", "화", "수", "목", "금"]
+	var day_names: Array[String] = [tr("월"), tr("화"), tr("수"), tr("목"), tr("금")]
 	var day_in_week: int = day % GameClock.DAYS_PER_WEEK
 	var day_name: String = day_names[day_in_week] if day_in_week < day_names.size() else "?"
-	_lbl_season_info.text = "%d주차 %s요일" % [week + 1, day_name]
+	_lbl_season_info.text = tr("%d주차 %s요일") % [week + 1, day_name]
 	var tick: int = GameClock.get_current_tick()
-	_lbl_tick_progress.text = "틱 %d/%d" % [tick, GameClock.TICKS_PER_DAY]
+	_lbl_tick_progress.text = tr("틱 %d/%d") % [tick, GameClock.TICKS_PER_DAY]
 	_progress_bar.value = GameClock.get_day_progress() * 100.0
 	_update_speed_label()
 
 
 func _update_speed_label() -> void:
 	if _ui_state == _STATE_PAUSED:
-		_lbl_speed.text = "⏸ 일시정지"
+		_lbl_speed.text = tr("⏸ 일시정지")
 		return
 	var spd: float = GameClock.get_speed_multiplier()
 	if spd <= 1.0:
-		_lbl_speed.text = "▶ 1x"
+		_lbl_speed.text = tr("▶ 1x")
 	elif spd <= 2.0:
-		_lbl_speed.text = "▶▶ 2x"
+		_lbl_speed.text = tr("▶▶ 2x")
 	else:
-		_lbl_speed.text = "▶▶▶▶ 4x"
+		_lbl_speed.text = tr("▶▶▶▶ 4x")
 
 
 func _update_row2() -> void:
 	var summary: Dictionary = PortfolioManager.get_portfolio_summary()
 	var total: int = summary["total_assets"]
 	var rate: float = summary["return_rate"]
-	_lbl_total_assets.text = "총 자산: ₩%s" % FormatUtils.number(total)
+	_lbl_total_assets.text = tr("총 자산: ₩%s") % FormatUtils.number(total)
 	if rate > 0.0:
 		_lbl_total_assets.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
 	elif rate < 0.0:
@@ -243,10 +243,10 @@ func _update_cash_label() -> void:
 	var holdings_count: int = PortfolioManager.get_all_holdings().size()
 	var max_holdings: int = SkillTree.get_max_holdings()
 	if reserved > 0:
-		_lbl_cash.text = "시드: ₩%s (예약: ₩%s) | 보유 %d/%d" % [
+		_lbl_cash.text = tr("시드: ₩%s (예약: ₩%s) | 보유 %d/%d") % [
 			FormatUtils.number(cash), FormatUtils.number(reserved), holdings_count, max_holdings]
 	else:
-		_lbl_cash.text = "시드: ₩%s | 보유 %d/%d" % [FormatUtils.number(cash), holdings_count, max_holdings]
+		_lbl_cash.text = tr("시드: ₩%s | 보유 %d/%d") % [FormatUtils.number(cash), holdings_count, max_holdings]
 
 
 func _update_index_label() -> void:
@@ -259,17 +259,17 @@ func _update_index_label() -> void:
 
 func _update_league_hud() -> void:
 	if SeasonManager.get_is_free_market():
-		_lbl_league_tier.text = "프리마켓"
-		_lbl_season_return.text = "시즌 -"
-		_lbl_weekly_return.text = "주간 -"
+		_lbl_league_tier.text = tr("프리마켓")
+		_lbl_season_return.text = tr("시즌 -")
+		_lbl_weekly_return.text = tr("주간 -")
 		return
 	var tier_rank: int = SeasonManager.get_tier_rank()
 	var tier_name: String = SeasonManager.get_tier_name(SeasonManager.get_current_tier())
-	_lbl_league_tier.text = "%s %d위" % [tier_name, tier_rank] if tier_rank > 0 else tier_name
+	_lbl_league_tier.text = tr("%s %d위") % [tier_name, tier_rank] if tier_rank > 0 else tier_name
 	var s_ret: float = SeasonManager.get_season_return_pct()
 	var w_ret: float = SeasonManager.get_weekly_return_pct()
-	_lbl_season_return.text = "시즌 %+.1f%%" % s_ret
-	_lbl_weekly_return.text = "주간 %+.1f%%" % w_ret
+	_lbl_season_return.text = tr("시즌 %+.1f%%") % s_ret
+	_lbl_weekly_return.text = tr("주간 %+.1f%%") % w_ret
 	_apply_return_color(_lbl_season_return, s_ret)
 	_apply_return_color(_lbl_weekly_return, w_ret)
 
@@ -294,7 +294,7 @@ func set_ui_state(state: int) -> void:
 	_lbl_speed.visible = speed_visible
 	_btn_market_open.visible = (state == _STATE_PRE_MARKET)
 	if state == _STATE_PRE_MARKET:
-		_btn_market_open.text = "장 시작 Enter" if SeasonManager.is_season_active() else "시즌 시작 Enter"
+		_btn_market_open.text = tr("장 시작 Enter") if SeasonManager.is_season_active() else tr("시즌 시작 Enter")
 		_update_sp_alert()
 	else:
 		_lbl_sp_alert.visible = false
@@ -317,7 +317,7 @@ func _update_speed_buttons(multiplier: float) -> void:
 func _update_sp_alert() -> void:
 	var sp: int = XpSystem.get_available_skill_points()
 	if sp > 0:
-		_lbl_sp_alert.text = "미사용 스킬 포인트 %d개 — 스킬 트리 열기 K" % sp
+		_lbl_sp_alert.text = tr("미사용 스킬 포인트 %d개 — 스킬 트리 열기 K") % sp
 		_lbl_sp_alert.visible = true
 	else:
 		_lbl_sp_alert.visible = false

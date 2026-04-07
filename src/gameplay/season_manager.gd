@@ -482,6 +482,7 @@ func get_save_data() -> Dictionary:
 		"season_start_capital": _season_start_capital,
 		"weekly_start_capital": _weekly_start_capital,
 		"weekly_trade_count": _weekly_trade_count,
+		"seasons_played": _seasons_played,
 	}
 
 
@@ -492,6 +493,7 @@ func load_save_data(data: Dictionary) -> void:
 	_season_start_capital = data.get("season_start_capital", 0)
 	_weekly_start_capital = data.get("weekly_start_capital", 0)
 	_weekly_trade_count = data.get("weekly_trade_count", 0)
+	_seasons_played = data.get("seasons_played", 0)  # 픽션 날짜 복원용 (EC: 구버전 세이브 → 0)
 
 
 ## Resets all season state to initial values for unit tests. Call in before_each.

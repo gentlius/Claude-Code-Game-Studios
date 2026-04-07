@@ -214,6 +214,41 @@ func reset_for_testing() -> void:
 	reset()
 	_initial_seed = 0
 
+
+# ── Serialization ──
+
+## Returns serializable state for save system (GDD: save-load.md).
+## Saves holdings only — transactions are ephemeral session data.
+func get_save_data() -> Dictionary:
+	var holdings_data: Dictionary = {}
+	for stock_id: String in _holdings:
+		var h: Dictionary = _holdings[stock_id]
+		holdings_data[stock_id] = {
+			"quantity": h["quantity"],
+			"avg_buy_price": h["avg_buy_price"],
+			"total_invested": h["total_invested"],
+		}
+	return {"holdings": holdings_data}
+
+
+## Restores holdings from save data. Does not restore transactions (ephemeral).
+func load_save_data(data: Dictionary) -> void:
+	_holdings.clear()
+	var holdings_data: Dictionary = data.get("holdings", {})
+	for stock_id: String in holdings_data:
+		var h: Dictionary = holdings_data[stock_id]
+		_holdings[stock_id] = {
+			"stock_id": stock_id,
+			"quantity": h.get("quantity", 0),
+			"avg_buy_price": h.get("avg_buy_price", 0),
+			"total_invested": h.get("total_invested", 0),
+			"first_buy_tick": 0,
+			"last_trade_tick": 0,
+			"current_value": 0,
+			"unrealized_pnl": 0,
+			"unrealized_pnl_pct": 0.0,
+		}
+
 # ── Internal ──
 
 func _record_transaction(

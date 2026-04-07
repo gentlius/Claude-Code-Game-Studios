@@ -51,13 +51,13 @@ func _ready() -> void:
 
 func _build_header(vbox: VBoxContainer) -> void:
 	_lbl_order_stock_name = Label.new()
-	_lbl_order_stock_name.text = "종목 선택"
+	_lbl_order_stock_name.text = tr("종목 선택")
 	_lbl_order_stock_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_lbl_order_stock_name.add_theme_font_size_override("font_size", 15)
 	ThemeSetup.style_label_primary(_lbl_order_stock_name)
 	vbox.add_child(_lbl_order_stock_name)
 	_lbl_order_current_price = Label.new()
-	_lbl_order_current_price.text = "현재가 ₩0"
+	_lbl_order_current_price.text = tr("현재가 ₩0")
 	_lbl_order_current_price.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_lbl_order_current_price.add_theme_font_size_override("font_size", 16)
 	ThemeSetup.style_label_primary(_lbl_order_current_price)
@@ -72,13 +72,13 @@ func _build_side_tabs(vbox: VBoxContainer) -> void:
 	hbox.add_theme_constant_override("separation", 2)
 	vbox.add_child(hbox)
 	_btn_buy_tab = Button.new()
-	_btn_buy_tab.text = "매수 B"
+	_btn_buy_tab.text = tr("매수 B")
 	_btn_buy_tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_btn_buy_tab.custom_minimum_size.y = 28
 	_btn_buy_tab.pressed.connect(func() -> void: _set_order_side("BUY"))
 	hbox.add_child(_btn_buy_tab)
 	_btn_sell_tab = Button.new()
-	_btn_sell_tab.text = "매도 S"
+	_btn_sell_tab.text = tr("매도 S")
 	_btn_sell_tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_btn_sell_tab.custom_minimum_size.y = 28
 	_btn_sell_tab.pressed.connect(func() -> void: _set_order_side("SELL"))
@@ -90,13 +90,13 @@ func _build_type_row(vbox: VBoxContainer) -> void:
 	hbox.add_theme_constant_override("separation", 2)
 	vbox.add_child(hbox)
 	_radio_market = Button.new()
-	_radio_market.text = "시장가"
+	_radio_market.text = tr("시장가")
 	_radio_market.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_radio_market.custom_minimum_size.y = 26
 	_radio_market.pressed.connect(func() -> void: _set_order_type("MARKET"))
 	hbox.add_child(_radio_market)
 	_radio_limit = Button.new()
-	_radio_limit.text = "지정가" if SkillTree.is_skill_unlocked("TR1") else "지정가 🔒"
+	_radio_limit.text = tr("지정가") if SkillTree.is_skill_unlocked("TR1") else tr("지정가 🔒")
 	_radio_limit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_radio_limit.custom_minimum_size.y = 26
 	_radio_limit.pressed.connect(func() -> void: _set_order_type("LIMIT"))
@@ -105,7 +105,7 @@ func _build_type_row(vbox: VBoxContainer) -> void:
 	_limit_price_row.visible = false
 	vbox.add_child(_limit_price_row)
 	var limit_lbl: Label = Label.new()
-	limit_lbl.text = "지정가"
+	limit_lbl.text = tr("지정가")
 	limit_lbl.add_theme_font_size_override("font_size", 12)
 	ThemeSetup.style_label_primary(limit_lbl)
 	_limit_price_row.add_child(limit_lbl)
@@ -125,7 +125,7 @@ func _build_qty_row(vbox: VBoxContainer) -> void:
 	hbox.add_theme_constant_override("separation", 2)
 	vbox.add_child(hbox)
 	var qty_lbl: Label = Label.new()
-	qty_lbl.text = "수량"
+	qty_lbl.text = tr("수량")
 	qty_lbl.add_theme_font_size_override("font_size", 12)
 	ThemeSetup.style_label_primary(qty_lbl)
 	hbox.add_child(qty_lbl)
@@ -139,20 +139,20 @@ func _build_qty_row(vbox: VBoxContainer) -> void:
 	ThemeSetup.apply_spinbox_theme(_spin_quantity)
 	hbox.add_child(_spin_quantity)
 	var btn_max: Button = Button.new()
-	btn_max.text = "최대"
+	btn_max.text = tr("최대")
 	btn_max.custom_minimum_size.y = 26
 	btn_max.pressed.connect(_calculate_max_quantity)
 	ThemeSetup.apply_button_theme(btn_max)
 	hbox.add_child(btn_max)
 	_lbl_estimated_amount = Label.new()
-	_lbl_estimated_amount.text = "예상 금액: ₩0"
+	_lbl_estimated_amount.text = tr("예상 금액: ₩0")
 	ThemeSetup.style_label_secondary(_lbl_estimated_amount)
 	vbox.add_child(_lbl_estimated_amount)
 
 
 func _build_submit_area(vbox: VBoxContainer) -> void:
 	_btn_submit_order = Button.new()
-	_btn_submit_order.text = "주문실행 Enter"
+	_btn_submit_order.text = tr("주문실행 Enter")
 	_btn_submit_order.pressed.connect(_submit_order)
 	_btn_submit_order.custom_minimum_size.y = 30
 	ThemeSetup.apply_accent_button(_btn_submit_order)
@@ -169,7 +169,7 @@ func _build_submit_area(vbox: VBoxContainer) -> void:
 
 func _build_pending_section(vbox: VBoxContainer) -> void:
 	var pending_title: Label = Label.new()
-	pending_title.text = "미체결 주문"
+	pending_title.text = tr("미체결 주문")
 	ThemeSetup.style_label_secondary(pending_title)
 	vbox.add_child(pending_title)
 	var scroll: ScrollContainer = ScrollContainer.new()

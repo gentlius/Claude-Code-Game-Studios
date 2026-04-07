@@ -38,39 +38,36 @@ const LAZY_EVAL_ON_DEMAND: bool = true
 # ── Tier Parameter Table ──
 ## GDD §4-1 티어별 수익률 분포 파라미터.
 ## 순서: [mu_tier, sigma_tier, r_min, r_max]
-## 단위: % (예: 200.0 = 200%)
+## 단위: % (예: 20.0 = 20%)
 ## Q1 결정: GDScript 상수로 관리 (YAGNI — 추후 Resource로 추출 가능)
-## GDD §4-1 티어별 수익률 분포 파라미터.
-## mu는 단조 증가 보장 (GDD §3-1 원칙 3 — 티어 단조성).
-## r_min도 단조 증가 → 고티어 AI는 저티어 AI보다 항상 높은 하한 수익률.
-## 원래 GDD 공식(daily_r 복리)은 홀짝 교대 패턴이었으나,
-## AC-02(인접 티어 중앙값 단조성) 보장을 위해 선형 보간 방식으로 재산정.
-## 단조성은 mu 단독 보장. r_min은 전 티어 동일(-60%) → 고티어도 손실 가능.
-## 이전 설계(r_min 계단 상승)는 "고티어가 항상 고수익"을 강제하는 부작용이 있어 수정.
-## 수익률 분포 겹침(overlap)은 sigma로 자연 발생 — ADR 참고.
+## 설계 원칙: 티어 = 자본량, 실력 ≠ 티어.
+## mu는 생존편향 2%씩 미세 증가만 (동일 실력 분포, 대자본 생존편향 소폭 반영).
+## sigma는 티어 상승 시 하락 (대자본 = 분산투자 가능 = 퍼센트 기준 수익률 안정화).
+## r_min/r_max는 전 티어 동일 — 고티어도 손실/대박 동일한 상하한.
+## 단조성은 mu 단독 보장 (AC-02). ADR-007 참고.
 const TIER_PARAMS: Array[Dictionary] = [
-	# TIER_BRONZE (0) — mu 100→25: 0% 수익 플레이어가 하위 5%→37백분위로 개선
-	{ "mu": 25.0, "sigma": 55.0, "r_min": -60.0, "r_max": 600.0 },
+	# TIER_BRONZE (0)
+	{ "mu": 8.0, "sigma": 55.0, "r_min": -60.0, "r_max": 600.0 },
 	# TIER_SILVER (1)
-	{ "mu": 40.0, "sigma": 50.0, "r_min": -60.0, "r_max": 650.0 },
+	{ "mu": 10.0, "sigma": 52.0, "r_min": -60.0, "r_max": 600.0 },
 	# TIER_GOLD (2)
-	{ "mu": 60.0, "sigma": 45.0, "r_min": -60.0, "r_max": 550.0 },
+	{ "mu": 12.0, "sigma": 49.0, "r_min": -60.0, "r_max": 600.0 },
 	# TIER_PLATINUM (3)
-	{ "mu": 80.0, "sigma": 40.0, "r_min": -60.0, "r_max": 500.0 },
+	{ "mu": 14.0, "sigma": 46.0, "r_min": -60.0, "r_max": 600.0 },
 	# TIER_EMERALD (4)
-	{ "mu": 105.0, "sigma": 35.0, "r_min": -60.0, "r_max": 450.0 },
+	{ "mu": 16.0, "sigma": 43.0, "r_min": -60.0, "r_max": 600.0 },
 	# TIER_DIAMOND (5)
-	{ "mu": 130.0, "sigma": 30.0, "r_min": -60.0, "r_max": 420.0 },
+	{ "mu": 18.0, "sigma": 40.0, "r_min": -60.0, "r_max": 600.0 },
 	# TIER_MASTER (6)
-	{ "mu": 155.0, "sigma": 25.0, "r_min": -60.0, "r_max": 380.0 },
+	{ "mu": 20.0, "sigma": 37.0, "r_min": -60.0, "r_max": 600.0 },
 	# TIER_GRANDMASTER (7)
-	{ "mu": 180.0, "sigma": 22.0, "r_min": -60.0, "r_max": 360.0 },
+	{ "mu": 22.0, "sigma": 34.0, "r_min": -60.0, "r_max": 600.0 },
 	# TIER_CHALLENGER (8)
-	{ "mu": 205.0, "sigma": 18.0, "r_min": -60.0, "r_max": 320.0 },
+	{ "mu": 24.0, "sigma": 31.0, "r_min": -60.0, "r_max": 600.0 },
 	# TIER_LEGEND (9)
-	{ "mu": 225.0, "sigma": 15.0, "r_min": -60.0, "r_max": 300.0 },
+	{ "mu": 26.0, "sigma": 28.0, "r_min": -60.0, "r_max": 600.0 },
 	# TIER_MASTER_OF_INVESTMENT (10)
-	{ "mu": 250.0, "sigma": 20.0, "r_min": -60.0, "r_max": 500.0 },
+	{ "mu": 28.0, "sigma": 25.0, "r_min": -60.0, "r_max": 600.0 },
 ]
 
 # ── Internal State ──

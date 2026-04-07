@@ -125,9 +125,9 @@ func _build_ui() -> void:
 	_tab_bar.add_theme_constant_override("separation", 0)
 	tab_bar_panel.add_child(_tab_bar)
 
-	_btn_f1 = _make_tab_button("F1  거래", TAB_F1)
-	_btn_f2 = _make_tab_button("F2  리그", TAB_F2)
-	_btn_f3 = _make_tab_button("F3  성장", TAB_F3)
+	_btn_f1 = _make_tab_button(tr("F1  거래"), TAB_F1)
+	_btn_f2 = _make_tab_button(tr("F2  리그"), TAB_F2)
+	_btn_f3 = _make_tab_button(tr("F3  성장"), TAB_F3)
 	_tab_bar.add_child(_btn_f1)
 	_tab_bar.add_child(_btn_f2)
 	_tab_bar.add_child(_btn_f3)
@@ -156,7 +156,7 @@ func _build_ui() -> void:
 	content.add_child(_league_screen)
 
 	# F3 — GrowthScreen (placeholder)
-	_growth_screen = _build_placeholder("F3  성장 화면", "준비 중")
+	_growth_screen = _build_placeholder(tr("F3  성장 화면"), tr("준비 중"))
 	_growth_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	content.add_child(_growth_screen)
 

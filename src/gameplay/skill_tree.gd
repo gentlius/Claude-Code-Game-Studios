@@ -191,8 +191,10 @@ func _load_skills_from_json() -> void:
 
 ## Returns serializable state for save system.
 func get_save_data() -> Dictionary:
+	var keys: Array[String] = []
+	keys.assign(_unlocked_skills.keys())
 	return {
-		"unlocked_skills": _unlocked_skills.keys(),
+		"unlocked_skills": keys,
 	}
 
 

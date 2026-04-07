@@ -101,7 +101,7 @@ Day 7+:   S5-05 게임패드 (여유 있을 때)
 
 - [x] S5-01~S5-02 Must Have 전부 완료 (SaveSystem + AudioManager 구현됨)
 - [x] S5-06 인트로 서사 완료 (IntroSequence 구현, game_main.gd 연결)
-- [ ] `save-load.md` GDD Approved, `audio.md` GDD Approved
+- [x] `save-load.md` GDD Approved (2026-04-07), `audio.md` GDD Approved (2026-04-07)
 - [x] `intro-sequence.md` GDD Approved ✅ (2026-04-06)
 - [ ] 세이브 → 종료 → 로드 → 재개 E2E: XP/레벨/스킬포인트/시즌 상태 전부 복원
 - [ ] 주문 체결·레벨업·VI·뉴스 SFX 4개 인게임 발동 확인

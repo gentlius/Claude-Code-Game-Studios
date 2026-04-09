@@ -170,10 +170,11 @@ func start_season() -> bool:
 		var participant_counts: Dictionary = _build_participant_counts()
 		AiCompetitor.init_season(_current_tier, participant_counts, seed_val)
 
-	on_season_started.emit(_current_tier, _is_free_market)
 	## TD-08: SeasonManager owns GameClock initialisation (tick counters, state).
-	## Called here so the UI only needs to call SeasonManager.start_season().
+	## Called BEFORE on_season_started so GameClock._season_active == true
+	## when signal handlers call SeasonManager.is_season_active() (Godot signals are sync).
 	GameClock.start_season()
+	on_season_started.emit(_current_tier, _is_free_market)
 	return true
 
 
@@ -218,10 +219,10 @@ func get_season_start_capital() -> int:
 	return _season_start_capital
 
 
-## True when a season has been started this session (season capital > 0).
+## True when a season has been started (delegates to GameClock — single source of truth).
 ## Used by TradingScreen to decide whether to show "시즌 시작" or "장 시작" button.
 func is_season_active() -> bool:
-	return _season_start_capital > 0
+	return GameClock.is_season_active()
 
 
 ## Fiction calendar date for the current game tick.
@@ -237,10 +238,15 @@ func get_fiction_date() -> Dictionary:
 	return {"month": month, "day": day}
 
 
-## Player's current rank within their tier (1-based). 0 = unranked (free-market).
+## Player's current rank within their tier (1-based). 0 = unranked (free-market or pre-trade).
 ## Delegates to _calculate_player_tier_rank with the live season return.
 func get_tier_rank() -> int:
 	if not is_season_active() or _is_free_market:
+		return 0
+	# Day 1 PRE_MARKET: 장이 한 번도 열리지 않아 순위 집계 전.
+	# get_current_day()는 0-indexed이므로 day 0 = 첫 날 장 시작 전.
+	if GameClock.get_current_day() == 0 \
+			and GameClock.get_market_state() == GameClock.MarketState.PRE_MARKET:
 		return 0
 	return _calculate_player_tier_rank(get_season_return_pct())
 
@@ -497,7 +503,9 @@ func load_save_data(data: Dictionary) -> void:
 
 
 ## Resets all season state to initial values for unit tests. Call in before_each.
-func reset_for_testing() -> void:
+## Resets all season state for a new game.
+## Resets all season state. Called by GameMain (new game) and tests (before_each).
+func reset() -> void:
 	_current_tier = TIER_FREE_MARKET
 	_is_free_market = true
 	_season_start_capital = 0

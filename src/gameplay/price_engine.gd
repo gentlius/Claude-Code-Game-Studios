@@ -195,13 +195,13 @@ func _ready() -> void:
 
 
 func _on_season_start() -> void:
-	_initialize_season()
+	_reset_season_mechanics()
 
 
 ## Called by SaveSystem after loading a save where a season was in progress.
 ## Rebuilds _stock_states in one pass: StockDatabase for metadata, save_data for
 ## dynamic fields (prices, season_bias, ohlcv_daily, tick_prices, tick_volumes).
-## Does NOT call _initialize_season() — that would reset fields we are restoring.
+## Does NOT call _reset_season_mechanics() — that would discard the restored state.
 ## Backward-compat: old saves with "closing_prices" flat dict are still accepted.
 ## Engine enters READY state; transitions to RUNNING when player opens market.
 func initialize_for_load(save_data: Dictionary) -> void:
@@ -278,14 +278,26 @@ func initialize_for_load(save_data: Dictionary) -> void:
 	_cb_stage = 0
 	_cb_halt_remaining = 0
 	_base_market_cap = _compute_total_market_cap()
-	_current_index  = INDEX_BASE
-	_prev_day_index = INDEX_BASE
+	# 저장된 시장지수 복원. 없으면 INDEX_BASE(1000) 유지.
+	var saved_index: float = save_data.get("market_index", 0.0)
+	var saved_prev:  float = save_data.get("prev_day_index", 0.0)
+	if saved_index > 0.0:
+		_current_index  = saved_index
+		_prev_day_index = saved_prev if saved_prev > 0.0 else saved_index
+		# _base_market_cap을 재보정: 현재 시가총액과 저장된 지수로부터 역산
+		_base_market_cap = _base_market_cap * INDEX_BASE / saved_index
+	else:
+		_current_index  = INDEX_BASE
+		_prev_day_index = INDEX_BASE
 	_index_history.clear()
 	_engine_state = EngineState.READY
+	# 로드 후 가격 복원 완료 — UI 일괄 갱신.
+	on_price_updated.emit(0)
 
 
 ## Returns full per-stock dynamic state for save system.
 ## tick_prices/tick_volumes are the full-season buffers (GDD chart-renderer §5-1).
+## market_index / prev_day_index: 시장지수 복원용. 없으면 INDEX_BASE(1000)로 초기화됨.
 func get_save_data() -> Dictionary:
 	var stocks_data: Dictionary = {}
 	for stock_id: String in _stock_states:
@@ -298,17 +310,24 @@ func get_save_data() -> Dictionary:
 			"tick_prices":    s.get("tick_prices",     []),
 			"tick_volumes":   s.get("tick_volumes",    []),
 		}
-	return {"stocks": stocks_data}
+	return {
+		"stocks": stocks_data,
+		"market_index": _current_index,
+		"prev_day_index": _prev_day_index,
+	}
 
 
 ## Resets all price engine state for unit tests. Call in before_each.
-func reset_for_testing() -> void:
+## Resets all price engine state. Called by GameMain (new game) and tests (before_each).
+func reset() -> void:
 	_stock_states.clear()
 	_vi_states.clear()
 	_cb_stage = 0
 	_cb_halt_remaining = 0
 	_prev_day_index = 0.0
 	_current_index = 0.0
+	_base_market_cap = 0.0
+	_engine_state = EngineState.UNINITIALIZED
 
 
 func _on_market_state_changed(
@@ -325,6 +344,9 @@ func _on_market_state_changed(
 		GameClock.MarketState.PRE_MARKET:
 			if _engine_state == EngineState.END_OF_DAY:
 				_engine_state = EngineState.READY
+				# 일일 정산(_end_trading_day)에서 prev_day_close 갱신 완료.
+				# on_price_updated로 모든 UI에 알려 등락률·현재가를 일괄 갱신.
+				on_price_updated.emit(0)
 
 # ── Public API ──
 
@@ -376,66 +398,99 @@ func push_event(event: MarketEvent) -> void:
 		var queue: Array = state["event_queue"]
 		queue.append(event)
 
-# ── Season Initialization (GDD: UNINITIALIZED → READY) ──
+# ── Season Initialization ──
 
-func _initialize_season() -> void:
+## Returns a randomly selected SeasonBias (BULL 40%, NEUTRAL 30%, BEAR 30%).
+func _random_bias() -> SeasonBias:
+	var r: float = randf()
+	if r < BIAS_BULL_PROB:
+		return SeasonBias.BULL
+	elif r < BIAS_NEUTRAL_CUTOFF:
+		return SeasonBias.NEUTRAL
+	else:
+		return SeasonBias.BEAR
+
+
+## Called by GameMain after reset(), before MainScreen is shown (new game only).
+## Populates _stock_states from StockDatabase so get_current_price() is valid
+## before any UI is created. Does NOT emit on_price_updated — StockListPanel._ready()
+## performs the initial render by reading PriceEngine directly.
+func init_first_season() -> void:
 	_stock_states.clear()
 	_transition_matrices.clear()
 
-	var stock_ids: Array[String] = StockDatabase.get_all_stock_ids()
-	for stock_id: String in stock_ids:
+	for stock_id: String in StockDatabase.get_all_stock_ids():
 		var stock: StockData = StockDatabase.get_stock(stock_id)
 		if stock == null:
 			continue
-
-		# Assign random season bias (BULL 40%, NEUTRAL 30%, BEAR 30%)
-		var r: float = randf()
-		var bias: SeasonBias
-		if r < BIAS_BULL_PROB:
-			bias = SeasonBias.BULL
-		elif r < BIAS_NEUTRAL_CUTOFF:
-			bias = SeasonBias.NEUTRAL
-		else:
-			bias = SeasonBias.BEAR
-
+		var bias: SeasonBias = _random_bias()
 		_stock_states[stock_id] = {
-			"stock_id": stock_id,
-			"current_price": stock.base_price,
-			"base_price": stock.base_price,
-			"prev_day_close": stock.base_price,  ## 전일 종가 (상/하한가 기준)
+			"stock_id":           stock_id,
+			"current_price":      stock.base_price,
+			"base_price":         stock.base_price,
+			"prev_day_close":     stock.base_price,
 			"volatility_profile": stock.volatility_profile,
-			"macro_sensitivity": stock.macro_sensitivity,
+			"macro_sensitivity":  stock.macro_sensitivity,
 			"sector_sensitivity": stock.sector_sensitivity,
-			"markov_state": MarkovState.SIDEWAYS,
-			"state_duration": 0,
-			"season_bias": bias,
-			"tick_prices": [] as Array[int],
-			"tick_volumes": [] as Array[float],
-			"ohlcv_daily": [] as Array[Dictionary],
-			"event_queue": [] as Array,
-			"gradual_events": [] as Array,
+			"markov_state":       MarkovState.SIDEWAYS,
+			"state_duration":     0,
+			"season_bias":        bias,
+			"tick_prices":        [] as Array[int],
+			"tick_volumes":       [] as Array[float],
+			"ohlcv_daily":        [] as Array[Dictionary],
+			"event_queue":        [] as Array,
+			"gradual_events":     [] as Array,
 		}
-
 		_transition_matrices[stock_id] = _build_transition_matrix(
 			stock.volatility_profile, bias
 		)
 
-	# Initialize VI states for each stock (GDD Rule 2-4)
 	_vi_states.clear()
 	for stock_id: String in _stock_states:
 		_vi_states[stock_id] = {"halt_remaining": 0, "count_today": 0, "cooldown": 0}
 
-	# Reset circuit breaker (GDD Rule 2-5)
 	_cb_stage = 0
 	_cb_halt_remaining = 0
-
-	# Initialize market index
 	_base_market_cap = _compute_total_market_cap()
 	_current_index = INDEX_BASE
 	_prev_day_index = INDEX_BASE
 	_index_history.clear()
-
 	_engine_state = EngineState.READY
+
+
+## Resets per-season mechanics (Markov state, season bias, tick/OHLCV history, VI, CB,
+## market index baseline) for all stocks. current_price and prev_day_close are preserved
+## so prices carry forward naturally across seasons. Called every season start (Season 1
+## and N+1). No emit — prices are unchanged so UI dirty flags will not trigger; the chart
+## renderer re-fetches its buffers on the next MARKET_OPEN state transition.
+func _reset_season_mechanics() -> void:
+	for stock_id: String in _stock_states:
+		var state: Dictionary = _stock_states[stock_id]
+		var bias: SeasonBias = _random_bias()
+		state["markov_state"]   = MarkovState.SIDEWAYS
+		state["state_duration"] = 0
+		state["season_bias"]    = bias
+		state["tick_prices"]    = [] as Array[int]
+		state["tick_volumes"]   = [] as Array[float]
+		state["ohlcv_daily"]    = [] as Array[Dictionary]
+		state["event_queue"]    = [] as Array
+		state["gradual_events"] = [] as Array
+		# current_price, prev_day_close: carry forward — not touched
+		_transition_matrices[stock_id] = _build_transition_matrix(
+			state["volatility_profile"], bias
+		)
+
+	for stock_id: String in _vi_states:
+		_vi_states[stock_id] = {"halt_remaining": 0, "count_today": 0, "cooldown": 0}
+	_cb_stage = 0
+	_cb_halt_remaining = 0
+
+	# Recompute index baseline from current (carried-forward) prices so each season
+	# starts fresh at INDEX_BASE regardless of prior season's price level.
+	_base_market_cap = _compute_total_market_cap()
+	_current_index = INDEX_BASE
+	_prev_day_index = INDEX_BASE
+	_index_history.clear()
 
 # ── Tick Processing (GDD Rule 5) ──
 

@@ -13,7 +13,7 @@ func test_currency_system_api():
 	assert_true(CurrencySystem.has_method("sim_deduct"),        "sim_deduct 존재")
 	assert_true(CurrencySystem.has_method("sim_add"),           "sim_add 존재")
 	assert_true(CurrencySystem.has_method("settle_season"),     "settle_season 존재")
-	assert_true(CurrencySystem.has_method("reset_for_testing"), "reset_for_testing 존재")
+	assert_true(CurrencySystem.has_method("reset"), "reset 존재")
 
 
 # ── PortfolioManager ─────────────────────────────────────────────────
@@ -51,6 +51,7 @@ func test_game_clock_api():
 	assert_true(GameClock.has_method("pause_request"),        "pause_request 존재")
 	assert_true(GameClock.has_method("pause_release"),        "pause_release 존재")
 	assert_true(GameClock.has_method("get_market_state"),     "get_market_state 존재")
+	assert_true(GameClock.has_method("is_season_active"),     "is_season_active 존재")
 	assert_true(GameClock.has_method("get_current_tick"),     "get_current_tick 존재")
 	assert_true(GameClock.has_method("get_current_day"),      "get_current_day 존재")
 	assert_true(GameClock.has_method("get_current_week"),     "get_current_week 존재")
@@ -125,18 +126,18 @@ func test_skill_tree_api():
 	assert_true(SkillTree.has_method("is_skill_unlocked"),   "is_skill_unlocked 존재")
 
 
-# ── reset_for_testing() 계약 ─────────────────────────────────────────
-## 모든 autoload 시스템이 reset_for_testing()을 구현해야 한다.
+# ── reset() 계약 ─────────────────────────────────────────────────────
+## 모든 autoload 시스템이 reset()을 구현해야 한다.
 ## 실패 = 테스트 격리 불가 → 상태 오염으로 인한 플레이크 테스트
 
-func test_all_systems_have_reset_for_testing():
-	assert_true(GameClock.has_method("reset_for_testing"),       "GameClock.reset_for_testing 존재")
-	assert_true(CurrencySystem.has_method("reset_for_testing"),  "CurrencySystem.reset_for_testing 존재")
-	assert_true(PortfolioManager.has_method("reset_for_testing"),"PortfolioManager.reset_for_testing 존재")
-	assert_true(OrderEngine.has_method("reset_for_testing"),     "OrderEngine.reset_for_testing 존재")
-	assert_true(XpSystem.has_method("reset_for_testing"),        "XpSystem.reset_for_testing 존재")
-	assert_true(SkillTree.has_method("reset_for_testing"),       "SkillTree.reset_for_testing 존재")
-	assert_true(PriceEngine.has_method("reset_for_testing"),     "PriceEngine.reset_for_testing 존재")
-	assert_true(NewsEventSystem.has_method("reset_for_testing"), "NewsEventSystem.reset_for_testing 존재")
-	assert_true(AiCompetitor.has_method("reset_for_testing"),    "AiCompetitor.reset_for_testing 존재")
-	assert_true(SeasonManager.has_method("reset_for_testing"),   "SeasonManager.reset_for_testing 존재")
+func test_all_systems_have_reset():
+	assert_true(GameClock.has_method("reset"),       "GameClock.reset 존재")
+	assert_true(CurrencySystem.has_method("reset"),  "CurrencySystem.reset 존재")
+	assert_true(PortfolioManager.has_method("reset"),"PortfolioManager.reset 존재")
+	assert_true(OrderEngine.has_method("reset"),     "OrderEngine.reset 존재")
+	assert_true(XpSystem.has_method("reset"),        "XpSystem.reset 존재")
+	assert_true(SkillTree.has_method("reset"),       "SkillTree.reset 존재")
+	assert_true(PriceEngine.has_method("reset"),     "PriceEngine.reset 존재")
+	assert_true(NewsEventSystem.has_method("reset"), "NewsEventSystem.reset 존재")
+	assert_true(AiCompetitor.has_method("reset"),    "AiCompetitor.reset 존재")
+	assert_true(SeasonManager.has_method("reset"),   "SeasonManager.reset 존재")

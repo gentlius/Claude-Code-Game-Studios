@@ -29,13 +29,16 @@ func _ready() -> void:
 	_build_rows()
 	PriceEngine.on_price_updated.connect(_on_price_updated)
 	OrderEngine.on_order_filled.connect(_on_order_filled)
+	# 생성 시점의 PriceEngine 상태를 한 번 읽어 초기 렌더.
+	# 신규 게임: init_first_season() 완료 후 MainScreen이 생성되므로 base_price를 그린다.
+	# 로드 게임: initialize_for_load() 완료 후 MainScreen이 생성되므로 복원 가격을 그린다.
+	_on_price_updated(0)
 
 
 func _init_prev_close() -> void:
 	for sid: String in _stock_ids:
-		var stock: StockData = StockDatabase.get_stock(sid)
-		if stock:
-			_prev_close_prices[sid] = stock.base_price
+		var limits: Dictionary = PriceEngine.get_daily_limits(sid)
+		_prev_close_prices[sid] = limits.get("prev_close", 0)
 
 
 func _build_rows() -> void:
@@ -143,9 +146,12 @@ func set_selected(stock_id: String) -> void:
 
 
 ## Called by TradingScreen on market close to snapshot prev-close prices.
+## 스냅샷 직후 즉시 재렌더 — 장 종료 시점부터 등락률 0%로 표시 (save/load 후와 동일한 뷰).
 func snapshot_prev_close() -> void:
 	for sid: String in _stock_ids:
 		_prev_close_prices[sid] = PriceEngine.get_current_price(sid)
+	_last_prices.clear()   ## dirty flag 초기화 → 모든 행 재렌더 강제
+	_on_price_updated(0)   ## 장 종료 즉시 0% 등락률 표시
 
 
 func _on_order_filled(_order: Dictionary) -> void:

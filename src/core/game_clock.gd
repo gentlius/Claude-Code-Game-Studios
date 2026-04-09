@@ -47,6 +47,9 @@ const BASE_TICK_INTERVAL: float = 0.192  ## real seconds per tick at 1x speed (~
 const SECONDS_PER_TICK: int = 15  ## game-world seconds each tick represents (4 ticks = 1 minute)
 ## Max ticks fired per frame — prevents death spiral when a slow frame causes tick backlog.
 const MAX_TICKS_PER_FRAME: int = 3
+## Auto-slow to 1x when a news event fires at 4x (GDD — "판단이 곧 실력"). VI/CB는 속도 유지.
+## TODO(Beta/Settings): UserSettings.auto_slow_on_news 옵션으로 대체. design/gdd/settings.md 참조.
+const AUTO_SLOW_ON_EVENT: bool = true
 
 # ── State ──
 
@@ -66,6 +69,12 @@ var _pause_sources: Dictionary = {}
 ## Returns the current market state (PRE_MARKET, MARKET_OPEN, etc.).
 func get_market_state() -> MarketState:
 	return _market_state
+
+
+## True after start_season() has been called (i.e. a season is in progress).
+## Single source of truth — replaces CurrencySystem.is_season_active().
+func is_season_active() -> bool:
+	return _season_active
 
 
 ## Returns the current tick within the trading day (0 to TICKS_PER_DAY-1).
@@ -181,23 +190,32 @@ func confirm_transition() -> void:
 
 ## Returns serializable clock state for save system.
 ## Saves day and week counters so week-end/season-end fire at the correct time after load.
-## _current_tick is NOT saved — saves occur at market close (tick = end of day = 0 on next open).
+## _current_tick is NOT saved — saves occur at PRE_MARKET (after DAY_TRANSITION), where
+## _current_day is already advanced by _advance_to_next_day(). No +1 compensation needed.
 func get_save_data() -> Dictionary:
 	return {
-		"current_day": _current_day,
-		"current_week": _current_week,
+		"current_day":   _current_day,
+		"current_week":  _current_week,
+		"season_active": _season_active,
+		"market_state":  int(_market_state),
 	}
 
 
-## Restores clock counters from save data.
-## Called by SaveSystem before the player opens the market.
+## Restores clock state from save data. Must be called before the season-active
+## check in SaveSystem so GameClock.is_season_active() returns the correct value.
 func load_save_data(data: Dictionary) -> void:
-	_current_day  = maxi(data.get("current_day",  0), 0)
-	_current_week = maxi(data.get("current_week", 0), 0)
+	_current_day   = maxi(data.get("current_day",  0), 0)
+	_current_week  = maxi(data.get("current_week", 0), 0)
+	_season_active = data.get("season_active", false)
+	var state_int: int = data.get("market_state", MarketState.PRE_MARKET)
+	if state_int >= 0 and state_int < MarketState.size():
+		_market_state = state_int as MarketState
+	else:
+		_market_state = MarketState.PRE_MARKET
 
 
-## Resets all runtime state to initial values for unit tests. Call in before_each.
-func reset_for_testing() -> void:
+## Resets all runtime state. Called by GameMain (new game) and tests (before_each).
+func reset() -> void:
 	_market_state = MarketState.PRE_MARKET
 	_current_tick = 0
 	_current_day = 0

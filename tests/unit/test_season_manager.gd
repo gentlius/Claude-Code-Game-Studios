@@ -5,7 +5,7 @@ extends GutTest
 
 ## Reset SeasonManager's internal state before each test.
 func before_each() -> void:
-	SeasonManager.reset_for_testing()
+	SeasonManager.reset()
 
 
 # ─────────────────────────────────────────────
@@ -300,8 +300,9 @@ func test_is_season_active_false_before_start() -> void:
 
 
 func test_is_season_active_true_after_start() -> void:
-	# Arrange: simulate season start
-	SeasonManager._season_start_capital = 1_000_000
+	# Arrange: is_season_active() delegates to GameClock._season_active,
+	# which start_season() sets. Simulate that directly.
+	GameClock._season_active = true
 	# Assert
 	assert_true(SeasonManager.is_season_active(), "시즌 시작 후 → true")
 

@@ -1,46 +1,123 @@
-## Game entry point — initializes season and loads TradingScreen.
-## This replaces TestMain.tscn as the main scene for actual gameplay.
+## Game entry point. Flow: SplashScreen → StartScreen → (IntroSequence?) → MainScreen.
+## Manages top-level scene switching: Splash → Start → Main, and F4 Main → Start.
+## GDD: design/gdd/start-screen.md §3-1
 extends Node
 
-const IntroSequenceScript = preload("res://src/ui/intro_sequence.gd")
-var _intro: Node = null
+# ── Node References ──
+
+var _splash: Control = null
+var _start_screen: Control = null
+var _main_screen: Control = null
+var _intro: Control = null
+var _saving_overlay: Node = null
+
+## Track whether the current MainScreen was created via new game (needs initial save).
+var _pending_initial_save: bool = false
 
 
 func _ready() -> void:
-	# Apply white-base theme defaults (font colors, panel styles)
 	ThemeSetup.apply_base_theme(get_tree())
 
-	# 1. Load save data if present (GDD: save-load.md). Restores currency/portfolio/xp/skills/season.
-	#    If no save exists, init_first_season() runs normally below.
-	var save_loaded: bool = SaveSystem.load_game()
-	if not save_loaded:
-		CurrencySystem.init_first_season()
+	# SavingOverlay: CanvasLayer layer=10, stays alive for entire session
+	_saving_overlay = load("res://src/ui/saving_overlay.gd").new()
+	add_child(_saving_overlay)
 
-	# 2. Prime PortfolioManager cache so SeasonManager can read total_assets
-	#    when the player presses "시즌 시작" (cache is 0 until first tick otherwise).
-	#    SaveSystem.load_game() already calls update_valuation internally after price restore,
-	#    but call again here to cover the no-save (new game) path.
-	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)
-
-	# 3. 최초 실행 시 인트로 시퀀스 표시. GDD: design/gdd/intro-sequence.md (S5-06)
-	if not IntroSequenceScript.has_been_seen():
-		_intro = IntroSequenceScript.new()
-		add_child(_intro)
-		_intro.intro_finished.connect(_on_intro_finished)
-	else:
-		_load_main_screen()
+	_show_splash()
 
 
-func _on_intro_finished() -> void:
-	if _intro:
-		_intro.queue_free()
-		_intro = null
+# ── Splash ──
+
+func _show_splash() -> void:
+	_splash = load("res://src/ui/splash_screen.gd").new()
+	add_child(_splash)
+	_splash.splash_finished.connect(_on_splash_finished)
+
+
+func _on_splash_finished() -> void:
+	_splash.queue_free()
+	_splash = null
+	_show_start_screen()
+
+
+# ── Start Screen ──
+
+func _show_start_screen() -> void:
+	_start_screen = load("res://src/ui/start_screen.gd").new()
+	add_child(_start_screen)
+	_start_screen.slot_selected.connect(_on_slot_selected)
+	_start_screen.new_game_confirmed.connect(_on_new_game_confirmed)
+
+
+func _on_slot_selected(id: int) -> void:
+	_start_screen.queue_free()
+	_start_screen = null
+	_pending_initial_save = false
+
+	var ok: bool = SaveSystem.load_slot(id)
+	if not ok:
+		# 로드 실패 — StartScreen으로 복귀 (EC-10)
+		push_error("GameMain: 슬롯 %d 로드 실패 — StartScreen으로 복귀" % id)
+		_show_start_screen()
+		return
+
 	_load_main_screen()
 
 
+func _on_new_game_confirmed(slot_id: int) -> void:
+	_start_screen.queue_free()
+	_start_screen = null
+	_pending_initial_save = true
+
+	# Reset ALL autoloads so a new game starts from a clean slate.
+	# Order: GameClock first (stops ticks), then gameplay, then economy.
+	GameClock.reset()
+	NewsEventSystem.reset()
+	PriceEngine.reset()
+	OrderEngine.reset()
+	AiCompetitor.reset()
+	XpSystem.reset()
+	SkillTree.reset()
+	SeasonManager.reset()
+	PortfolioManager.reset()
+	CurrencySystem.reset()
+
+	# 모든 autoload 리셋 완료 — 가격 데이터를 DB에서 로드해 UI 생성 전에 유효 상태로 만든다.
+	# 이후 get_current_price()는 언제나 base_price를 반환하므로 UI fallback 불필요.
+	PriceEngine.init_first_season()
+
+	# slot_id는 SaveSystem.create_slot()이 이미 설정했으므로 active_slot_id가 맞음
+	CurrencySystem.init_first_season()
+	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)
+
+	# 인트로 시퀀스 — 새 게임 시 항상 재생 (GDD intro-sequence.md §3-1)
+	var IntroScript = load("res://src/ui/intro_sequence.gd")
+	_intro = IntroScript.new()
+	add_child(_intro)
+	_intro.intro_finished.connect(_on_intro_finished)
+
+
+func _on_intro_finished() -> void:
+	_intro.queue_free()
+	_intro = null
+	_load_main_screen()
+
+
+# ── Main Screen ──
+
 func _load_main_screen() -> void:
-	# 4. Load MainScreen (F1/F2/F3 tabs). Season start is triggered by the
-	#    "시즌 시작" button in TradingScreen's PRE_MARKET state (ADR-006, TD-08).
 	var screen_scene: PackedScene = load("res://src/ui/MainScreen.tscn")
-	var screen: Control = screen_scene.instantiate()
-	add_child(screen)
+	_main_screen = screen_scene.instantiate()
+	add_child(_main_screen)
+	_main_screen.exit_to_start_requested.connect(_on_exit_to_start_requested)
+
+	# 새 게임: MainScreen 준비 완료 후 초기 상태 1회 저장 (GDD §3-5 Step 6)
+	if _pending_initial_save and SaveSystem.active_slot_id >= 0:
+		_pending_initial_save = false
+		SaveSystem.save_slot(SaveSystem.active_slot_id)
+
+
+func _on_exit_to_start_requested() -> void:
+	# F4 나가기: MainScreen 제거 후 StartScreen 표시. 저장 없음(자동 저장 기반).
+	_main_screen.queue_free()
+	_main_screen = null
+	_show_start_screen()

@@ -48,6 +48,7 @@ var _tick_counter: int = 0
 ## Stored Callable refs for lambda disconnect (lambdas are unique per-instance)
 var _on_season_started_cb: Callable
 var _on_season_ended_cb: Callable
+var _on_day_transition_cb: Callable
 
 
 func _ready() -> void:
@@ -59,8 +60,11 @@ func _ready() -> void:
 	GameClock.on_tick.connect(_on_tick)
 	_on_season_started_cb = func(_tier: int, _is_free: bool) -> void: _refresh()
 	_on_season_ended_cb = func(_rank: int, _is_free: bool, _pct: float) -> void: _refresh()
+	# PRE_MARKET 진입 시 즉시 갱신 — 틱이 없어서 on_tick이 발화하지 않으므로 별도 연결 필요.
+	_on_day_transition_cb = func() -> void: _refresh()
 	SeasonManager.on_season_started.connect(_on_season_started_cb)
 	SeasonManager.on_season_ended.connect(_on_season_ended_cb)
+	GameClock.on_day_transition.connect(_on_day_transition_cb)
 
 
 func _exit_tree() -> void:
@@ -70,6 +74,8 @@ func _exit_tree() -> void:
 		SeasonManager.on_season_started.disconnect(_on_season_started_cb)
 	if SeasonManager.on_season_ended.is_connected(_on_season_ended_cb):
 		SeasonManager.on_season_ended.disconnect(_on_season_ended_cb)
+	if GameClock.on_day_transition.is_connected(_on_day_transition_cb):
+		GameClock.on_day_transition.disconnect(_on_day_transition_cb)
 
 
 # ── Refresh ──
@@ -120,7 +126,10 @@ func _update_left_panel() -> void:
 	_lbl_tier_name.text = tier_name
 
 	var tier_participants: int = _estimate_tier_participants(tier)
-	_lbl_tier_rank.text = tr("%d위 / %s명") % [tier_rank, _fmt_comma(tier_participants)]
+	if tier_rank > 0:
+		_lbl_tier_rank.text = tr("%d위 / %s명") % [tier_rank, _fmt_comma(tier_participants)]
+	else:
+		_lbl_tier_rank.text = tr("순위 집계 전")
 
 	_lbl_season_return.text = _fmt_pct(season_pct)
 	_lbl_season_return.add_theme_color_override("font_color",
@@ -192,12 +201,16 @@ func _update_leaderboard() -> void:
 
 	# AC-12: 글로벌 순위 — 내 티어 위의 모든 참가자 수 + 내 티어 순위 (ADR-007)
 	var tier_rank_val: int = SeasonManager.get_tier_rank()
-	var players_above: int = 0
-	for t: int in range(my_tier + 1, AiCompetitor.TIER_COUNT):
-		players_above += _estimate_tier_participants(t)
-	var global_rank: int = players_above + tier_rank_val
-	_global_rank_label.text = tr("글로벌: %d위 / %s명") % [global_rank, _fmt_comma(SeasonManager.TOTAL_PARTICIPANTS)]
-	_global_rank_label.visible = true
+	if tier_rank_val > 0:
+		var players_above: int = 0
+		for t: int in range(my_tier + 1, AiCompetitor.TIER_COUNT):
+			players_above += _estimate_tier_participants(t)
+		var global_rank: int = players_above + tier_rank_val
+		_global_rank_label.text = tr("글로벌: %d위 / %s명") % [global_rank, _fmt_comma(SeasonManager.TOTAL_PARTICIPANTS)]
+		_global_rank_label.visible = true
+	else:
+		_global_rank_label.text = tr("글로벌: 순위 집계 전")
+		_global_rank_label.visible = true
 
 
 func _add_row(entry: Dictionary) -> void:

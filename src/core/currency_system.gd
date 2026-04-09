@@ -18,7 +18,6 @@ const DEFAULT_SEASON_SEED: int = 1_000_000
 
 var _deposit: int = INITIAL_DEPOSIT
 var _sim_cash: int = 0
-var _season_active: bool = false
 
 # ── Public API: Queries ──
 
@@ -30,11 +29,6 @@ func get_sim_cash() -> int:
 ## Returns the permanent deposit balance (예수금).
 func get_deposit() -> int:
 	return _deposit
-
-
-## Returns true if a season is currently active.
-func is_season_active() -> bool:
-	return _season_active
 
 # ── Public API: Sim Cash Operations ──
 
@@ -66,7 +60,6 @@ func init_first_season(amount: int = DEFAULT_SEASON_SEED) -> void:
 		push_warning("CurrencySystem.init_first_season called on non-zero balance (%d) — ignoring" % _sim_cash)
 		return
 	_sim_cash = amount
-	_season_active = true
 	season_initialized.emit(amount)
 	sim_cash_changed.emit(_sim_cash, amount)
 
@@ -76,7 +69,6 @@ func init_first_season(amount: int = DEFAULT_SEASON_SEED) -> void:
 ## sim_add/sim_deduct directly, so the balance is already correct by the time
 ## this is called. Wiping _sim_cash here would erase carry-over funds.
 func settle_season() -> void:
-	_season_active = false
 	season_settled.emit()
 
 
@@ -88,11 +80,10 @@ func award_prize(amount: int) -> void:
 	deposit_changed.emit(_deposit, amount)
 
 
-## Resets volatile season state for unit tests. Call in before_each.
-## Does NOT reset _deposit — tests that need a clean deposit must set it directly.
-func reset_for_testing() -> void:
+## Resets all currency state. Called by GameMain (new game) and tests (before_each).
+func reset() -> void:
 	_sim_cash = 0
-	_season_active = false
+	_deposit = 0
 
 
 # ── Serialization ──
@@ -102,7 +93,6 @@ func get_save_data() -> Dictionary:
 	return {
 		"sim_cash": _sim_cash,
 		"deposit": _deposit,
-		"season_active": _season_active,
 	}
 
 
@@ -110,6 +100,5 @@ func get_save_data() -> Dictionary:
 func load_save_data(data: Dictionary) -> void:
 	_sim_cash = maxi(data.get("sim_cash", DEFAULT_SEASON_SEED), 0)
 	_deposit = maxi(data.get("deposit", INITIAL_DEPOSIT), 0)
-	_season_active = data.get("season_active", _sim_cash > 0)  # fallback for old saves
 	sim_cash_changed.emit(_sim_cash, 0)
 	deposit_changed.emit(_deposit, 0)

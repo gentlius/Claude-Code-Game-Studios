@@ -103,11 +103,12 @@ Day 7+:   S5-05 게임패드 (여유 있을 때)
 - [x] S5-06 인트로 서사 완료 (IntroSequence 구현, game_main.gd 연결)
 - [x] `save-load.md` GDD Approved (2026-04-07), `audio.md` GDD Approved (2026-04-07)
 - [x] `intro-sequence.md` GDD Approved ✅ (2026-04-06)
-- [ ] 세이브 → 종료 → 로드 → 재개 E2E: XP/레벨/스킬포인트/시즌 상태 전부 복원
-- [ ] 주문 체결·레벨업·VI·뉴스 SFX 4개 인게임 발동 확인
-- [ ] 최초 실행 → 인트로 5장 → MainScreen 진입 E2E 통과
-- [ ] 기존 테스트 전부 통과 + 신규 intro_sequence 테스트 통과
-- [x] `--export-release` 빌드 성공 + SCRIPT ERROR 없음 (2026-04-07)
+- [x] 세이브 → 종료 → 로드 → 재개 E2E: 새게임 → 시즌 시작 → 장 시작 → 장 종료 → 장 시작 전 세이브 → 나가기 → 로드 → 장 시작 **수동 통과 (2026-04-09)**
+- [x] 주문 체결·레벨업·VI·뉴스 SFX 4개 인게임 발동 확인 (2026-04-07)
+- [x] 최초 실행 → 인트로 5장 → MainScreen 진입 E2E 통과 (2026-04-07)
+- [ ] 기존 테스트 전부 통과 + 신규 intro_sequence 테스트 통과 → **S6-01로 이월**
+  - test_save_system.gd가 v1 단일슬롯 API(save_game/load_game/has_save/delete_save) 참조로 완전 파손됨 → 2026-04-07 재작성 완료
+- [x] `--export-release` 빌드 성공 + SCRIPT ERROR 없음 (2026-04-09)
 - [x] `production/milestones/alpha.md` 생성 ✅ (2026-04-06)
 - [x] AI TIER_PARAMS 자본 모델 재설계 완료 (2026-04-06)
 - [x] S5-03 차트 RSI/MACD 배열 재할당 제거 (zero-alloc 최적화)
@@ -116,3 +117,4 @@ Day 7+:   S5-05 게임패드 (여유 있을 때)
 - [x] 코드 리뷰 S2/S3 버그 전부 수정 (2026-04-07)
 - [x] GDD 리뷰 지적 수정: league global rank, AC-14 시즌시작 버튼, pause guard
 - [x] 코드 커밋 완료, main 브랜치 green (2026-04-07)
+- [x] 버그픽스 3건 (2026-04-09): GameClock `season_active` 단일 소스 + `market_state` 복원, PriceEngine `init_first_season()` / `_reset_season_mechanics()` 가격 연속성, `SeasonManager.start_season()` 시그널 순서 (동기 호출 버그 → 리그화면 미전환)

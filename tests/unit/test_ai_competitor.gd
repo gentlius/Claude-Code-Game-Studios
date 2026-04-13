@@ -11,25 +11,23 @@ const EPSILON: float  = 0.001  # AC-01 부동소수점 오차 허용값 (%)
 
 ## 표준 테스트용 init_season 호출 헬퍼.
 ## 브론즈 100명 기본값으로 초기화 (성능 테스트 외).
-## _season_active=true 강제: get_all_return_pcts / get_tier_return_pct는
-## MARKET_OPEN 이후에만 값을 반환하므로, 테스트는 장 개시 상태로 실행한다.
+## is_season_active()는 GameClock._season_active 위임 — 테스트에서 직접 설정.
+## get_all_return_pcts / get_tier_return_pct는 시즌 활성 상태에서만 값을 반환한다.
 func _init_standard(player_tier: int = AiCompetitor.TIER_BRONZE,
 		counts: Dictionary = { 0: 100 },
 		seed: int = SEED_FIXED) -> void:
 	AiCompetitor.init_season(player_tier, counts, seed)
-	AiCompetitor._season_active = true
+	GameClock._season_active = true
 
 
 func after_each() -> void:
-	# 시그널 중복 연결 방지를 위해 각 테스트 후 상태 초기화
 	AiCompetitor._initialized = false
-	AiCompetitor._season_active = false
 	AiCompetitor._tier_data.clear()
-	# 시그널 연결 해제 (연결되어 있을 때만)
+	GameClock._season_active = false
+	GameClock._current_day  = 0
+	GameClock._current_tick = 0
 	if GameClock.on_day_transition.is_connected(AiCompetitor._on_day_transition):
 		GameClock.on_day_transition.disconnect(AiCompetitor._on_day_transition)
-	if GameClock.on_tick.is_connected(AiCompetitor._on_tick):
-		GameClock.on_tick.disconnect(AiCompetitor._on_tick)
 
 
 # ── AC-01: 계약 인터페이스 정상 동작 (GDD §8 AC-03) ──
@@ -123,12 +121,12 @@ func test_ai_competitor_different_seed_different_result() -> void:
 	# tick을 1560/2로 설정해 progress>0이 되도록 함.
 	var counts: Dictionary = { AiCompetitor.TIER_BRONZE: 20 }
 	_init_standard(AiCompetitor.TIER_BRONZE, counts, 11111)
-	AiCompetitor._current_tick = 780  # 하루 중간 (TICKS_PER_DAY/2) — progress>0
+	GameClock._current_tick = 780  # 하루 중간 (TICKS_PER_DAY/2) — progress>0
 	var run_a: Array = AiCompetitor.get_all_return_pcts(AiCompetitor.TIER_BRONZE)
 
 	after_each()
 	_init_standard(AiCompetitor.TIER_BRONZE, counts, 22222)
-	AiCompetitor._current_tick = 780
+	GameClock._current_tick = 780
 	var run_b: Array = AiCompetitor.get_all_return_pcts(AiCompetitor.TIER_BRONZE)
 
 	# 다른 시드는 높은 확률로 다른 결과를 내야 함 (전체 배열 중 적어도 하나 다름)
@@ -229,11 +227,11 @@ func test_ai_competitor_out_of_range_participant_id_returns_zero() -> void:
 # ── EC-04: current_day=0 시 r_prev=0.0 ──
 
 func test_ai_competitor_first_day_interpolation_starts_from_zero() -> void:
-	# Arrange — 시즌 첫날, _current_day=0, _current_tick=0
+	# Arrange — 시즌 첫날, day=0, tick=0 (after_each에서 이미 0이지만 명시적으로 설정)
 	var counts: Dictionary = { AiCompetitor.TIER_BRONZE: 10 }
 	_init_standard(AiCompetitor.TIER_BRONZE, counts)
-	AiCompetitor._current_day = 0
-	AiCompetitor._current_tick = 0
+	GameClock._current_day  = 0
+	GameClock._current_tick = 0
 
 	# Act — 장 시작 직후 (tick=0): r_prev=0, progress=0 → return_pct ≈ 0
 	var result: float = AiCompetitor.get_tier_return_pct(0)
@@ -291,7 +289,7 @@ func test_ai_competitor_rank_estimation_within_tolerance() -> void:
 	var count: int = 7600
 	var counts: Dictionary = { AiCompetitor.TIER_BRONZE: count }
 	_init_standard(AiCompetitor.TIER_BRONZE, counts, SEED_FIXED)
-	AiCompetitor._current_tick = 780  # progress>0이어야 수익률 분포가 생김
+	GameClock._current_tick = 780  # progress>0이어야 수익률 분포가 생김
 
 	# 정확한 전체 수익률 수집
 	var all_r: Array = AiCompetitor.get_all_return_pcts(AiCompetitor.TIER_BRONZE)

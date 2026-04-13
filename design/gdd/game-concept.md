@@ -1,7 +1,7 @@
 # Game Concept: Seed Money (시드머니)
 
 *Created: 2026-03-25*
-*Status: Draft*
+*Status: Approved (2026-04-07)*
 
 ---
 

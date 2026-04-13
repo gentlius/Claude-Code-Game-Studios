@@ -52,3 +52,11 @@
 - [ADR-005](../../docs/architecture/005-season-manager-xp-ownership.md) — SeasonManager가 시즌 XP 지급 전권 소유
 - [ADR-006](../../docs/architecture/006-tab-scene-ownership.md) — MainScreen이 F1/F2/F3 탭 및 일시정지 단일 진입점
 - [ADR-007](../../docs/architecture/007-global-rank-statistical-fairness.md) — 글로벌 순위 return_pct 단일 정렬 + AI 파라미터 단조성 보장
+- [ADR-008](../../docs/architecture/008-leaderboard-sort-cache.md) — 리더보드 정렬·캐시 전략
+- [ADR-009](../../docs/architecture/009-multi-slot-save-architecture.md) — 인덱스+슬롯 분리 멀티슬롯 세이브 구조
+- [ADR-010](../../docs/architecture/010-game-entry-flow-ownership.md) — GameMain이 모든 최상위 화면 전환 소유
+- [ADR-011](../../docs/architecture/011-saving-overlay-canvas-layer.md) — SavingOverlay CanvasLayer(layer=10) 입력 차단 구현
+- [ADR-012](../../docs/architecture/012-gameclock-pause-reference-counting.md) — GameClock pause_request/release() 참조 카운팅 일시정지
+- [ADR-013](../../docs/architecture/013-trading-screen-component-split.md) — TradingScreen 5-컴포넌트 Facade 분리 (TD-04)
+- [ADR-014](../../docs/architecture/014-mainscreen-tab-scene-lifecycle.md) — MainScreen 탭 씬 visibility 토글 상주 방식
+- [ADR-015](../../docs/architecture/015-save-trigger-timing.md) — SaveSystem 저장 트리거 타이밍 (시즌/일별/초기 저장 순서)

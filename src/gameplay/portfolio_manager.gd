@@ -29,8 +29,13 @@ func _ready() -> void:
 
 
 func _on_season_start() -> void:
-	reset()
-	_initial_seed = CurrencySystem.DEFAULT_SEASON_SEED
+	# 보유 주식·거래 내역만 초기화. 캐시(sim_cash, total_assets)는 유지한다.
+	# reset()은 캐시도 0으로 밀어버려 update_valuation() 호출 전까지 UI가 0을 표시하는 버그 유발.
+	# _initial_seed = 이 시즌 시작 자본 (수익률 기준선). SeasonManager가 이미 스냅샷 완료.
+	_holdings.clear()
+	_transactions.clear()
+	_next_tx_id = 1
+	_initial_seed = SeasonManager.get_season_start_capital()
 
 # ── Public API: Queries ──
 
@@ -198,7 +203,7 @@ func update_valuation(sim_cash: int, reserved_cash: int) -> void:
 
 # ── Season Lifecycle ──
 
-## Reset portfolio for a new season.
+## Resets all portfolio state.
 func reset() -> void:
 	_holdings.clear()
 	_transactions.clear()
@@ -207,18 +212,13 @@ func reset() -> void:
 	_cached_return_rate = 0.0
 	_cached_sim_cash = 0
 	_cached_reserved_cash = 0
-
-
-## Resets all state including season baseline for unit tests. Call in before_each.
-func reset_for_testing() -> void:
-	reset()
 	_initial_seed = 0
 
 
 # ── Serialization ──
 
 ## Returns serializable state for save system (GDD: save-load.md).
-## Saves holdings only — transactions are ephemeral session data.
+## Saves holdings, initial_seed (return_rate baseline), and last 20 transactions.
 func get_save_data() -> Dictionary:
 	var holdings_data: Dictionary = {}
 	for stock_id: String in _holdings:
@@ -228,10 +228,16 @@ func get_save_data() -> Dictionary:
 			"avg_buy_price": h["avg_buy_price"],
 			"total_invested": h["total_invested"],
 		}
-	return {"holdings": holdings_data}
+	var tx_slice: Array = _transactions.slice(maxi(0, _transactions.size() - 20))
+	return {
+		"holdings": holdings_data,
+		"initial_seed": _initial_seed,
+		"next_tx_id": _next_tx_id,
+		"transactions": tx_slice,
+	}
 
 
-## Restores holdings from save data. Does not restore transactions (ephemeral).
+## Restores holdings, initial_seed, and recent transactions from save data.
 func load_save_data(data: Dictionary) -> void:
 	_holdings.clear()
 	var holdings_data: Dictionary = data.get("holdings", {})
@@ -239,15 +245,24 @@ func load_save_data(data: Dictionary) -> void:
 		var h: Dictionary = holdings_data[stock_id]
 		_holdings[stock_id] = {
 			"stock_id": stock_id,
-			"quantity": h.get("quantity", 0),
-			"avg_buy_price": h.get("avg_buy_price", 0),
-			"total_invested": h.get("total_invested", 0),
+			# JSON.parse_string() returns all numbers as float — cast to int explicitly
+			# to preserve type parity with values written by add_holding().
+			"quantity":       int(h.get("quantity", 0)),
+			"avg_buy_price":  int(h.get("avg_buy_price", 0)),
+			"total_invested": int(h.get("total_invested", 0)),
 			"first_buy_tick": 0,
 			"last_trade_tick": 0,
 			"current_value": 0,
 			"unrealized_pnl": 0,
 			"unrealized_pnl_pct": 0.0,
 		}
+	# Fallback to DEFAULT_SEASON_SEED for saves written before initial_seed was persisted.
+	_initial_seed = data.get("initial_seed", CurrencySystem.DEFAULT_SEASON_SEED)
+	_next_tx_id = data.get("next_tx_id", 1)
+	_transactions.clear()
+	for tx: Variant in data.get("transactions", []):
+		if tx is Dictionary:
+			_transactions.append(tx as Dictionary)
 
 # ── Internal ──
 

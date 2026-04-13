@@ -4,7 +4,7 @@ extends GutTest
 
 
 func before_each() -> void:
-	GameClock.reset_for_testing()
+	GameClock.reset()
 
 
 # ─────────────────────────────────────────────
@@ -78,16 +78,16 @@ func test_pause_request_noop_when_not_market_open() -> void:
 		"PRE_MARKET에서 pause_request → 상태 변경 없음")
 
 
-func test_reset_for_testing_clears_pause_sources() -> void:
+func test_reset_clears_pause_sources() -> void:
 	# Arrange: add a pause source
 	GameClock._market_state = GameClock.MarketState.MARKET_OPEN
 	GameClock.pause_request("some_source")
 
 	# Act
-	GameClock.reset_for_testing()
+	GameClock.reset()
 
 	# Assert: sources cleared — release after reset should not affect state
 	GameClock._market_state = GameClock.MarketState.MARKET_OPEN
 	GameClock.pause_release("some_source")  # stale call after reset
 	assert_eq(GameClock.get_market_state(), GameClock.MarketState.MARKET_OPEN,
-		"reset_for_testing 후 누적된 소스 없음")
+		"reset 후 누적된 소스 없음")

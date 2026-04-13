@@ -8,37 +8,74 @@
 
 ## 1. Overview
 
-단일 슬롯 자동 저장 시스템. 장 마감(on_market_close)마다 자동으로 JSON 파일에 저장하고,
-앱 시작 시 파일이 있으면 자동으로 로드한다. XP·레벨·스킬·시즌 상태·포트폴리오·현금을
-모두 복원해 게임을 재개할 수 있게 한다.
+멀티 슬롯 자동 저장 시스템. 슬롯마다 `user://save_slot_{id}.json`에 데이터를 저장하고,
+슬롯 목록은 `user://save_index.json`으로 관리한다.
+장 마감(on_market_close)마다 활성 슬롯에 자동 저장하며, 저장 중에는 전체화면 스피너
+오버레이로 진행을 알리고 유저 입력을 차단한다.
+XP·레벨·스킬·시즌 상태·포트폴리오·현금을 모두 복원해 게임을 재개할 수 있게 한다.
 
-멀티 슬롯과 클라우드 동기화는 Beta 이관.
+클라우드 동기화는 Beta 이관.
 
 ---
 
 ## 2. Player Fantasy
 
 앱을 꺼도 내 포지션, XP, 스킬트리가 그대로다.
-다음 날 켜면 어제 장 마감 이후부터 이어서 플레이할 수 있다.
+여러 슬롯에서 서로 다른 도전을 번갈아 플레이할 수 있다.
+저장 중임을 알 수 있으며, 저장이 완료되기 전에는 나가지 않는다.
 
 ---
 
 ## 3. Detailed Design
 
-### 3-1 SaveSystem Autoload
+### 3-1 파일 구조
+
+| 파일 | 역할 |
+|------|------|
+| `user://save_index.json` | 슬롯 목록 + 메타데이터 캐시 (레벨·시즌·날짜·평가금액) |
+| `user://save_slot_{id}.json` | 슬롯별 전체 게임 상태 |
+
+`save_index.json` 형식:
+```json
+{
+  "index_version": 1,
+  "slots": [
+    {
+      "id": 0,
+      "name": "나의 첫 도전",
+      "level": 4,
+      "season_number": 2,
+      "fiction_week": 2,
+      "fiction_day": 3,
+      "portfolio_value": 1250000,
+      "saved_at": 1712345678
+    }
+  ]
+}
+```
+
+`save_slot_{id}.json` 형식: §3-4 참조 (`save_version`: 2).
+
+### 3-2 SaveSystem Autoload
 
 - 파일: `src/core/save_system.gd`
 - 클래스: `SaveSystem` (autoload)
-- 저장 경로: `user://save_data.json`
+- 공개 프로퍼티: `active_slot_id: int` — 현재 로드된 슬롯 ID (-1이면 미로드)
 
-### 3-2 저장 타이밍
+### 3-3 저장 타이밍
 
 | 트리거 | 설명 |
 |-------|------|
-| `GameClock.on_market_close` | 매일 장 마감 후 자동 저장 |
-| `SeasonManager.on_season_ended` | 시즌 종료 후 자동 저장 |
+| `GameClock.on_market_close` | 매일 장 마감 후 활성 슬롯 자동 저장 |
+| `SeasonManager.on_season_ended` | 시즌 종료 후 활성 슬롯 자동 저장 |
+| 새 게임 진입 직후 | `MainScreen._ready()` 완료 후 초기 상태 1회 저장 |
 
-### 3-3 직렬화 대상 시스템 (8개)
+저장 흐름:
+1. `save_started` 시그널 emit → `SavingOverlay` 표시, 입력 차단
+2. 직렬화 → 파일 쓰기 → `save_index.json` 메타 갱신
+3. `save_completed` 시그널 emit → `SavingOverlay` 해제
+
+### 3-4 직렬화 대상 시스템 (8개)
 
 | 시스템 | 저장 필드 |
 |--------|----------|
@@ -58,6 +95,7 @@
 | `GameClock._current_tick` | 장 마감 후 저장 → 로드 시 항상 0 (새 거래일 시작) | 0 | 없음 |
 | `GameClock.MarketState` | 로드 후 항상 PRE_MARKET에서 재개 | PRE_MARKET | 없음 |
 | `PriceEngine` 마코프 상태 | 세션 초기화 허용 — 가격·bias·차트 데이터는 복원됨 | SIDEWAYS | 없음 (Markov는 세션 스코프) |
+| `PriceEngine` 호가창 | KRX 미체결 잔량은 장 마감 시 초기화. 다음 날 장 시작 시 재생성 (`order-book.md`) | 빈 상태 | 없음 |
 | `OrderEngine` 미체결 주문 | 장 마감 후 저장 → 미체결 주문 없음 | 빈 큐 | 없음 |
 | `NewsEventSystem` 딜레이 큐 | 장 마감 후 저장 → 큐 비어있음 | 빈 큐 | 없음 |
 
@@ -66,7 +104,7 @@
 > **season_active**: 잔고 0인 시즌(파산 직전) 상태를 잔고로 추론하면 비활성으로 오복원. 명시적 저장 필요.  
 > **current_day / current_week**: 미복원 시 항상 week=0, day=0으로 리셋 → 3주차에 저장하면 로드 후 5일 뒤에 "1주차 종료" 이벤트 발생. 주간 보상·시즌 종료 타이밍 오작동.
 
-### 3-4 저장 포맷 (JSON)
+### 3-5 저장 포맷 (save_slot_{id}.json)
 
 ```json
 {
@@ -106,34 +144,59 @@
 }
 ```
 
-### 3-5 로드 타이밍
+### 3-6 로드 타이밍
 
-`game_main.gd` `_ready()` 에서 `CurrencySystem.init_first_season()` 호출 **직전**에
-`SaveSystem.load_game()` 호출.
+`StartScreen`에서 슬롯 클릭 → `SaveSystem.load_slot(id)` 호출 → 각 시스템 `load_save_data()` 복원 → MainScreen 진입.
 
-세이브 파일이 없으면 `init_first_season()` 을 정상 실행(새 게임).
-세이브 파일이 있으면 `init_first_season()` 을 건너뛰고 저장된 값을 복원.
+새 게임의 경우: `StartScreen`이 `IntroSequence.play()` → `MainScreen._ready()` → `SaveSystem.save_slot(id)` (초기 상태 저장).
 
-### 3-6 마이그레이션
+### 3-7 마이그레이션
 
-`save_version` 필드 불일치 시:
-- 알려진 필드만 로드, 나머지는 시스템 기본값 사용.
-- `push_warning` 으로 로그 출력.
-- 게임플레이 차단하지 않음.
+**v1 단일 슬롯 → 멀티 슬롯 자동 마이그레이션**:  
+`user://save_data.json` 존재 + `user://save_index.json` 없음 → 앱 시작 시 자동 실행:
+1. `save_data.json` → `save_slot_0.json` 복사
+2. `save_slot_0.json`의 데이터로 `save_index.json` 생성 (슬롯 이름: "슬롯 1")
+3. `save_data.json` 삭제
+4. `push_warning("save_data.json migrated to slot 0")`
+
+**save_version 불일치** 시:
+- 알려진 필드만 로드, 나머지는 시스템 기본값.
+- `push_warning` 로그, 게임플레이 차단 없음.
+
+### 3-8 SavingOverlay
+
+저장 진행 중임을 알리는 전체화면 UI 컴포넌트.
+
+| 항목 | 규격 |
+|------|------|
+| 씬 위치 | MainScreen 루트의 최상단 레이어 (CanvasLayer layer=10) |
+| 배경 | `#000000` 반투명 오버레이 (alpha 0.6) |
+| 스피너 | 인디케이터 원형 스피너, 48px, `#ebebeb`, 중앙 배치 |
+| 텍스트 | "저장 중..." 14px, 스피너 하단 8px |
+| 입력 차단 | 오버레이 Panel `mouse_filter = MOUSE_FILTER_STOP`, 하위 노드 비활성화 불필요 |
+| 표시 트리거 | `SaveSystem.save_started` 시그널 |
+| 해제 트리거 | `SaveSystem.save_completed` 시그널 |
+| F4 차단 | `trading_screen.gd`가 `SavingOverlay.visible`을 체크해 F4 무반응 처리 |
 
 ---
 
 ## 4. Formulas
 
-저장: `JSON.stringify(data, "\t")` — data는 각 시스템 get_save_data() 결과를 합친 딕셔너리  
+저장: `JSON.stringify(data, "\t")` — data는 각 시스템 `get_save_data()` 결과를 합친 딕셔너리  
 로드: `JSON.parse_string(text)` → `Dictionary` 캐스팅 → 각 시스템 `load_save_data(sub_dict)` 호출
+
+**save_index 메타 갱신** (저장 시마다):
+```
+portfolio_value = CurrencySystem.sim_cash
+                + Σ(holding.quantity × PriceEngine.get_current_price(stock_id))
+```
 
 **직렬화 예시**:
 - `_unlocked_skills = {"A1": true, "S1": true}` → `"unlocked_skills": ["A1", "S1"]`
 - `_holdings = {"005930": {...}}` → JSON 그대로 직렬화
 - `total_xp = 1500` → `"total_xp": 1500`
 
-**범위 보증**: 로드 시 `maxi(data.get("field", default), 0)` 패턴으로 음수 방지. 포맷이 올바르면 데이터 손실 없음.
+**범위 보증**: 로드 시 `maxi(data.get("field", default), 0)` 패턴으로 음수 방지.
 
 ---
 
@@ -141,21 +204,29 @@
 
 | Code | 상황 | 처리 |
 |------|------|------|
-| EC-01 | 파일 없음 (첫 실행) | 새 게임으로 정상 시작 |
-| EC-02 | 저장 파일 열기 실패 | push_warning, 게임 차단 없음 |
-| EC-03 | JSON 파싱 실패 | push_error, 새 게임 시작 |
-| EC-04 | save_version 불일치 | 알려진 필드만 로드, push_warning |
-| EC-05 | 포트폴리오 빈 상태로 저장 | holdings: {} 정상 복원 |
-| EC-06 | 저장 중 디스크 공간 부족 | push_warning, 기존 파일 유지 |
-| EC-07 | 세이브 파일 변조 — 선행조건 없는 스킬 해금 | SkillTree.load_save_data()가 선행조건 미충족 스킬을 탐지·제거. 연쇄 무효화(A2 의존 A3도 제거). push_warning 로그. 정상 해금된 스킬은 영향 없음 |
+| EC-01 | `save_index.json` 없음 (첫 실행) | 빈 슬롯 목록, 새 게임으로 정상 시작 |
+| EC-02 | 슬롯 파일 열기 실패 | `push_warning`, StartScreen 복귀, 알림 팝업 |
+| EC-03 | JSON 파싱 실패 | `push_error`, 슬롯 카드에 "⚠ 손상된 파일" 표시 |
+| EC-04 | save_version 불일치 | 알려진 필드만 로드, `push_warning` |
+| EC-05 | 포트폴리오 빈 상태로 저장 | `holdings: {}` 정상 복원 |
+| EC-06 | 저장 중 디스크 공간 부족 | `push_warning`, 기존 파일 유지, `save_completed` emit (실패 상태로) |
+| EC-07 | 세이브 파일 변조 — 선행조건 없는 스킬 해금 | `SkillTree.load_save_data()`가 선행조건 미충족 스킬 탐지·제거. 연쇄 무효화. `push_warning`. |
+| EC-08 | `save_data.json` 존재 (구버전 단일 슬롯) | §3-7 마이그레이션 자동 실행 |
+| EC-09 | 저장 중 앱 강제 종료 | 이전 정상 저장 파일 유지 (원자적 쓰기: 임시 파일 → rename) |
+
+> **EC-09 원자적 쓰기**: `save_slot_{id}.tmp`에 먼저 기록 후 `save_slot_{id}.json`으로 rename. Godot `FileAccess`는 rename 미지원이므로 임시 파일 쓰기 후 원본 삭제 → 임시 파일 이름 변경 순서.
 
 ---
 
 ## 6. Dependencies
 
-- `XpSystem`, `SkillTree`, `SeasonManager` — 이미 get_save_data/load_save_data 구현됨
-- `CurrencySystem`, `PortfolioManager` — 이번 스프린트에서 추가
+- `XpSystem`, `SkillTree`, `SeasonManager` — `get_save_data` / `load_save_data` 구현됨
+- `CurrencySystem`, `PortfolioManager` — S5-01에서 추가됨
+- `PriceEngine` — `get_save_data` / `initialize_for_load()` 구현됨
+- `AiCompetitor` — `get_save_data` / `load_save_data` 구현됨
 - `GameClock.on_market_close`, `SeasonManager.on_season_ended` 시그널
+- `StartScreen` — `load_slot()` / `delete_slot()` / `get_slot_list()` 호출자 (`start-screen.md`)
+- `SavingOverlay` — `save_started` / `save_completed` 시그널 구독자 (`trading-screen.md`)
 
 ---
 
@@ -163,8 +234,10 @@
 
 | 이름 | 기본값 | 안전 범위 | 게임플레이 영향 |
 |------|--------|-----------|----------------|
-| `SAVE_VERSION` | 1 | 1 이상 정수, 절대 감소 금지 | 필드 추가·삭제 시 increment. 낮추면 신규 세이브를 구버전으로 잘못 해석 |
-| `SAVE_PATH` | `user://save_data.json` | Godot `user://` 접두사 유지 | 변경 시 기존 세이브 접근 불가 — 변경 금지 또는 마이그레이션 필수 |
+| `SAVE_VERSION` | 2 | 1 이상 정수, 절대 감소 금지 | 필드 추가·삭제 시 increment. 낮추면 신규 세이브를 구버전으로 잘못 해석 |
+| `INDEX_VERSION` | 1 | 1 이상 정수, 절대 감소 금지 | `save_index.json` 포맷 변경 시 increment |
+| `SAVE_PATH_SLOT` | `user://save_slot_{id}.json` | `user://` 접두사 유지 | 변경 시 기존 슬롯 접근 불가 |
+| `SAVE_INDEX_PATH` | `user://save_index.json` | `user://` 접두사 유지 | 변경 시 슬롯 목록 유실 |
 
 ---
 
@@ -172,15 +245,20 @@
 
 | AC | 조건 |
 |----|------|
-| AC-01 | `save_game()` 호출 후 `user://save_data.json` 파일 생성 |
+| AC-01 | `save_slot_{id}.json` 파일 생성 확인 |
 | AC-02 | 로드 후 XP/레벨/스킬포인트 정확히 복원 |
 | AC-03 | 세이브 → 종료 → 로드 → 재개 E2E 통과 |
 | AC-04 | 보유 주식(종목·수량·평균단가) 복원 |
 | AC-05 | 시즌 상태(티어·시즌시작자본) 복원 |
 | AC-06 | sim_cash·deposit 복원 |
-| AC-07 | 파일 없을 때 새 게임 정상 시작 |
+| AC-07 | 슬롯 없을 때 새 게임 정상 시작 |
 | AC-08 | 저장 실패 시 게임플레이 차단 없음 |
 | AC-09 | save_version 불일치 시 알려진 필드만 로드, 경고만 출력 |
+| AC-10 | 저장 중 SavingOverlay 표시, 입력 차단 |
+| AC-11 | save_completed 시 SavingOverlay 해제 |
+| AC-12 | `save_data.json` 존재 시 slot_0으로 자동 마이그레이션 |
+| AC-13 | save_index.json에 레벨·시즌·픽션날짜·평가금액 정확히 기록 |
+| AC-14 | 멀티 슬롯 독립 저장·로드 (슬롯 A 로드가 슬롯 B 파일에 영향 없음) |
 
 ---
 
@@ -189,31 +267,36 @@
 Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 진입점
-- `game_main.gd._ready()` → `SaveSystem.load_game()` (init_first_season 이전)
-- `GameClock.on_market_close` → `SaveSystem.save_game()`
-- `SeasonManager.on_season_ended` → `SaveSystem.save_game()`
+- `StartScreen.slot_selected(id)` → `SaveSystem.load_slot(id)`
+- `StartScreen.new_game_confirmed(name)` → `SaveSystem.create_slot(name)` → `MainScreen._ready()` → `SaveSystem.save_slot(active_slot_id)`
+- `GameClock.on_market_close` → `SaveSystem.save_slot(active_slot_id)`
+- `SeasonManager.on_season_ended` → `SaveSystem.save_slot(active_slot_id)`
 
 ### 호출 경로
-- [x] `SaveSystem.save_game()` → 5개 시스템 `get_save_data()` 수집 → JSON 기록
-- [x] `SaveSystem.load_game()` → JSON 읽기 → 5개 시스템 `load_save_data()` 복원
-- [x] `CurrencySystem.get_save_data()` / `load_save_data()` — 이번 스프린트 추가
-- [x] `PortfolioManager.get_save_data()` / `load_save_data()` — 이번 스프린트 추가
-- [x] `PriceEngine.get_save_data()` / `initialize_for_load()` — ohlcv_daily + tick_prices + tick_volumes + season_bias 전체 복원 (단일 패스, _initialize_season() 미호출)
-- [x] `AiCompetitor.get_save_data()` / `load_save_data()` — seed 저장으로 순위 결정론적 재현
+- [x] `SaveSystem.save_slot(id)` → emit `save_started` → 8개 시스템 `get_save_data()` → JSON 기록 → index 갱신 → emit `save_completed`
+- [x] `SaveSystem.load_slot(id)` → JSON 읽기 → 8개 시스템 `load_save_data()` 복원
+- [x] `SaveSystem.get_slot_list()` → `save_index.json` 읽기 → `Array[Dictionary]` 반환
+- [x] `SaveSystem.create_slot(name)` → 새 ID 할당 → `save_index.json` 갱신 → `active_slot_id` 세팅
+- [x] `SaveSystem.delete_slot(id)` → `save_slot_{id}.json` 삭제 → `save_index.json` 갱신
+- [x] `SavingOverlay` — `save_started` / `save_completed` 구독, `mouse_filter = STOP`
 - [x] `SaveSystem` autoload → `project.godot` 등록
+- [x] v1 마이그레이션: `save_data.json` 감지 → slot_0 변환 → index 생성
 
 ### AC → 테스트 매핑
 | AC | 테스트 파일 | 테스트 함수 |
 |----|------------|------------|
-| AC-01 | `tests/unit/test_save_system.gd` | `test_save_game_creates_file()` |
-| AC-02 | `tests/unit/test_save_system.gd` | `test_load_game_restores_xp()` |
-| AC-03 | E2E 수동 테스트 | 세이브 → 앱 재시작 → 로드 → 시즌/XP/포트폴리오 동일 확인 |
-| AC-04 | `tests/unit/test_save_system.gd` | `test_load_game_restores_holdings()` |
-| AC-05 | `tests/unit/test_save_system.gd` | `test_load_game_restores_season()` |
-| AC-06 | `tests/unit/test_save_system.gd` | `test_load_game_restores_currency()` |
-| AC-07 | `tests/unit/test_save_system.gd` | `test_load_game_no_file_starts_fresh()` |
+| AC-01 | `tests/unit/test_save_system.gd` | `test_save_slot_creates_file()` |
+| AC-02 | `tests/unit/test_save_system.gd` | `test_load_slot_restores_xp()` |
+| AC-03 | E2E 수동 테스트 | 세이브 → 앱 재시작 → 슬롯 선택 → 시즌/XP/포트폴리오 동일 확인 |
+| AC-04 | `tests/unit/test_save_system.gd` | `test_load_slot_restores_holdings()` |
+| AC-05 | `tests/unit/test_save_system.gd` | `test_load_slot_restores_season()` |
+| AC-06 | `tests/unit/test_save_system.gd` | `test_load_slot_restores_currency()` |
+| AC-07 | `tests/unit/test_save_system.gd` | `test_no_slots_starts_fresh()` |
 | AC-08 | `tests/unit/test_save_system.gd` | `test_save_failure_does_not_block_gameplay()` |
-| AC-09 | `tests/unit/test_save_system.gd` | `test_load_game_version_mismatch_loads_known_fields()` |
+| AC-09 | `tests/unit/test_save_system.gd` | `test_load_version_mismatch_loads_known_fields()` |
+| AC-12 | `tests/unit/test_save_system.gd` | `test_v1_migration_creates_slot_0()` |
+| AC-13 | `tests/unit/test_save_system.gd` | `test_index_meta_portfolio_value_correct()` |
+| AC-14 | `tests/unit/test_save_system.gd` | `test_multi_slot_independence()` |
 
 ### 빌드 검증
 - [x] 바이너리 실행 확인: QA Lead 서명 2026-04-07 (SCRIPT ERROR 0, AiCompetitor push_error는 시즌 미시작 예상 동작 — 기존과 동일)

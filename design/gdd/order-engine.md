@@ -566,7 +566,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `OrderEngine.get_season_trade_count() -> int` 존재
 - [x] `OrderEngine.get_order_history(limit) -> Array[Dictionary]` 존재
 - [x] `OrderEngine.on_order_filled(order)` 시그널 존재
-- [x] `OrderEngine.reset_for_testing()` 존재
+- [x] `OrderEngine.reset()` 존재
 - [x] `ORDER_HISTORY_MAX_SIZE = 500` 상수 존재 (S3-09 cap 추가)
 
 ### AC → 테스트 매핑

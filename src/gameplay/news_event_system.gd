@@ -92,6 +92,11 @@ var _daily_mega_fired: bool = false            ## MEGA already fired today
 var _news_delay_queue: Array[Dictionary] = [] ## Pending news items awaiting display
 var _overnight_buffer: Array[Dictionary] = [] ## Events for next morning
 
+## Display-only entries restored from a save. Delivered to NewsFeed when it calls
+## get_and_clear_loaded_news() in _ready(). MarketEvent objects are NOT re-pushed
+## (price effects are already reflected in PriceEngine's saved state).
+var _loaded_news_bundle: Array[Dictionary] = []
+
 ## Cooldown tracking: template_id (or template_id+stock_id) -> last_used_tick
 var _cooldown_tracker: Dictionary = {}
 ## Recent INDIVIDUAL targets: stock_id -> last_event_tick
@@ -143,11 +148,62 @@ static func _minutes_to_ticks(minutes: int) -> int:
 	return minutes * GameClock.TICKS_PER_MINUTE
 
 
-## Resets volatile intraday/queue state for unit tests. Call in before_each.
-func reset_for_testing() -> void:
+## Saves pending overnight display entries. MarketEvent objects cannot be serialized;
+## price effects are already captured in PriceEngine.get_save_data(). On load, these
+## entries are delivered to NewsFeed when it calls get_and_clear_loaded_news() in _ready().
+func get_save_data() -> Dictionary:
+	var entries: Array = []
+	for e: Dictionary in _overnight_buffer:
+		entries.append({
+			"headline":         e.get("headline",         ""),
+			"body":             e.get("body",             ""),
+			"impact_hint":      e.get("impact_hint",      ""),
+			"scope":            e.get("scope",            "MACRO"),
+			"impact_tier":      e.get("impact_tier",      "SMALL"),
+			"direction":        e.get("direction",        ""),
+			"target_stock_ids": e.get("target_stock_ids", []),
+		})
+	return {"overnight_display": entries}
+
+
+## Restores pending overnight news from save. Does NOT re-push MarketEvents.
+## NewsFeed._ready() calls get_and_clear_loaded_news() to display these.
+func load_save_data(data: Dictionary) -> void:
+	_loaded_news_bundle.clear()
+	for e: Dictionary in data.get("overnight_display", []):
+		_loaded_news_bundle.append({
+			"headline":         e.get("headline",         ""),
+			"body":             e.get("body",             ""),
+			"impact_hint":      e.get("impact_hint",      ""),
+			"scope":            e.get("scope",            "MACRO"),
+			"impact_tier":      e.get("impact_tier",      "SMALL"),
+			"direction":        e.get("direction",        ""),
+			"target_stock_ids": e.get("target_stock_ids", []),
+			"display_tick":     0,
+			"is_pre_market":    true,
+		})
+	# Must be READY so _on_market_open() calls _generate_daily_schedule() instead of
+	# returning early. Default UNINITIALIZED silently suppresses all intraday news.
+	_state = SystemState.READY
+
+
+## Returns and clears the news bundle restored from a save.
+## Called by NewsFeed._ready() so late-joining UI receives pre-market news.
+func get_and_clear_loaded_news() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for e: Dictionary in _loaded_news_bundle:
+		result.append(e)
+	_loaded_news_bundle.clear()
+	return result
+
+
+## Resets all news state. Called by GameMain (new game) and tests (before_each).
+func reset() -> void:
+	_overnight_buffer.clear()
 	_daily_mutex.clear()
 	_news_delay_queue.clear()
 	_daily_event_count = 0
+	_loaded_news_bundle.clear()
 	_state = SystemState.UNINITIALIZED
 
 
@@ -195,7 +251,7 @@ func _on_market_close() -> void:
 	_generate_overnight_events()
 
 
-func _on_day_transition(_day: int) -> void:
+func _on_day_transition() -> void:
 	if _state == SystemState.UNINITIALIZED:
 		return
 	_generate_overnight_disclosures()
@@ -793,7 +849,10 @@ func _deliver_pre_market_news() -> void:
 		_season_stats["by_impact"][entry["impact_tier"]] = _season_stats["by_impact"].get(entry["impact_tier"], 0) + 1
 
 	on_pre_market_news.emit(news_bundle)
-	_overnight_buffer.clear()
+	# _overnight_buffer는 여기서 clear하지 않는다 (ADR-015 개정).
+	# 저장 시점이 PRE_MARKET(deliver 직후)이므로, 버퍼가 살아있어야
+	# get_save_data()가 당일 뉴스를 overnight_display에 포함할 수 있다.
+	# 버퍼 클리어는 다음 날 _generate_overnight_events() 첫 줄이 담당한다.
 
 
 func _select_overnight_template(scope: String, impact: String) -> Dictionary:

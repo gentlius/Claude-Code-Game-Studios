@@ -349,7 +349,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `XpSystem.get_available_skill_points() -> int` 존재
 - [x] `XpSystem.on_xp_gained(amount, source)` 시그널 존재
 - [x] `XpSystem.on_level_up(new_level, skill_points)` 시그널 존재
-- [x] `XpSystem.reset_for_testing()` 존재
+- [x] `XpSystem.reset()` 존재
 
 ### AC → 테스트 매핑
 

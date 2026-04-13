@@ -435,7 +435,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `SeasonManager.get_tier_rank() -> int` 공개 API 존재 (LeagueScreen용, S3-05 추가)
 - [x] `SeasonManager.get_weekly_trade_count() -> int` 공개 API 존재 (LeagueScreen용, S3-05 추가)
 - [x] `SeasonManager.is_season_trade_eligible() -> bool` 공개 API 존재 (LeagueScreen용, S3-05 추가)
-- [x] `SeasonManager.reset_for_testing()` 존재 (테스트 격리)
+- [x] `SeasonManager.reset()` 존재 (테스트 격리)
 
 ### AC → 테스트 매핑
 
@@ -453,7 +453,10 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | AC-11~13 특별 보상 | `tests/unit/test_season_manager.gd` | `test_weekly_prize_*` | ✅ 구현됨 |
 | is_season_active (S3-03) | `tests/unit/test_season_manager.gd` | `test_is_season_active_*` | ✅ 구현됨 |
 | get_leaderboard (S3-03) | `tests/unit/test_season_manager.gd` | `test_get_leaderboard_*` | ✅ 구현됨 |
-| AC-16 처리 순서 | 통합 테스트 — E2E 검증 (S3-07) | — | ⬜ 미확인 |
+| AC-10 상금 입금 | `tests/unit/test_season_manager.gd` | `test_bronze_first_prize_amount()` | ✅ 구현됨 |
+| AC-14 타이브레이커 | `tests/unit/test_season_manager.gd` | `test_tie_breaker_by_join_timestamp()` | ✅ 구현됨 |
+| AC-15 거장 AI | `tests/unit/test_season_manager.gd` | `test_master_tier_in_leaderboard()` | ✅ 구현됨 |
+| AC-16 처리 순서 | 통합 테스트 — E2E 검증 (S3-07) | — | ⬜ S6-01 E2E 검증 중 |
 | AC-17~20 프리마켓 XP | `tests/unit/test_season_manager.gd` | `test_free_market_xp_*` | ✅ 구현됨 |
 
 ### 빌드 검증

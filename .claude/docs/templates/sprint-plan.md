@@ -61,10 +61,12 @@
 
 - [ ] All Must Have tasks completed and passing acceptance criteria
 - [ ] No S1 or S2 bugs in delivered features
-- [ ] Code reviewed and merged to develop
-- [ ] Design documents updated for any deviations from spec
+- [ ] Code reviewed and merged to develop (Code Review Checklist "GDD 동기화" 4항목 + "ADR 동기화" 4항목 통과)
+- [ ] **이 스프린트에서 구현된 모든 시스템의 GDD Status = Approved** (미완이면 In Review + 미완 항목 명시)
+- [ ] **이 스프린트에서 내린 아키텍처 결정이 모두 ADR로 작성됨** (Technical Director 서명)
 - [ ] Test cases written and executed for all new features
 - [ ] Asset naming and format standards met
+- [ ] `--export-release` 빌드 성공 + SCRIPT ERROR 없음. QA Lead 서명.
 
 ## Daily Status Tracking
 

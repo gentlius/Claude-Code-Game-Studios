@@ -273,7 +273,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `SkillTree.is_skill_unlocked(skill_id: String) -> bool` 존재
 - [x] `SkillTree.can_unlock(skill_id: String) -> bool` 존재
 - [x] `SkillTree.on_skill_unlocked(skill_id)` 시그널 존재
-- [x] `SkillTree.reset_for_testing()` 존재
+- [x] `SkillTree.reset()` 존재
 
 ### AC → 테스트 매핑
 

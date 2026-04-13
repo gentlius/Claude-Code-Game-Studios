@@ -1138,7 +1138,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `PriceEngine.get_market_index() -> float` 존재
 - [x] `PriceEngine.on_vi_triggered(stock_id, is_upper, halt_ticks)` 시그널 존재
 - [x] `PriceEngine.on_circuit_breaker(stage, halt_ticks)` 시그널 존재
-- [x] `PriceEngine.reset_for_testing()` 존재
+- [x] `PriceEngine.reset()` 존재
 
 ### AC → 테스트 매핑
 

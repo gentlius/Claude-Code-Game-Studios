@@ -416,7 +416,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `PortfolioManager.get_total_assets() -> int` 존재
 - [x] `PortfolioManager.get_all_holdings() -> Array[Dictionary]` 존재
 - [x] `PortfolioManager.update_valuation(cash, reserved)` 존재
-- [x] `PortfolioManager.reset_for_testing()` 존재
+- [x] `PortfolioManager.reset()` 존재
 
 ### AC → 테스트 매핑
 

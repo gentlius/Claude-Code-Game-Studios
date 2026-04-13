@@ -257,7 +257,7 @@ total_season_days = weeks_per_season * 5
 - [x] 장 마감 후 일일 정산 리포트가 표시되고, 확인 전까지 다음 날로 진행하지 않는다
 - [x] 주말 스킵 시 주간 리포트가 표시된다
 - [x] 시즌 종료 시 daily→weekly→season 순차 리포트가 표시된다
-- [ ] 4x 배속 중 뉴스 이벤트 발생 시 자동으로 1x로 감속된다 — MVP 스코프 (Sprint 1 이후). `auto_slow_on_event` 튜닝 knob으로 on/off
+- [x] 4x 배속 중 뉴스 이벤트 발생 시 자동으로 1x로 감속된다. `auto_slow_on_event` 튜닝 knob으로 on/off
 - [x] `get_market_state()`가 정확한 현재 상태를 반환한다
 - [x] 틱 시그널이 모든 구독 시스템(가격 엔진, 뉴스)에 정확히 전달된다
 - [x] 배속 전환 시 틱 누락이 발생하지 않는다
@@ -300,7 +300,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `GameClock.toggle_pause()` 존재
 - [x] `GameClock.set_speed(multiplier: float)` 존재
 - [x] `GameClock.on_tick(tick, day, week)` 시그널 존재
-- [x] `GameClock.reset_for_testing()` 존재
+- [x] `GameClock.reset()` 존재
 
 ### AC → 테스트 매핑
 
@@ -311,9 +311,9 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | 중복 source_id 멱등 | `tests/unit/test_game_clock.gd` | `test_pause_request_duplicate_source_id_is_idempotent()` | ✅ |
 | 미등록 source_id 해제 noop | `tests/unit/test_game_clock.gd` | `test_pause_release_unknown_source_is_noop()` | ✅ |
 | 비장중 pause_request noop | `tests/unit/test_game_clock.gd` | `test_pause_request_noop_when_not_market_open()` | ✅ |
-| reset_for_testing 초기화 | `tests/unit/test_game_clock.gd` | `test_reset_for_testing_clears_pause_sources()` | ✅ |
+| reset 초기화 | `tests/unit/test_game_clock.gd` | `test_reset_clears_pause_sources()` | ✅ |
 | API 계약 | `tests/unit/test_api_contracts.gd` | `test_game_clock_api()` | ✅ |
 
 ### 빌드 검증
 
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 Eric (2026-04-07)

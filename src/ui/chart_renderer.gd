@@ -349,6 +349,11 @@ func _disconnect_signals() -> void:
 		GameClock.on_market_state_changed.disconnect(_on_market_state_changed)
 	if PriceEngine.on_price_updated.is_connected(_on_price_updated):
 		PriceEngine.on_price_updated.disconnect(_on_price_updated)
+	# TD-AUDIT-03: 씬 제거 시 타이머 dangling 방지 — timeout이 freed 객체에서 발화하는 오류 수정
+	if is_instance_valid(_load_debounce_timer):
+		_load_debounce_timer.stop()
+		if _load_debounce_timer.timeout.is_connected(_on_load_debounce_timeout):
+			_load_debounce_timer.timeout.disconnect(_on_load_debounce_timeout)
 
 
 # ── Input ──

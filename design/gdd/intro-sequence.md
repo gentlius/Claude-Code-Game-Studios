@@ -26,11 +26,14 @@
 
 ### 3-1. 트리거 조건
 
+인트로는 **새 게임 시작 시 항상** 재생된다. `StartScreen`이 직접 `IntroSequence.play()`를 호출한다.  
+기존 슬롯 로드 시에는 재생하지 않는다.
+
 | 조건 | 동작 |
 |------|------|
-| `user://intro_seen.flag` 없음 | 인트로 표시 → 종료 시 플래그 생성 |
-| `user://intro_seen.flag` 있음 | 인트로 스킵, MainScreen 직행 |
-| 설정 메뉴 "인트로 다시 보기" | 플래그 삭제 → 재시작 또는 즉시 재생 |
+| 새 게임 시작 | `StartScreen` → `IntroSequence.play()` → 재생 → `intro_finished` → MainScreen |
+| 기존 슬롯 로드 | 인트로 없음, MainScreen 직행 |
+| 설정 메뉴 "인트로 다시 보기" | `IntroSequence.play()` 직접 호출 (Beta 이후) |
 
 ### 3-2. 카드 텍스트
 
@@ -84,11 +87,9 @@
 
 | 상황 | 처리 |
 |------|------|
-| EC-01: 플래그 파일 쓰기 실패 (디스크 풀) | 오류 무시, 게임플레이 차단 없음. push_warning만 출력 |
-| EC-02: 설정 다시보기 중 `clear_seen_flag()` 실패 | push_warning 출력, 인트로는 재생되지 않을 수 있음 (허용) |
-| EC-03: 카드 5 이후 클릭 중복 입력 | `_finishing` 플래그로 이중 종료 방지 |
-| EC-04: 스킵 직후 `intro_finished` 중복 emit | `_finishing` 플래그 체크 후 1회만 emit |
-| EC-05: `TYPEWRITER_SPEED = 0` | 0 나눗셈 방지: speed = max(speed, 1.0) |
+| EC-01: 카드 5 이후 클릭 중복 입력 | `_finishing` 플래그로 이중 종료 방지 |
+| EC-02: 스킵 직후 `intro_finished` 중복 emit | `_finishing` 플래그 체크 후 1회만 emit |
+| EC-03: `TYPEWRITER_SPEED = 0` | 0 나눗셈 방지: speed = max(speed, 1.0) |
 
 ---
 
@@ -96,11 +97,12 @@
 
 | 의존 방향 | 시스템 | 설명 |
 |----------|--------|------|
-| IntroSequence → | `game_main.gd` | `_ready()`에서 인트로 유무 판단, `intro_finished` 수신 |
-| IntroSequence ← | 설정 메뉴 (미구현) | `IntroSequence.clear_seen_flag()` 호출로 다시 보기 |
+| IntroSequence ← | `StartScreen` | 새 게임 시 `IntroSequence.play()` 호출 (`start-screen.md`) |
+| IntroSequence → | `StartScreen` / `MainScreen` | `intro_finished` 시그널 수신 후 MainScreen 진입 |
+| IntroSequence ← | 설정 메뉴 (미구현) | `IntroSequence.play()` 직접 호출로 다시 보기 (Beta 이후) |
 | IntroSequence ← | S5-02 AudioManager (미구현) | 인트로 중 ambient BGM 재생 (Beta 이후) |
 
-역방향: `game_main.gd`는 `intro-sequence.md`에 의존한다고 명시해야 함 (현재 game_main.gd에 주석 추가).
+역방향: `start-screen.md`는 `IntroSequence.play()` 호출자임을 명시.
 
 ---
 
@@ -111,7 +113,6 @@
 | `TYPEWRITER_SPEED` | 28.0 chars/sec | 10 ~ 60 | 낮을수록 긴장감↑, 높을수록 답답함↓ |
 | `CARD_FADE_DURATION` | 0.4s | 0.1 ~ 1.0 | 카드 전환 속도 |
 | `FINISH_FADE_DURATION` | 1.2s | 0.5 ~ 2.5 | 마지막 카드 후 무게감 |
-| `SEEN_FLAG_PATH` | `user://intro_seen.flag` | — | 저장 경로 (변경 시 기존 플래그 무효) |
 
 ---
 
@@ -119,15 +120,14 @@
 
 | AC | 조건 | 검증 방법 |
 |----|------|----------|
-| AC-01 | 최초 실행 시 인트로가 MainScreen보다 먼저 표시된다 | 수동: 플래그 삭제 후 실행 |
-| AC-02 | 두 번째 실행 시 인트로 없이 MainScreen 직행 | 수동: 플래그 존재 상태로 실행 |
+| AC-01 | 새 게임 시작 시 인트로가 MainScreen보다 먼저 표시된다 | 수동: 새 게임 버튼 클릭 |
+| AC-02 | 기존 슬롯 로드 시 인트로 없이 MainScreen 직행 | 수동: 슬롯 선택 후 진입 |
 | AC-03 | 스킵 버튼/ESC 누르면 즉시 MainScreen으로 이동 | 수동: 카드 1에서 스킵 |
 | AC-04 | 5장 카드가 정확한 텍스트로 순서대로 표시된다 | 수동: 전 카드 확인 |
 | AC-05 | 카드 5 완료 후 MainScreen이 정상 로드된다 | 수동 + 빌드 검증 |
-| AC-06 | `has_been_seen()` — 플래그 없으면 false, 있으면 true | 유닛 테스트 |
-| AC-07 | `clear_seen_flag()` 후 `has_been_seen()` = false | 유닛 테스트 |
-| AC-08 | 타이프라이터 진행 중 클릭 시 텍스트 즉시 완성 | 수동 |
-| AC-09 | 인트로 표시 중 MainScreen이 메모리에 로드되지 않는다 | 수동: Godot 디버거 씬 트리 확인 |
+| AC-06 | 타이프라이터 진행 중 클릭 시 텍스트 즉시 완성 | 수동 |
+| AC-07 | 인트로 표시 중 MainScreen이 메모리에 로드되지 않는다 | 수동: Godot 디버거 씬 트리 확인 |
+| AC-08 | 새 게임 여러 번 시작해도 인트로 매번 재생 | 수동: 슬롯 삭제 후 새 게임 반복 |
 
 ---
 
@@ -136,20 +136,17 @@
 Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 진입점
-- `game_main.gd._ready()` → `IntroSequence.has_been_seen()` → (false면) `IntroSequence.new()` → `add_child()` → `intro_finished` 연결
+- `StartScreen.new_game_confirmed(name)` → `IntroSequence.play()` → `intro_finished` → MainScreen
 
 ### 호출 경로
-- [x] `IntroSequence.has_been_seen()` — `FileAccess.file_exists(SEEN_FLAG_PATH)` 사용
-- [x] `IntroSequence.clear_seen_flag()` — `DirAccess.open("user://").remove()` 사용
-- [x] `intro_finished` 시그널 — `game_main._on_intro_finished()` → `_load_main_screen()`
-- [x] `_mark_seen()` — 스킵 및 정상 종료 양쪽에서 호출
+- [x] `IntroSequence.play()` — 씬 인스턴스화 → `add_child()` → 재생 → `intro_finished` emit → `queue_free()`
+- [x] `intro_finished` 시그널 — `StartScreen._on_intro_finished()` → MainScreen 전환
+- [x] 스킵(ESC·스킵 버튼) → `_finishing` 플래그 체크 → `intro_finished` emit
 
 ### AC → 테스트 매핑
 | AC | 테스트 파일 | 테스트 함수 |
 |----|------------|------------|
-| AC-06 | `tests/unit/test_intro_sequence.gd` | `test_has_been_seen_false_when_no_flag()` |
-| AC-06 | `tests/unit/test_intro_sequence.gd` | `test_has_been_seen_true_when_flag_exists()` |
-| AC-07 | `tests/unit/test_intro_sequence.gd` | `test_clear_seen_flag_removes_file()` |
+| AC-06 | `tests/unit/test_intro_sequence.gd` | `test_typewriter_completes_on_click()` |
 
 ### 빌드 검증
 - [ ] 바이너리 실행 확인: QA Lead 서명 _______

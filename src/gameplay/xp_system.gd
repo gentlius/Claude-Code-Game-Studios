@@ -264,11 +264,16 @@ func grant_season_bonus(
 # ── Serialization ──
 
 ## Returns serializable state for save system.
+## Includes daily settlement display fields so the popup shows correct values after load.
 func get_save_data() -> Dictionary:
 	return {
 		"total_xp": _total_xp,
 		"current_level": _current_level,
 		"spent_skill_points": _spent_skill_points,
+		"prev_close_assets": _prev_close_assets,
+		"last_daily_return_pct": _last_daily_return_pct,
+		"last_market_return_pct": _last_market_return_pct,
+		"last_alpha_pct": _last_alpha_pct,
 	}
 
 
@@ -281,10 +286,15 @@ func load_save_data(data: Dictionary) -> void:
 	_total_xp = maxi(_total_xp, 0)
 	_current_level = maxi(_current_level, 1)
 	_spent_skill_points = maxi(_spent_skill_points, 0)
+	_prev_close_assets = maxi(data.get("prev_close_assets", 0), 0)
+	_last_daily_return_pct  = data.get("last_daily_return_pct", 0.0)
+	_last_market_return_pct = data.get("last_market_return_pct", 0.0)
+	_last_alpha_pct         = data.get("last_alpha_pct", 0.0)
 
 
-## Resets all XP state to initial values for unit tests. Call in before_each.
-func reset_for_testing() -> void:
+## Resets all XP state to initial values for a new game.
+## Resets all XP state. Called by GameMain (new game) and tests (before_each).
+func reset() -> void:
 	_total_xp = 0
 	_current_level = 1
 	_spent_skill_points = 0

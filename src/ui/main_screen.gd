@@ -1,8 +1,11 @@
-## MainScreen — F1/F2/F3 탭 컨테이너 + 탭 전환 + 일시정지 단일 진입점.
+## MainScreen — F1/F2/F3 탭 컨테이너 + F4 나가기 + 탭 전환 + 일시정지 단일 진입점.
 ## ADR-006: MainScreen이 GameClock.pause_request/release()를 소유.
 ## 각 탭 씬(TradingScreen, LeagueScreen, GrowthScreen)은 pause API를 직접 호출하지 않는다.
 ## See: docs/architecture/006-tab-scene-ownership.md
 extends Control
+
+## F4 나가기 버튼/키 — game_main이 수신해 StartScreen으로 전환. GDD: start-screen.md §3-7
+signal exit_to_start_requested
 
 # ── Constants ──
 
@@ -23,6 +26,7 @@ var _tab_bar: HBoxContainer
 var _btn_f1: Button
 var _btn_f2: Button
 var _btn_f3: Button
+var _btn_f4_exit: Button
 
 var _trading_screen: Control   ## F1
 var _league_screen: Control    ## F2
@@ -69,6 +73,19 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_F3:
 			_switch_tab(TAB_F3)
 			get_viewport().set_input_as_handled()
+		KEY_F4:
+			_request_exit_to_start()
+			get_viewport().set_input_as_handled()
+
+
+# ── F4 나가기 ──
+
+func _request_exit_to_start() -> void:
+	## 저장 중(SavingOverlay visible)이면 무반응. GDD start-screen.md §3-7.
+	## SavingOverlay는 CanvasLayer(layer=10)이므로 SaveSystem 시그널로 상태 확인.
+	if SaveSystem._save_pending:
+		return
+	exit_to_start_requested.emit()
 
 
 # ── Internal ──
@@ -131,6 +148,30 @@ func _build_ui() -> void:
 	_tab_bar.add_child(_btn_f1)
 	_tab_bar.add_child(_btn_f2)
 	_tab_bar.add_child(_btn_f3)
+
+	# F4 나가기 — 우측 정렬, 탭이 아닌 씬 전환 버튼
+	var spacer: Control = Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tab_bar.add_child(spacer)
+
+	_btn_f4_exit = Button.new()
+	_btn_f4_exit.text = tr("F4  나가기")
+	_btn_f4_exit.focus_mode = Control.FOCUS_NONE
+	_btn_f4_exit.add_theme_font_size_override("font_size", 13)
+	_btn_f4_exit.custom_minimum_size = Vector2(120, 32)
+	var exit_normal: StyleBoxFlat = StyleBoxFlat.new()
+	exit_normal.bg_color = Color(0.12, 0.12, 0.13, 1.0)
+	exit_normal.set_border_width_all(0)
+	var exit_hover: StyleBoxFlat = StyleBoxFlat.new()
+	exit_hover.bg_color = Color(0.22, 0.12, 0.12, 1.0)
+	exit_hover.set_border_width_all(0)
+	_btn_f4_exit.add_theme_stylebox_override("normal", exit_normal)
+	_btn_f4_exit.add_theme_stylebox_override("hover", exit_hover)
+	_btn_f4_exit.add_theme_stylebox_override("pressed", exit_hover)
+	_btn_f4_exit.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55, 1.0))
+	_btn_f4_exit.add_theme_color_override("font_hover_color", Color(0.85, 0.5, 0.5, 1.0))
+	_btn_f4_exit.pressed.connect(_request_exit_to_start)
+	_tab_bar.add_child(_btn_f4_exit)
 
 	# ── Tab Content Container ──
 	var content: Control = Control.new()

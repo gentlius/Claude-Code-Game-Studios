@@ -1,13 +1,10 @@
 class_name IntroSequence
 extends Control
-## 최초 실행 시 표시되는 5장 슬라이드 카드 인트로.
+## 새 게임 시작 시 표시되는 5장 슬라이드 카드 인트로.
+## StartScreen이 새 게임 확인 후 game_main을 통해 인스턴스화.
 ## GDD: design/gdd/intro-sequence.md
-## 다시 보기: IntroSequence.clear_seen_flag() 호출 후 재실행.
 
 signal intro_finished
-
-## 최초 실행 여부를 저장하는 플래그 파일 경로.
-const SEEN_FLAG_PATH: String = "user://intro_seen.flag"
 
 ## 타이프라이터 속도 (초당 문자 수). GDD §7 튜닝 노브. EC-05: 반드시 양수.
 const TYPEWRITER_SPEED: float = 28.0
@@ -25,6 +22,21 @@ const CARD_TEXTS: Array[String] = [
 	"브론즈에서 거장까지.\n\n1,000,000원에서 1,000억까지.\n\n쪽방에서 수평선까지.\n\n시장이 열린다."
 ]
 
+## Path to the persistent flag that records whether the intro has been seen.
+const SEEN_FLAG_PATH: String = "user://intro_seen.flag"
+
+
+## Returns true if the player has already seen the intro at least once.
+static func has_been_seen() -> bool:
+	return FileAccess.file_exists(SEEN_FLAG_PATH)
+
+
+## Removes the intro-seen flag so the intro plays again on next new game.
+static func clear_seen_flag() -> void:
+	if FileAccess.file_exists(SEEN_FLAG_PATH):
+		DirAccess.remove_absolute(SEEN_FLAG_PATH)
+
+
 var _current_card: int = 0
 var _typewriter_active: bool = false
 var _finishing: bool = false
@@ -36,22 +48,6 @@ var _prompt_label: Label
 var _skip_button: Button
 var _counter_label: Label
 var _overlay: ColorRect
-
-
-## GDD AC-06: 플래그 파일 없으면 false.
-static func has_been_seen() -> bool:
-	return FileAccess.file_exists(SEEN_FLAG_PATH)
-
-
-## 설정 메뉴 다시 보기용. GDD AC-07.
-static func clear_seen_flag() -> void:
-	if not FileAccess.file_exists(SEEN_FLAG_PATH):
-		return
-	var da := DirAccess.open("user://")
-	if da:
-		da.remove("intro_seen.flag")
-	else:
-		push_warning("IntroSequence: user:// 접근 실패 — 플래그 삭제 안 됨 (EC-02)")
 
 
 func _ready() -> void:
@@ -209,11 +205,10 @@ func _advance() -> void:
 
 
 func _finish() -> void:
-	# EC-03: 이중 종료 방지
+	# EC-01: 이중 종료 방지
 	if _finishing:
 		return
 	_finishing = true
-	_mark_seen()
 	_skip_button.hide()
 	_prompt_label.hide()
 
@@ -223,7 +218,7 @@ func _finish() -> void:
 
 
 func _on_skip_pressed() -> void:
-	# EC-04: 이중 emit 방지
+	# EC-02: 이중 emit 방지
 	if _finishing:
 		return
 	if _typewriter_tween:
@@ -231,7 +226,6 @@ func _on_skip_pressed() -> void:
 		_typewriter_tween = null
 	_typewriter_active = false
 	_finishing = true
-	_mark_seen()
 	intro_finished.emit()
 
 
@@ -255,11 +249,3 @@ func _input(event: InputEvent) -> void:
 					get_viewport().set_input_as_handled()
 
 
-func _mark_seen() -> void:
-	var f := FileAccess.open(SEEN_FLAG_PATH, FileAccess.WRITE)
-	if f:
-		f.store_string("1")
-		f.close()
-	else:
-		# EC-01: 실패해도 게임플레이 차단 안 함
-		push_warning("IntroSequence: 플래그 파일 저장 실패 (EC-01) — 디스크 공간 확인")

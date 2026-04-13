@@ -44,8 +44,8 @@ func _on_season_start() -> void:
 	_next_order_id = 1
 
 
-## Resets all order engine state for unit tests. Call in before_each.
-func reset_for_testing() -> void:
+## Resets all order engine state. Called by GameMain (new game) and tests (before_each).
+func reset() -> void:
 	_next_order_id = 1
 	_market_order_queue.clear()
 	_pending_limit_orders.clear()

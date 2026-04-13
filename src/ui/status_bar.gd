@@ -12,7 +12,6 @@ signal pause_toggled
 signal speed_changed(multiplier: float)
 ## Emitted when the market-open / season-start button is pressed.
 signal market_open_pressed
-
 ## Exposed for TradingScreen to wire skill-tree toggle.
 var xp_bar: XpBar
 
@@ -49,6 +48,12 @@ func _ready() -> void:
 	CurrencySystem.sim_cash_changed.connect(func(_a: int, _d: int) -> void: _update_row2())
 	# valuation_updated is intentionally NOT connected here — on_tick already fires _update_row2()
 	# after OrderEngine._on_tick() has updated valuation, so connecting both would fire twice per tick.
+	var _sp_alert_handler: Callable = func(_id: String) -> void: _update_sp_alert()
+	SkillTree.on_skill_unlocked.connect(_sp_alert_handler)
+	tree_exiting.connect(func() -> void:
+		if SkillTree.on_skill_unlocked.is_connected(_sp_alert_handler):
+			SkillTree.on_skill_unlocked.disconnect(_sp_alert_handler)
+	)
 
 
 func _build_row1() -> void:
@@ -251,6 +256,10 @@ func _update_cash_label() -> void:
 
 func _update_index_label() -> void:
 	var index_val: float = PriceEngine.get_market_index()
+	# 시즌 초기화 전(또는 초기화 직후 첫 틱 전)에는 지수가 0 → 미표시.
+	if index_val <= 0.0:
+		_lbl_market_index.text = tr("지수 ---")
+		return
 	var index_change: float = PriceEngine.get_index_change_pct()
 	var sign_str: String = "+" if index_change >= 0.0 else ""
 	_lbl_market_index.text = "지수 %s (%s%.2f%%)" % [

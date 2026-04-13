@@ -72,8 +72,8 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  시즌 3 | 2주차 화요일 | ■■■□ 틱 152/390 | ▶ 1x [⏸]               │  행 1 (변경 없음)
-│  총 자산: ₩1,015,000 (+1.5%) | 시드: ₩300,000    [브론즈 38위] | 시즌 +12.3% | 주간 +2.1%  │  행 2 (우측에 리그 HUD 추가)
+│  시즌 3 | 2주차 화요일 | ■■■□ 틱 152/390 | ▶ 1x [⏸]               │  행 1
+│  총 자산: ₩1,015,000 (+1.5%) | 시드: ₩300,000    [브론즈 38위] | 시즌 +12.3% | 주간 +2.1%  │  행 2
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -103,9 +103,12 @@
 있을 때만 "(예약: ₩200,000)" 형태로 현금 잔액 옆에 표시한다. 총 자산 계산에는
 `sim_cash + reserved_cash + 보유 주식 평가액`이 반영된다.
 
-**탭바 소유권**: F1(거래) / F2(리그/시즌) / F3(성장) 탭바는 `MainScreen`이 소유한다.
+**탭바 소유권**: F1(거래) / F2(리그/시즌) / F3(성장) / F4(나가기) 탭바는 `MainScreen`이 소유한다.
 `TradingScreen`은 F1 탭의 자식 씬으로 인스턴스된다. 탭 전환 시 일시정지 정책은
 `league-ui.md §3-1`이 정본이다.
+
+**F4 나가기**: F4는 씬 전환 버튼이며 탭이 아니다. 클릭 시 StartScreen으로 전환한다.
+`SavingOverlay` 표시 중이면 비활성. 상세 규격: `start-screen.md §3-7`.
 
 #### 규칙 3. 종목 리스트
 
@@ -140,10 +143,15 @@
 
 #### 규칙 4. 주문 패널
 
+> **호가창 통합**: 주문 패널 상단에 10단 호가창(매도5·매수5)이 포함된다.
+> 호가 클릭 시 지정가 가격 필드에 자동 입력. 상세 규칙은 `design/gdd/order-book.md` 참조.
+
 ```
 ┌──────────────┐
 │  스타칩 (STC)  │
 │  현재가 65,000 │
+├──────────────┤
+│ [호가창 10단]  │  ← order-book.md
 ├──────────────┤
 │ [매수] [매도]  │  ← 탭 전환
 ├──────────────┤
@@ -504,12 +512,13 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 | 기능 | 진입점 |
 |------|--------|
-| 메인 HUD 진입 | `game_main.gd._ready()` → `MainScreen.tscn` → `TradingScreen.tscn` (F1 탭) |
+| 메인 HUD 진입 | `StartScreen` → `SaveSystem.load_slot(id)` 또는 새 게임 → `MainScreen.tscn` → `TradingScreen.tscn` (F1 탭) |
 | 시즌 시작 버튼 | `TradingScreen._on_btn_market_open_pressed()` → `SeasonManager.start_season()` (is_season_active 분기) |
 | 주문 제출 | `OrderPanel._submit_order()` → `OrderEngine.submit_market_order()` / `submit_limit_order()` |
 | 탭 전환 → F2 이동 | `StatusBar.league_hud_clicked` → `TradingScreen.league_tab_requested` → `MainScreen._switch_tab(TAB_F2)` (ADR-006) |
 | 일시정지/속도 | `StatusBar.pause_toggled` / `speed_changed` → `TradingScreen.pause_toggle_requested` / `speed_change_requested` → `MainScreen` → `GameClock` (TD-03) |
 | 정산 확인 | `SettlementReporter.settlement_confirmed` → `TradingScreen` → `GameClock.confirm_transition()` |
+| F4 나가기 | `MainScreen._input(F4)` 또는 탭바 `[나가기]` 버튼 클릭 → `SavingOverlay` 미표시 시 → `StartScreen` 전환 |
 
 ### 호출 경로
 
@@ -523,6 +532,9 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `TradingScreen.league_tab_requested` 시그널 존재 (S3-06)
 - [x] `TradingScreen.pause_toggle_requested` 시그널 존재 (S3-13)
 - [x] `TradingScreen.speed_change_requested` 시그널 존재 (S3-13)
+- [ ] `MainScreen` 탭바에 `[나가기]` 버튼 추가 (F1/F2/F3 우측)
+- [ ] `MainScreen._input(event)`: F4 감지 → `SavingOverlay.visible` 체크 → StartScreen 전환
+- [ ] `SavingOverlay`: `SaveSystem.save_started` / `save_completed` 구독, `CanvasLayer layer=10`
 - [ ] `StockListPanel._row_nodes` — `_ready()`에서 1회 빌드, `get_children()` 런타임 호출 없음
 - [ ] `StockListPanel._last_prices` — dirty flag skip 동작
 - [ ] `StockListPanel._sel_style` / `_desel_style` — `_ready()` 1회 캐시, 런타임 `StyleBoxFlat.new()` 없음
@@ -548,4 +560,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 빌드 검증
 
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 Eric (2026-04-07)

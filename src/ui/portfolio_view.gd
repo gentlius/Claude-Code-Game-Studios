@@ -25,6 +25,9 @@ func _ready() -> void:
 	PortfolioManager.holding_added.connect(_on_holding_added)
 	PortfolioManager.holding_removed.connect(_on_holding_removed)
 	tree_exiting.connect(_disconnect_signals)
+	# Initial render — valuation_updated may have fired during load_slot() before
+	# this node existed, so explicitly refresh on entry.
+	_refresh()
 
 
 func _build_ui() -> void:

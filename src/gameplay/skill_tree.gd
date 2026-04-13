@@ -223,5 +223,7 @@ func load_save_data(data: Dictionary) -> void:
 
 ## Resets all unlocked skills for unit tests. Call in before_each.
 ## Note: skill point balances are owned by XpSystem — reset that separately.
-func reset_for_testing() -> void:
+## Resets all skill unlock state for a new game.
+## Resets all skill tree state. Called by GameMain (new game) and tests (before_each).
+func reset() -> void:
 	_unlocked_skills.clear()

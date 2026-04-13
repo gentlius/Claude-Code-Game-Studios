@@ -94,21 +94,9 @@ season_return_rate = (sim_total_assets - season_start_cash) / season_start_cash 
 
 ### 시즌 상금 테이블
 
-> **⚠️ 이 테이블은 구버전(브론즈 고정값)입니다.**
-> 상금 규칙의 단일 소스는 `design/gdd/season-manager.md §3-4`입니다.
-> 상금은 티어별 진입 기준 자산 × 배율로 산정됩니다 (티어에 따라 규모가 달라짐).
-
-브론즈 기준 참고값 (티어 진입 기준 자산 = 1,000,000원):
-
-| Season Rank | Prize (₩) |
-|-------------|-----------|
-| 1위 | 500,000 (× 50%) |
-| 2위 | 300,000 (× 30%) |
-| 3위 | 150,000 (× 15%) |
-| 4위 | 80,000 (× 8%) |
-| 5위 | 50,000 (× 5%) |
-| 6~10위 | 30,000 (× 3%) |
-| 완주 보너스 | — (XP 20 지급, 현금 없음) |
+> **단일 소스**: `design/gdd/season-manager.md §3-4`
+> 상금 규칙은 season-manager.md §3-4가 권위 문서입니다. 이 문서에서는 중복 정의하지 않습니다.
+> 요약: 티어별 진입 기준 자산 × 순위 배율로 산정. 티어가 높을수록 상금 규모 비례 증가.
 
 ### 복리 성장 시나리오 (예시, 브론즈 기준)
 
@@ -159,8 +147,8 @@ season_return_rate = (sim_total_assets - season_start_cash) / season_start_cash 
 | Parameter | Current Value | Safe Range | Effect of Increase | Effect of Decrease |
 |-----------|--------------|------------|-------------------|-------------------|
 | `first_season_cash` (첫 시즌) | 1,000,000 | 100,000-10,000,000 | 여유로운 시작, 1억까지 거리 감소 | 더 절박한 시작, 복리 성장 체감 증가 |
-| `prize_1st` | ~~500,000~~ | — | **폐기됨**: 상금은 티어별 진입 기준 자산 × 배율로 산정. `design/gdd/season-manager.md §3-4` 참조 |
-| `prize_completion` | ~~30,000~~ | — | **폐기됨**: 완주 보너스는 현금 없음, XP 20만 지급. `design/gdd/season-manager.md §3-4` 참조 |
+| ~~`prize_1st`~~ | 폐기됨 | — | 상금 파라미터는 `season-manager.md §3-4` 단일 소스로 이관됨 |
+| ~~`prize_completion`~~ | 폐기됨 | — | 완주 보너스 XP 20만 — `season-manager.md §3-4` 참조 |
 
 ---
 
@@ -209,7 +197,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `CurrencySystem.sim_add(amount: int)` 존재
 - [x] `CurrencySystem.sim_deduct(amount: int) -> bool` 존재
 - [x] `CurrencySystem.init_first_season()` 존재
-- [x] `CurrencySystem.reset_for_testing()` 존재
+- [x] `CurrencySystem.reset()` 존재
 
 ### AC → 테스트 매핑
 

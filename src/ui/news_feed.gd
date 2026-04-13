@@ -47,6 +47,10 @@ func _ready() -> void:
 	NewsEventSystem.on_theme_hint.connect(_on_theme_hint)
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
 	SkillTree.on_skill_unlocked.connect(_on_skill_unlocked_refresh_title)
+	# Deliver any pre-market news that fired during load_slot() before this node existed.
+	var pending: Array[Dictionary] = NewsEventSystem.get_and_clear_loaded_news()
+	if not pending.is_empty():
+		_on_pre_market_news(pending)
 	tree_exiting.connect(_disconnect_signals)
 
 

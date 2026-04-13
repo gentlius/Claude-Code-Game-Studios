@@ -37,6 +37,11 @@ func _ready() -> void:
 	_season_reveal_timer.one_shot = true
 	_season_reveal_timer.timeout.connect(_on_season_reveal_tick)
 	add_child(_season_reveal_timer)
+	# audit-1: 씬 제거 중 타이머 발화 → freed 객체 접근 방지
+	tree_exiting.connect(func() -> void:
+		if is_instance_valid(_season_reveal_timer):
+			_season_reveal_timer.stop()
+	)
 
 
 func _build_panel() -> void:
@@ -307,7 +312,7 @@ func _season_xp_base_line() -> String:
 
 
 func _on_season_reveal_tick() -> void:
-	if not _panel.visible:
+	if not is_inside_tree() or not is_instance_valid(_panel) or not _panel.visible:
 		return
 	var gold: String = "D9B320"
 	var bd: Dictionary = XpSystem.get_season_xp_breakdown()

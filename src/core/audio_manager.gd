@@ -25,6 +25,9 @@ var _player_order: AudioStreamPlayer
 var _player_level: AudioStreamPlayer
 var _player_vi: AudioStreamPlayer
 var _player_news: AudioStreamPlayer
+var _player_bgm: AudioStreamPlayer    ## BGM 전용 (루핑 트랙)
+var _player_ui: AudioStreamPlayer     ## 파일 기반 UI SFX (스타트화면 등)
+var _sfx_cache: Dictionary = {}       ## "category/name" → AudioStream 캐시
 
 
 # ── Lifecycle ──
@@ -52,6 +55,14 @@ func _build_players() -> void:
 	_player_news = AudioStreamPlayer.new()
 	_player_news.bus = "Master"
 	add_child(_player_news)
+
+	_player_bgm = AudioStreamPlayer.new()
+	_player_bgm.bus = "Master"
+	add_child(_player_bgm)
+
+	_player_ui = AudioStreamPlayer.new()
+	_player_ui.bus = "Master"
+	add_child(_player_ui)
 
 
 # ── SFX Generation ──
@@ -152,7 +163,8 @@ func _save_settings() -> void:
 
 func _apply_volume() -> void:
 	var db: float = linear_to_db(_master_volume) if not _muted else -80.0
-	for player: AudioStreamPlayer in [_player_order, _player_level, _player_vi, _player_news]:
+	for player: AudioStreamPlayer in [_player_order, _player_level, _player_vi, _player_news,
+			_player_bgm, _player_ui]:
 		player.volume_db = db
 
 
@@ -211,6 +223,50 @@ func play_news_sfx() -> void:
 	if _muted:
 		return
 	_player_news.play()
+
+
+## Play BGM track from assets/audio/bgm/{track_name}.ogg. Loops automatically.
+## Call from StartScreen._ready() and any screen with persistent background music.
+func play_bgm(track_name: String) -> void:
+	var stream: AudioStream = _load_audio_file("bgm", track_name)
+	if stream == null:
+		return
+	if _player_bgm.stream == stream and _player_bgm.playing:
+		return  # 이미 같은 트랙 재생 중
+	_player_bgm.stream = stream
+	_player_bgm.play()  # volume_db가 muted 시 -80dB이므로 play()는 항상 호출
+	# muted 상태에서도 play()를 호출해야 unmute 즉시 소리가 난다. (volume_db로 음소거 처리)
+
+
+## Stop BGM playback.
+func stop_bgm() -> void:
+	_player_bgm.stop()
+
+
+## Play a one-shot SFX from assets/audio/sfx/{sfx_name}.ogg.
+## Call from UI components at the moment the visual effect starts.
+func play_sfx(sfx_name: String) -> void:
+	if _muted:
+		return
+	var stream: AudioStream = _load_audio_file("sfx", sfx_name)
+	if stream == null:
+		return
+	_player_ui.stream = stream
+	_player_ui.play()
+
+
+## Load audio file with cache. Returns null and logs warning on miss.
+func _load_audio_file(category: String, name: String) -> AudioStream:
+	var key: String = "%s/%s" % [category, name]
+	if _sfx_cache.has(key):
+		return _sfx_cache[key]
+	var path: String = "res://assets/audio/%s/%s.ogg" % [category, name]
+	if not ResourceLoader.exists(path):
+		push_warning("AudioManager: 파일 없음 — %s" % path)
+		return null
+	var stream: AudioStream = ResourceLoader.load(path) as AudioStream
+	_sfx_cache[key] = stream
+	return stream
 
 
 # ── Event Connections ──

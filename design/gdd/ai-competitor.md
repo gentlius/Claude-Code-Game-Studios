@@ -508,7 +508,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `GameClock.on_tick` 시그널 → `AiCompetitor._on_tick(tick, day, week)` 구독 연결
 - [x] `AiCompetitor.get_all_return_pcts(tier) -> Array` 공개 API 존재
 - [x] `AiCompetitor.get_participant_meta(tier, id) -> Dictionary` → `{display_name, is_master_of_investment}` 반환
-- [x] `AiCompetitor.reset_for_testing()` 존재 (테스트 격리)
+- [x] `AiCompetitor.reset()` 존재 (테스트 격리)
 
 ### AC → 테스트 매핑
 

@@ -96,11 +96,17 @@ func _build_type_row(vbox: VBoxContainer) -> void:
 	_radio_market.pressed.connect(func() -> void: _set_order_type("MARKET"))
 	hbox.add_child(_radio_market)
 	_radio_limit = Button.new()
-	_radio_limit.text = tr("지정가") if SkillTree.is_skill_unlocked("TR1") else tr("지정가 🔒")
+	_radio_limit.text = tr("지정가")
 	_radio_limit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_radio_limit.custom_minimum_size.y = 26
 	_radio_limit.pressed.connect(func() -> void: _set_order_type("LIMIT"))
 	hbox.add_child(_radio_limit)
+	_refresh_limit_tab_state()
+	SkillTree.on_skill_unlocked.connect(_on_skill_unlocked)
+	tree_exiting.connect(func() -> void:
+		if SkillTree.on_skill_unlocked.is_connected(_on_skill_unlocked):
+			SkillTree.on_skill_unlocked.disconnect(_on_skill_unlocked)
+	)
 	_limit_price_row = HBoxContainer.new()
 	_limit_price_row.visible = false
 	vbox.add_child(_limit_price_row)
@@ -217,7 +223,7 @@ func refresh_limit_price_bounds() -> void:
 func set_ui_state_submit_enabled(enabled: bool, btn_text: String) -> void:
 	_btn_submit_order.disabled = not enabled
 	_btn_submit_order.text = btn_text
-	_radio_limit.text = "지정가" if SkillTree.is_skill_unlocked("TR1") else "지정가 🔒"
+	_refresh_limit_tab_state()
 
 
 ## Called by TradingScreen when chart price is clicked.
@@ -251,8 +257,7 @@ func _set_order_side(side: String) -> void:
 
 func _set_order_type(type: String) -> void:
 	if type == "LIMIT" and not SkillTree.is_skill_unlocked("TR1"):
-		_show_order_error("지정가 주문은 TR1 스킬이 필요합니다")
-		return
+		return  # 버튼이 disabled 상태여야 하므로 여기까지 오면 안 됨 — 안전망
 	_order_type = type
 	if type == "MARKET":
 		ThemeSetup.apply_accent_button(_radio_market)
@@ -390,6 +395,19 @@ func _on_order_filled(order: Dictionary) -> void:
 
 func _on_order_rejected(order: Dictionary) -> void:
 	_show_order_error(order.get("reject_reason", "주문 거부됨"))
+
+
+## TR1 해금 상태에 따라 지정가 버튼 활성/비활성 + 툴팁 갱신.
+func _refresh_limit_tab_state() -> void:
+	var unlocked: bool = SkillTree.is_skill_unlocked("TR1")
+	_radio_limit.disabled = not unlocked
+	_radio_limit.tooltip_text = "" if unlocked else tr("TR1 해금 필요")
+
+
+## SkillTree.on_skill_unlocked 핸들러 — TR1 해금 즉시 버튼 활성.
+func _on_skill_unlocked(skill_id: String) -> void:
+	if skill_id == "TR1":
+		_refresh_limit_tab_state()
 
 
 ## Called by TradingScreen for B/S keyboard shortcuts.

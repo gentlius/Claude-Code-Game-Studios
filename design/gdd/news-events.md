@@ -868,6 +868,8 @@ rumor_accuracy = 0.70  # 30% 확률로 방향 반전
 | mutex_group 필터링으로 후보 템플릿 0개 | mutex 필터 전 단계(scope/impact)로 후퇴 후 재시도. 그래도 없으면 슬롯 건너뜀 | 무한 루프 방지 |
 | narrative_state TTL=0인 이벤트 | state를 설정하지 않음 (narrative_sets_state 무시). 다른 필드는 정상 동작 | 0은 "미설정"의 의미 |
 | 같은 mutex_group의 야간 이벤트 + 장중 이벤트 | 야간 이벤트는 전일 mutex에 등록. 다음 날은 새 mutex 딕셔너리이므로 같은 그룹 장중 이벤트 발생 가능 | mutex는 일일 스코프 |
+| 4x 배속 중 뉴스 수신 | 자동으로 1x 감속. 플레이어가 뉴스를 읽을 시간 확보 ("판단이 곧 실력"). | 뉴스는 판단 요소 — 읽을 기회 보장 |
+| 4x 배속 중 VI/CB 발동 | 배속 유지. VI/CB는 자동 거래 정지(halt) 메커니즘으로 시간 압박이 없음. 감속 불필요. | halt 자체가 보호 장치 |
 | 페이크 루머 생성 기본 사양 | 하루 2회, 장 시작 30~360틱 사이에서 균등분포 배치. 페이크 루머는 실제 이벤트 풀에서 랜덤 template 선택 후 방향/대상만 표시 (실제 이벤트 미발생). `is_fake: true` 플래그로 내부 추적 (UI 비구분). 시즌 종료 시 "루머 적중률" 통계에서 페이크 제외 가능 | 루머 신뢰도 조절. 무조건 루머 추종 전략 방지 |
 
 ## Dependencies
@@ -950,7 +952,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 - [x] `NewsEventSystem.on_news_published(event: Dictionary)` 시그널 존재
 - [x] `NewsEventSystem.get_active_events() -> Array[Dictionary]` 존재
-- [x] `NewsEventSystem.reset_for_testing()` 존재
+- [x] `NewsEventSystem.reset()` 존재
 - [x] `assets/data/events.json` 이벤트 데이터 파일 존재
 
 ### AC → 테스트 매핑

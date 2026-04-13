@@ -2,7 +2,7 @@
 
 > **Status**: Draft
 > **Created**: 2026-03-25
-> **Last Updated**: 2026-04-04
+> **Last Updated**: 2026-04-08
 > **Source Concept**: design/gdd/game-concept.md
 
 ---
@@ -41,8 +41,8 @@
 | 15 | 포트폴리오 UI (Portfolio UI) | UI | MVP | In Review | ✅ Done | [portfolio-ui.md](portfolio-ui.md) | 포트폴리오 관리, 게임 시계 |
 | 16 | 리그/시즌 UI (League & Season UI) | UI | V-Slice | Approved | ✅ Done | [league-ui.md](league-ui.md) | 시즌/대회 관리, AI 경쟁자, 게임 시계 |
 | 17 | 프로그레션 UI (Progression UI) | UI | V-Slice | In Review | ✅ Done | [progression-ui.md](progression-ui.md) | 경험치 시스템, 스킬 트리, 게임 시계, 트레이딩 스크린 |
-| 18 | 세이브/로드 (Save/Load) | Persistence | Alpha | Not Started | — | — | 포트폴리오, 스킬 트리, 시즌, 경험치 |
-| 19 | 오디오 시스템 (Audio) | Audio | Alpha | Not Started | — | — | 주문 엔진, 뉴스 시스템 |
+| 18 | 세이브/로드 (Save/Load) | Persistence | Alpha | Approved | ✅ Done | [save-load.md](save-load.md) | 포트폴리오, 스킬 트리, 시즌, 경험치 |
+| 19 | 오디오 시스템 (Audio) | Audio | Alpha | Approved | ✅ Done | [audio.md](audio.md) | 주문 엔진, 뉴스 시스템 |
 | 20 | 튜토리얼 (Tutorial) | Meta | Full | Not Started | — | — | 전체 게임플레이 시스템 |
 | 21 | 설정 (Settings) | Meta | Full | Not Started | — | — | — |
 
@@ -165,16 +165,17 @@
 | Metric | Count |
 |--------|-------|
 | Total systems identified | 21 |
-| Design docs started | 15 |
-| Design docs reviewed (2차 리뷰 완료) | 15 |
-| Design docs approved | 7 (종목 DB, 포트폴리오, XP, AI 경쟁자, 시즌/대회 관리, 리그/시즌 UI, currency-system 갱신) |
-| Design docs in review | 9 |
-| **Implemented** | **18** (MVP 11/11 + V-Slice 7: XP, Skill Tree, Progression UI, AI 경쟁자, 시즌 관리, HUD, League UI) |
+| Design docs started | 17 |
+| Design docs reviewed (2차 리뷰 완료) | 17 |
+| Design docs approved | 9 (종목 DB, 포트폴리오, XP, AI 경쟁자, 시즌/대회 관리, 리그/시즌 UI, currency-system, save-load, audio) |
+| Design docs in review | 8 |
+| **Implemented** | **20** (MVP 11/11 + V-Slice 6 + Alpha 2: 세이브/로드, 오디오) |
 | MVP systems designed | 11/11 |
 | MVP systems implemented | 11/11 |
 | Vertical Slice systems designed | 6/6 ✅ (XP, Skill Tree, Progression UI, AI 경쟁자, 시즌 관리, 리그 UI) |
-| Vertical Slice systems implemented | 5/6 (XP, Skill Tree, Progression UI, AI 경쟁자, 시즌 관리 ✅ — 리그 F2탭 UI 미구현) |
-| GDD vs 구현 QA 완료 | **15/15** ✅ (전체 구현 시스템 검증 완료, GDD 갱신 완료) |
+| Vertical Slice systems implemented | 6/6 ✅ |
+| Alpha systems implemented | 2/2 ✅ (세이브/로드, 오디오) |
+| GDD vs 구현 QA 완료 | **17/17** ✅ (전체 구현 시스템 검증 완료, GDD 갱신 완료) |
 | 컨셉 변경 | 모의투자→실전투자 (단일 계좌, 복리 구조) 반영 완료 |
 
 ---

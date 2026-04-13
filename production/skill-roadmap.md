@@ -2,8 +2,8 @@
 
 > **Status**: Active
 > **Author**: game-designer
-> **Last Updated**: 2026-04-04
-> **Source**: skill-tree.md audit — 14 skills, 4 branches
+> **Last Updated**: 2026-04-07 (실제 코드 전수 확인 기준 업데이트)
+> **Source**: skill-tree.md audit + 코드 검증 (chart_renderer.gd, order_panel.gd, news_feed.gd, skill_tree.gd)
 
 ---
 
@@ -14,17 +14,18 @@
 (Efficacy Signal), (2) 구현 복잡도 대비 플레이어 경험 향상 비율, (3) 다른 스킬의
 선행 조건 역할 여부.
 
-현재 상태 요약: 4개 스킬이 게임플레이 완료 상태이나 UI 피드백이 없고, 1개 스킬은
-코드가 존재하나 스킬 게이트가 없으며, 9개 스킬은 미구현 상태다.
+현재 상태 요약 (2026-04-07 코드 검증 기준):
+A1/A2 Analysis 브랜치 게임플레이+UI 전부 완료. S1/S2/P1/P2는 게임플레이만 있고 UI 피드백 없음.
+TR1은 🔒 텍스트 게이트 있으나 버튼 비활성화 미완. S3/TR3/TR4는 스텁. TR2/A3/A4/P3 미구현.
 
 ---
 
-## 현재 상태 스냅샷 (2026-04-04 기준)
+## 현재 상태 스냅샷 (2026-04-07 기준 — 코드 실측)
 
 | ID | 스킬명 | 브랜치 | 게임플레이 | UI 피드백 | 전반적 상태 | 대상 페이즈 |
 |----|--------|--------|-----------|----------|------------|------------|
 | A1 | 이동평균선 | Analysis | ✅ Done | ✅ Done | **Complete** | — |
-| A2 | 보조지표 (RSI/MACD) | Analysis | ❌ Not Built | ❌ Not Built | Not Started | Phase 2 |
+| A2 | 보조지표 (RSI/MACD) | Analysis | ✅ Done | ✅ Done | **Complete** | ~~Phase 2~~ |
 | A3 | 재무제표 (PER/PBR/ROE) | Analysis | ❌ Not Built | ❌ Not Built | Not Started | Phase 4 |
 | A4 | 섹터 비교 분석 | Analysis | ❌ Not Built | ❌ Not Built | Not Started | Phase 5 |
 | S1 | 빠른 뉴스 | Sense | ✅ Done | ❌ Missing | Gameplay-Only | Phase 1 |
@@ -38,7 +39,9 @@
 | P2 | 10종목 보유 | Portfolio | ✅ Done | ❌ Missing | Gameplay-Only | Phase 1 |
 | P3 | 섹터 ETF | Portfolio | ❌ Not Built | ❌ Not Built | Not Started | Phase 5 |
 
-> **TR1 Partial Gate 설명**: `trading_screen.gd:416`에서 미해금 시 에러 메시지를 표시하는 방식으로 구현됨. 목표 상태는 지정가 라디오 버튼 자체가 비활성화(회색) + 툴팁 방식. Phase 1에서 교체 필요.
+> **A2 완료 확인 (2026-04-07)**: `chart_renderer.gd`에 `_draw_rsi()` / `_draw_macd()` 완전 구현됨. `_rsi_cache` 사전 계산 방식(O(visible) per draw). 레이아웃 4-zone 분할(chart 55%, RSI 15%, MACD 15%, volume 15%). A2 해금 여부에 따라 서브패널 자동 표시/숨김. 이전 "Not Built" 표기는 오류.
+
+> **TR1 Partial Gate 설명 (2026-04-07 업데이트)**: `order_panel.gd`에서 미해금 시 버튼 텍스트 "지정가 🔒" 표시. 버튼은 여전히 클릭 가능하며 주문 제출 시 에러 메시지. 목표: 버튼 자체 비활성(회색) + 툴팁. Sprint 6 S6-02에서 완성.
 
 ---
 

@@ -312,6 +312,10 @@ func _season_xp_base_line() -> String:
 
 
 func _on_season_reveal_tick() -> void:
+	# _confirm()이 stop() 호출 직전 프레임에 timeout이 발화할 수 있음.
+	# _season_reveal_step == 0 은 _confirm()이 이미 리셋했다는 의미 → 무시.
+	if _season_reveal_step == 0:
+		return
 	if not is_inside_tree() or not is_instance_valid(_panel) or not _panel.visible:
 		return
 	var gold: String = "D9B320"

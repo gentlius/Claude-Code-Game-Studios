@@ -11,25 +11,23 @@ const EPSILON: float  = 0.001  # AC-01 부동소수점 오차 허용값 (%)
 
 ## 표준 테스트용 init_season 호출 헬퍼.
 ## 브론즈 100명 기본값으로 초기화 (성능 테스트 외).
-## _market_opened=true 강제: get_all_return_pcts / get_tier_return_pct는
-## on_market_open 수신 이후에만 값을 반환한다 (PRE_MARKET 구간 0% 보호).
+## PRE_MARKET + day==0 이면 0% 반환. 테스트는 day>0 또는 MARKET_OPEN 상태로 실행.
+## GameClock._market_state = MARKET_OPEN 으로 설정하면 가드를 통과한다.
 func _init_standard(player_tier: int = AiCompetitor.TIER_BRONZE,
 		counts: Dictionary = { 0: 100 },
 		seed: int = SEED_FIXED) -> void:
 	AiCompetitor.init_season(player_tier, counts, seed)
-	AiCompetitor._market_opened = true
+	GameClock._market_state = GameClock.MarketState.MARKET_OPEN
 
 
 func after_each() -> void:
 	AiCompetitor._initialized = false
-	AiCompetitor._market_opened = false
 	AiCompetitor._tier_data.clear()
 	GameClock._current_day  = 0
 	GameClock._current_tick = 0
+	GameClock._market_state = GameClock.MarketState.PRE_MARKET
 	if GameClock.on_day_transition.is_connected(AiCompetitor._on_day_transition):
 		GameClock.on_day_transition.disconnect(AiCompetitor._on_day_transition)
-	if GameClock.on_market_open.is_connected(AiCompetitor._on_market_open):
-		GameClock.on_market_open.disconnect(AiCompetitor._on_market_open)
 
 
 # ── AC-01: 계약 인터페이스 정상 동작 (GDD §8 AC-03) ──
@@ -229,18 +227,18 @@ func test_ai_competitor_out_of_range_participant_id_returns_zero() -> void:
 # ── EC-04: current_day=0 시 r_prev=0.0 ──
 
 func test_ai_competitor_first_day_interpolation_starts_from_zero() -> void:
-	# Arrange — 시즌 첫날, day=0, tick=0 (after_each에서 이미 0이지만 명시적으로 설정)
+	# Arrange — 시즌 첫날, PRE_MARKET+day==0 → 0% 반환 (가드 통과 전)
 	var counts: Dictionary = { AiCompetitor.TIER_BRONZE: 10 }
-	_init_standard(AiCompetitor.TIER_BRONZE, counts)
+	AiCompetitor.init_season(AiCompetitor.TIER_BRONZE, counts, SEED_FIXED)
+	GameClock._market_state = GameClock.MarketState.PRE_MARKET
 	GameClock._current_day  = 0
 	GameClock._current_tick = 0
 
-	# Act — 장 시작 직후 (tick=0): r_prev=0, progress=0 → return_pct ≈ 0
+	# Act
 	var result: float = AiCompetitor.get_tier_return_pct(0)
 
-	# Assert — tick=0, progress=0이므로 결과는 r_prev(=0.0) ≈ 0.0
-	assert_almost_eq(result, 0.0, 0.1,
-		"EC-04: 첫날 tick=0에서 return_pct는 r_prev=0.0에 가까워야 함")
+	# Assert — PRE_MARKET + day==0 → 0.0 반환
+	assert_eq(result, 0.0, "EC-04: 시즌 첫 PRE_MARKET에서 return_pct == 0.0")
 
 
 # ── EC-07: AI 0명 티어 ──

@@ -74,12 +74,6 @@ const TIER_PARAMS: Array[Dictionary] = [
 
 ## 시즌 시작 여부 플래그. EC-01 가드에 사용.
 var _initialized: bool = false
-## 이번 시즌에 장이 최초 개시됐는지 여부.
-## GameClock.is_season_active()와 다르다:
-##   - is_season_active(): 시즌 시작 버튼 눌렸는가 (PRE_MARKET 포함)
-##   - _market_opened: on_market_open 수신 이후 (PRE_MARKET 구간엔 false)
-## PRE_MARKET 구간에서 수익률 0% 유지에 사용. 세이브 데이터로 복원.
-var _market_opened: bool = false
 ## 플레이어 배정 티어 (0~10).
 var _player_tier: int = 0
 ## 이 시즌의 글로벌 랜덤 시드.
@@ -99,7 +93,6 @@ var _tier_data: Dictionary = {}
 
 func _ready() -> void:
 	GameClock.on_day_transition.connect(_on_day_transition)
-	GameClock.on_market_open.connect(_on_market_open)
 
 
 # ── Public API ──
@@ -137,7 +130,6 @@ func init_season(player_tier: int, participant_counts: Dictionary, seed: int = 0
 		_rebuild_player_tier_buckets()
 
 	_initialized = true
-	_market_opened = false  # on_market_open 수신 전까지 수익률 미공개
 
 
 ## 매 틱 호출. 플레이어 소속 티어 내 특정 AI의 현재 return_pct를 반환한다.
@@ -146,7 +138,9 @@ func init_season(player_tier: int, participant_counts: Dictionary, seed: int = 0
 ## [br]Usage: var r := AiCompetitor.get_tier_return_pct(42)
 func get_tier_return_pct(participant_id: int) -> float:
 	# 장 개시 전 PRE_MARKET 구간: 수익률 미공개 (GDD §3-1 원칙 6)
-	if not _market_opened:
+	# PRE_MARKET + day==0: 시즌 첫 장 개시 전 — 수익률 미공개 (GDD §3-1 원칙 6)
+	if GameClock.get_market_state() == GameClock.MarketState.PRE_MARKET \
+			and GameClock.get_current_day() == 0:
 		return 0.0
 	# EC-01: init_season 미호출 가드
 	if not _initialized:
@@ -178,7 +172,8 @@ func get_tier_return_pct(participant_id: int) -> float:
 ## [br]Usage: var all_r := AiCompetitor.get_all_return_pcts(AiCompetitor.TIER_BRONZE)
 func get_all_return_pcts(tier: int) -> Array:
 	# 장 개시 전 PRE_MARKET 구간: 수익률 미공개 (GDD §3-1 원칙 6)
-	if not _market_opened:
+	if GameClock.get_market_state() == GameClock.MarketState.PRE_MARKET \
+			and GameClock.get_current_day() == 0:
 		return []
 	if not _initialized:
 		push_warning("AiCompetitor: init_season not called")
@@ -276,7 +271,8 @@ func estimate_player_rank(player_return_pct: float) -> int:
 ## 리더보드 상위 K개 행 구성 시 get_interpolated_return()과 함께 사용.
 ## [br]반환값: Array[int] — 해당 티어의 participant_id를 종가 내림차순으로 정렬한 배열
 func get_sorted_indices(tier: int) -> Array:
-	if not _market_opened or not _initialized:
+	if not _initialized or (GameClock.get_market_state() == GameClock.MarketState.PRE_MARKET \
+			and GameClock.get_current_day() == 0):
 		return []
 	if not _tier_data.has(tier):
 		return []
@@ -295,7 +291,8 @@ func get_sorted_indices(tier: int) -> Array:
 ## [br]participant_id: 0-based 인덱스
 ## [br]반환값: float (%)
 func get_interpolated_return(tier: int, participant_id: int) -> float:
-	if not _market_opened or not _initialized:
+	if not _initialized or (GameClock.get_market_state() == GameClock.MarketState.PRE_MARKET \
+			and GameClock.get_current_day() == 0):
 		return 0.0
 	if not _tier_data.has(tier):
 		return 0.0
@@ -318,7 +315,6 @@ func get_save_data() -> Dictionary:
 		"season_seed":        _season_seed,
 		"player_tier":        _player_tier,
 		"participant_counts": counts,
-		"market_opened":      _market_opened,
 	}
 
 
@@ -335,24 +331,17 @@ func load_save_data(data: Dictionary) -> void:
 	for key: String in counts_raw:
 		counts[int(key)] = counts_raw[key]
 	init_season(data.get("player_tier", 0), counts, data.get("season_seed", 0))
-	_market_opened = data.get("market_opened", true)  # 구버전 세이브: 장 개시 후 저장이므로 true
 	_rebuild_player_tier_buckets()  # 로드 시점 day 기준으로 버킷 재계산
 
 
 ## Resets all AI competitor state. Called by GameMain (new game) and tests (before_each).
 func reset() -> void:
 	_initialized = false
-	_market_opened = false
 	_player_tier = 0
 	_season_seed = 0
 	_tier_data.clear()
 
 # ── Signal Handlers ──
-
-## 장 최초 개시 시 수익률 공개 시작. PRE_MARKET 구간 0% 유지를 위해 필요.
-func _on_market_open() -> void:
-	_market_opened = true
-
 
 ## GameClock.on_day_transition 핸들러. 플레이어 티어 버킷 하루 1회 재계산.
 func _on_day_transition() -> void:

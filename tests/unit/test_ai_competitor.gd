@@ -11,23 +11,25 @@ const EPSILON: float  = 0.001  # AC-01 부동소수점 오차 허용값 (%)
 
 ## 표준 테스트용 init_season 호출 헬퍼.
 ## 브론즈 100명 기본값으로 초기화 (성능 테스트 외).
-## is_season_active()는 GameClock._season_active 위임 — 테스트에서 직접 설정.
-## get_all_return_pcts / get_tier_return_pct는 시즌 활성 상태에서만 값을 반환한다.
+## _market_opened=true 강제: get_all_return_pcts / get_tier_return_pct는
+## on_market_open 수신 이후에만 값을 반환한다 (PRE_MARKET 구간 0% 보호).
 func _init_standard(player_tier: int = AiCompetitor.TIER_BRONZE,
 		counts: Dictionary = { 0: 100 },
 		seed: int = SEED_FIXED) -> void:
 	AiCompetitor.init_season(player_tier, counts, seed)
-	GameClock._season_active = true
+	AiCompetitor._market_opened = true
 
 
 func after_each() -> void:
 	AiCompetitor._initialized = false
+	AiCompetitor._market_opened = false
 	AiCompetitor._tier_data.clear()
-	GameClock._season_active = false
 	GameClock._current_day  = 0
 	GameClock._current_tick = 0
 	if GameClock.on_day_transition.is_connected(AiCompetitor._on_day_transition):
 		GameClock.on_day_transition.disconnect(AiCompetitor._on_day_transition)
+	if GameClock.on_market_open.is_connected(AiCompetitor._on_market_open):
+		GameClock.on_market_open.disconnect(AiCompetitor._on_market_open)
 
 
 # ── AC-01: 계약 인터페이스 정상 동작 (GDD §8 AC-03) ──

@@ -8,10 +8,35 @@
 - **Verification-driven development**: Write tests first when adding gameplay systems.
   For UI changes, verify with screenshots. Compare expected output to actual output
   before marking work complete. Every implementation should have a way to prove it works.
+- **상태 소유권 (State Ownership)**: 모든 상태는 단일 소유자를 가진다. 동일한 사실을 두 곳에서 추적하면
+  하나를 제거하고 소유자에게서 읽는다. 상태를 다른 소스로 교체하기 전, 대체 소스가 시스템의
+  **모든 가능한 상태(상태머신의 각 노드, 세이브/로드 직후 포함)**에서 동일한 의미를 반환함을
+  코드 수정 전에 증명한다. 증명 불가 시 교체하지 않는다.
+- **리팩터링 사전 승인**: 여러 파일에 걸친 구조적 변경(변수 제거, 소유권 이전, 인터페이스 변경)은
+  Edit 툴 사용 전에 다음을 텍스트로 제시하고 승인을 받는다:
+  (1) 제거/이전하는 상태의 현재 의미, (2) 대체 소스의 의미와 동치 증명, (3) 수정 대상 파일 목록.
 
 # Code Review Checklist
 
 모든 PR/구현 완료 시 Lead Programmer + QA Lead가 공동 확인. 미통과 항목 있으면 Done 불가.
+
+## ADR 동기화 (Technical Director 서명 필수 — 미통과 시 Done 불가)
+- [ ] 이 구현에서 내린 아키텍처 결정(API 설계, 소유권, 패턴 선택)이 기존 ADR로 커버되는가
+- [ ] 커버되지 않는 결정이 있으면 새 ADR을 `docs/architecture/NNN-*.md`로 작성했는가
+- [ ] 새 ADR이 `technical-preferences.md` Architecture Decisions Log에 추가됐는가
+- [ ] 기존 ADR과 충돌하는 결정이 있으면 해당 ADR의 Status를 Superseded로 갱신했는가
+
+**ADR 작성 기준**: 다음 중 하나라도 해당하면 ADR 필수
+- 새 파일/모듈의 소유권 또는 생명주기를 결정할 때
+- 두 가지 이상의 구현 방식을 검토하고 하나를 선택할 때
+- 향후 개발자가 "왜 이렇게 했지?"라고 물을 것 같은 결정일 때
+- 기존 ADR에 정의된 패턴의 예외를 허용할 때
+
+## GDD 동기화 (Lead Programmer 서명 필수 — 미통과 시 Done 불가)
+- [ ] 이 구현과 관련된 GDD 파일을 특정했는가
+- [ ] 해당 GDD의 Implementation Checklist 항목이 전부 [x] 체크됐는가
+- [ ] 해당 GDD의 Status가 구현 완료를 반영하는가 (완료 → Approved, 부분 → In Review + 미완 항목 명시)
+- [ ] GDD에 기술된 API / 파일 경로 / 시그널명이 실제 코드와 일치하는가
 
 ## 인터페이스 정확성
 - [ ] 호출하는 모든 외부 메서드가 해당 파일에 실제로 정의돼 있는가 (Grep으로 확인)
@@ -23,6 +48,12 @@
 - [ ] `--export-release` 빌드 성공 (ERROR 없음)
 - [ ] 바이너리 실행 후 5초 이상 프로세스 생존
 - [ ] 실행 로그에 SCRIPT ERROR 없음
+
+## 버그 수정 검증 (버그 수정 PR에만 적용)
+- [ ] 이 수정은 **증상 억제(guard/patch)**인가, **원인 제거**인가?
+      증상 억제인 경우: 왜 근본 수정이 불가능한지 해당 코드에 주석으로 명시
+- [ ] 발견한 버그 패턴을 전체 codebase에서 grep해 동일 패턴이 다른 파일에 없는지 확인했는가?
+      (버그 1건 발견 → 동일 패턴 전수 검색 → 없으면 ✅, 있으면 함께 수정)
 
 ## 테스트
 - [ ] 해당 시스템의 API 계약 테스트가 `tests/unit/test_api_contracts.gd`에 추가됐는가

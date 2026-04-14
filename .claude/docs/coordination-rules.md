@@ -35,6 +35,15 @@
 
 **확인 순서**: `sprint-NN.md` DoD 전 항목 `[x]` 확인 → 그 다음에 `milestone.md` Status → Closed.
 
+### P-RULE-03: 다음 스프린트 선행 조건 항목은 Nice-to-Have 분류 금지
+스프린트 태스크의 AC 또는 설명에 "다음 스프린트 구현 선행 조건", "Sprint N+1 착수 전 필수" 등
+다음 스프린트 의존성이 명시된 항목은 **Nice-to-Have로 분류할 수 없다.** 최소 Should Have, 실질적
+블로커이면 Must Have로 분류한다.
+
+**근거**: Nice-to-Have는 미완 시 이월이 허용된다. 그러나 다음 스프린트 착수를 막는 항목이
+이월되면 다음 스프린트 첫 세션부터 블로킹 상태가 된다. 분류 시점에 의존성을 확인하여
+우선순위를 올바르게 결정한다.
+
 ---
 
 1. **Vertical Delegation**: Leadership agents delegate to department leads, who

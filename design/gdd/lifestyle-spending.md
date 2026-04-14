@@ -12,11 +12,16 @@
 
 <!-- TODO: 작성 예정 -->
 
-라이프스타일 소비 시스템은 시즌 결산 후 비시즌 윈도우에서 플레이어가 자신의 자산으로
-거주지·사치품·사회공헌·대안 투자 등에 지출할 수 있는 보조 루프다.
+라이프스타일 소비 시스템은 투자 대회 경쟁과 병렬로 운영되는 자산 성장 루프다.
+플레이어는 투자 수익을 현금 자산으로 전환하여 부동산·사치품·사회공헌·대안 투자 등에 지출하고,
+이를 통해 총 자산(F3)이 성장하는 시각적·서사적 피드백을 받는다.
 
-소비는 sim_cash에서 직접 차감된다. 지출하면 다음 시즌 시드가 줄어들고,
-줄어든 시드 기준으로 티어가 재배정된다. 현실적인 자산 운용의 트레이드오프를 그대로 반영한다.
+라이프스타일 소비는 **현금 자산**에서만 이루어진다. 경쟁 자금(예수금/계좌 총 평가금액)과
+완전히 분리되어 있으며, 라이프스타일 지출이 다음 시즌 시드나 티어에 직접 영향을 주지 않는다.
+
+**두 종류의 라이프스타일 이벤트:**
+- **자동 정산** (장 종료 후 매일): 부동산 임대 수익, 사치품 Recurring 비용 등이 현금 자산에 자동 반영
+- **능동 구매** (휴장 시간): 부동산·사치품 등 신규 구매. 매일 장 마감 후 접근 가능
 
 ---
 
@@ -28,24 +33,30 @@
 
 ## 3. Detailed Design
 
-### 3-1. 비시즌 윈도우 플로우
+### 3-1. 라이프스타일 플로우
 
 ```
-[시즌 종료 — Day 20 SEASON_END]
+[장 종료 후 — 매일]
   ↓
-[시즌 정산 화면] — 순위 / XP / 시즌 상금 확인 (기존)
+[자동 라이프스타일 정산]
+  ├─ 부동산 임대 수익 → 현금 자산 입금
+  ├─ Recurring 비용 차감 (골프 클럽 연회비 등) → 현금 자산 차감
+  └─ 스타트업 엑싯 이벤트 (만기 도달 시) → 현금 자산 입금 또는 0원
   ↓
-[비시즌 정산]
-  ├─ 부동산 임대 수익 → sim_cash 입금
-  ├─ 스타트업 엑싯 이벤트 (만기 도달 시) → sim_cash 입금 또는 0원
-  └─ Recurring 비용 차감 (골프 클럽 연회비 등)
-     결과: 시즌 결산 자산 확정
+[정산 리포트 시퀀스]
+  일일 정산 리포트                           ← 매일
+  → (5거래일째) 주간 정산 리포트             ← 주말에 추가
+    → (20거래일째) 시즌 정산 리포트          ← 시즌 종료에 추가
+  → 라이프스타일 정산 리포트                 ← 매일 항상 마지막
+      (자동 정산 내역: 임대 수익 / 비용 / 엑싯 결과 요약)
   ↓
-[라이프스타일 소비 화면] — 시즌 결산 자산에서 선택 소비
-  ↓
-[소비 후 잔여 = 다음 시즌 시드] → 티어 배정 기준
-  ↓
-[다음 시즌 시작 화면] (기존)
+[휴장 시간 — 능동 구매 가능]
+  ├─ 거주지 업그레이드
+  ├─ 사치품 구매
+  ├─ 대안 투자 (부동산 매입, 스타트업 투자)
+  └─ 사회공헌
+
+※ 시즌 종료 후: 예수금 전액 현금 자산 전환 → [시즌 시작 전]
 ```
 
 ### 3-2. 소비 카테고리
@@ -208,22 +219,43 @@ rental_income_per_season = property_value × RENTAL_YIELD_RATE
 - 범위: [TODO, TODO]
 - 예시: 강남 상가 10억 × TODO% = 시즌당 TODO만원
 
-### 시즌 결산 자산
+### 총 자산
 
 ```
-season_settled_assets = sim_cash
-                       + Σ(rental_income)
-                       + Σ(startup_exit_proceeds)
-                       - Σ(recurring_costs)
+total_assets = cash_assets + account_total_value + Σ(tangible_asset_values)
+
+account_total_value = deposit + trading_pnl          # 시즌 중
+                    = 0                               # 시즌 시작 전 (예수금 입금 전)
+
+tangible_asset_value = purchase_price
+                     × (1 - DEPRECIATION_RATE) ^ seasons_held  # 고정 감가
+                     × price_modifier                           # 확률 변동 + 이벤트 바이어스
 ```
 
-시즌 중 강제 청산 후 sim_cash에 주식 청산 대금 포함 (season-manager.md §3-1 ② 참조).
-
-### 다음 시즌 시드 및 티어 배정 기준
+### 일일 현금 자산 자동 정산
 
 ```
-next_season_seed = season_settled_assets - lifestyle_spending
-tier = season-manager.md §3-2 티어 테이블(next_season_seed 기준)
+cash_assets += Σ(rental_income_today)
+cash_assets -= Σ(recurring_costs_today)
+cash_assets += Σ(startup_exit_proceeds_today)   # 만기 도달 시
+```
+
+### 시즌 정산 후 예수금 → 현금 자산 전환
+
+```
+cash_assets += account_total_value   # 예수금 + 시즌 거래 P&L 전액
+account_total_value = 0
+```
+
+### 시즌 시작 전 예수금 자동 입금
+
+```
+auto_deposit = tier_threshold(max_tier_accessible(cash_assets))
+# 단, cash_assets ≤ 100만원이면 auto_deposit = cash_assets (전액)
+# 단, deposit < 100만원이면 출금 불가 (최소 보장)
+deposit = auto_deposit
+cash_assets -= auto_deposit
+tier = tier_by_deposit(deposit)
 ```
 
 ---

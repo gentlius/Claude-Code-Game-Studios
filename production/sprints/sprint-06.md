@@ -132,4 +132,4 @@ S6-01 리그 복원 항목은 재설계 완료 후 재검증.
 - [x] 기존 테스트 전부 통과 + 신규 테스트 추가 (243/243, 2026-04-14)
 - [x] Code Review Checklist "ADR 동기화" 통과. Technical Director 서명 (2026-04-14) — ADR-017 신규 (뉴스 순회), ADR-007 동점 처리 추가
 - [x] `--export-release` 빌드 성공 + SCRIPT ERROR 없음 (2026-04-14, 125MB)
-- [ ] 코드 커밋 완료, main 브랜치 green
+- [x] 코드 커밋 완료, main 브랜치 green (e6f0197, 2026-04-14)

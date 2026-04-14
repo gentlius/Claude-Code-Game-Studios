@@ -65,10 +65,11 @@ func _create_row(stock_id: String) -> HBoxContainer:
 	lbl_marker.add_theme_color_override("font_color", ThemeSetup.BTN_ACCENT_HOVER)
 	row.add_child(lbl_marker)           ## [0] ▶ marker
 	var lbl_ticker: Label = Label.new()
-	lbl_ticker.text = stock_id
-	lbl_ticker.custom_minimum_size.x = 32
+	var stock_data: StockData = StockDatabase.get_stock(stock_id)
+	lbl_ticker.text = stock_data.get_display_name() if stock_data != null else stock_id
+	lbl_ticker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ThemeSetup.style_label_primary(lbl_ticker)
-	row.add_child(lbl_ticker)           ## [1] ticker
+	row.add_child(lbl_ticker)           ## [1] name(ticker)
 	var lbl_price: Label = Label.new()
 	lbl_price.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lbl_price.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT

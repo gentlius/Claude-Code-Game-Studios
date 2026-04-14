@@ -24,6 +24,16 @@ const PROFIT_RED: Color = Color(0.92, 0.22, 0.20)      # #EB3833 Korean: profit=
 const LOSS_BLUE: Color = Color(0.18, 0.42, 0.90)       # #2E6BE6 Korean: loss=blue
 const NEUTRAL_GRAY: Color = Color(0.55, 0.55, 0.58)    # #8C8C94
 
+## Market price color scheme — parameterizable for DLC markets.
+## KRX default: price up = red, price down = blue.
+## Call set_market_colors() at market initialization to override.
+static var PRICE_UP: Color = PROFIT_RED
+static var PRICE_DOWN: Color = LOSS_BLUE
+
+static func set_market_colors(up: Color, down: Color) -> void:
+	PRICE_UP = up
+	PRICE_DOWN = down
+
 const BTN_NORMAL: Color = Color(0.88, 0.88, 0.91)      # #E0E0E8 visible gray
 const BTN_HOVER: Color = Color(0.82, 0.82, 0.86)       # #D1D1DB
 const BTN_PRESSED: Color = Color(0.76, 0.76, 0.80)     # #C2C2CC

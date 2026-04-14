@@ -1,6 +1,6 @@
 # Start Screen — GDD
 
-**Status**: Approved (2026-04-07)
+**Status**: In Review
 **Sprint**: S5
 **Owner**: ui-programmer / gameplay-programmer
 
@@ -42,7 +42,7 @@ Start Screen에서 기존 슬롯을 클릭해 이어하거나, 새 슬롯을 생
 | 항목 | 값 |
 |------|----|
 | 배경 | `#0a0a0a` |
-| 로고 이미지 | `assets/ui/logo.png`, 화면 중앙 |
+| 로고 | 네이티브 노드로 구현 (SVG `<text>` 미지원). 상승 바 차트 ColorRect 5개 + 구분선 + "SEED" 72px / "M O N E Y" 28px Label 2개. 화면 중앙 |
 | 자동 전환 | `SPLASH_DURATION`(2.0s) 경과 후 StartScreen으로 페이드 전환 |
 | 스킵 입력 | 마우스 좌클릭, Space, Enter |
 | 전환 페이드 | `SPLASH_FADE_DURATION`(0.3s) 페이드아웃 → StartScreen |

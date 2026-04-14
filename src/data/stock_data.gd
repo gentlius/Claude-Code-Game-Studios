@@ -18,3 +18,8 @@ enum VolatilityProfile { LOW, MEDIUM, HIGH, EXTREME }
 @export var dividend_yield: float = 0.0  ## Annual dividend yield as a decimal (e.g. 0.02 = 2%). 0.0 = no dividend.
 @export var event_tags: Array[String] = []  ## Tags for INDIVIDUAL event matching
 @export var description: String = ""
+
+## 종목 표시용 통합 포맷. 전체 코드에서 이 메서드만 사용한다.
+## 포맷 변경 시 이 한 곳만 수정하면 된다.
+func get_display_name() -> String:
+	return "%s(%s)" % [name_ko, stock_id]

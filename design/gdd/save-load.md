@@ -227,6 +227,7 @@ portfolio_value = CurrencySystem.sim_cash
 - `GameClock.on_market_close`, `SeasonManager.on_season_ended` 시그널
 - `StartScreen` — `load_slot()` / `delete_slot()` / `get_slot_list()` 호출자 (`start-screen.md`)
 - `SavingOverlay` — `save_started` / `save_completed` 시그널 구독자 (`trading-screen.md`)
+- `LifestyleManager` — Beta 구현 시 `get_save_data` / `load_save_data` 추가 필요. 직렬화 대상: 현재 거주지, 보유 부동산 목록(매입가/만기), 스타트업 투자 목록(투자금/엑싯 시즌), 구매 품목 목록, 획득 칭호 목록, Recurring 비용 항목
 
 ---
 

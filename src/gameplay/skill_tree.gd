@@ -177,14 +177,28 @@ func _load_skills_from_json() -> void:
 			var prereqs: Array[String] = []
 			for p: Variant in entry.get("prerequisites", []):
 				prereqs.append(str(p))
-			_skill_definitions[entry["id"]] = {
-				"id": entry["id"],
+			var skill_id: String = entry["id"]
+			_skill_definitions[skill_id] = {
+				"id": skill_id,
 				"branch": entry.get("branch", ""),
 				"tier": entry.get("tier", 0),
 				"name": entry.get("name", ""),
-				"description": entry.get("description", ""),
+				"description": _compute_description(skill_id, entry.get("description", "")),
 				"prerequisites": prereqs,
 			}
+
+
+## 상수 기반 동적 설명 생성. JSON 스트링 하드코딩 대신 실제 상수값을 사용.
+## 상수 변경 시 이 함수만 수정하면 됨.
+func _compute_description(skill_id: String, fallback: String) -> String:
+	match skill_id:
+		"S0":
+			return "뉴스 %d분 딜레이 (기본 제공)" % NEWS_DELAY_T0_MIN
+		"S1":
+			return "뉴스 딜레이 %d분으로 단축" % NEWS_DELAY_T1_MIN
+		"S2":
+			return "뉴스 딜레이 0초 (실시간)"
+	return fallback
 
 
 # ── Serialization ──

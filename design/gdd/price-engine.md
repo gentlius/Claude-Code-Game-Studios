@@ -320,6 +320,7 @@ Public API:
 - `get_index_change_pct() → float`: 전일 대비 등락률(%)
 - `get_market_cap(stock_id) → int`: 개별 종목 시가총액
 - `get_daily_limits(stock_id) → {upper, lower, prev_close}`: 상/하한가 조회
+- `get_market_avg_return_pct() → float`: 전체 종목 당일 단순 평균 등락률(%). XP 시스템이 Alpha 계산에 호출
 - `push_event(event: Event)`: 이벤트 큐에 추가 (뉴스/이벤트 시스템이 호출)
 
 ##### 2-4. VI (변동성완화장치, Volatility Interruption)

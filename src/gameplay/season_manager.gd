@@ -276,8 +276,8 @@ func get_leaderboard(tier: int = -99, from_rank: int = 1, to_rank: int = -1) -> 
 	if not is_season_active() or target_tier == TIER_FREE_MARKET:
 		return []
 
-	# O(1) — 전일 일별 스냅샷 정렬 인덱스 캐시 조회 (ADR-008)
-	var sorted_indices: Array = AiCompetitor.get_sorted_indices(target_tier)
+	# O(1) — 전일 EOD 기준 정렬 인덱스 캐시 조회 (ADR-008, GDD §3-3 재설계)
+	var sorted_indices: Array[int] = AiCompetitor.get_sorted_indices(target_tier)
 	var ai_count: int = sorted_indices.size()
 	var player_in_tier: bool = target_tier == _current_tier
 	var player_return: float = get_season_return_pct()
@@ -312,11 +312,13 @@ func get_leaderboard(tier: int = -99, from_rank: int = 1, to_rank: int = -1) -> 
 				continue
 			var ai_idx: int = sorted_indices[ai_pos]
 			var meta: Dictionary = AiCompetitor.get_participant_meta(target_tier, ai_idx)
+			# 전일 EOD 기준 수익률 직접 인덱스 접근 O(1) (ADR-008, GDD §3-3 재설계)
+			var eod: Array[float] = AiCompetitor.get_eod_snapshot(target_tier)
+			var ai_return: float = eod[ai_idx] if ai_idx < eod.size() else 0.0
 			result.append({
 				"rank": rank,
 				"nickname": meta["display_name"],
-				# O(1) 보간 — 전체 배열 불필요 (ADR-008)
-				"return_pct": AiCompetitor.get_interpolated_return(target_tier, ai_idx),
+				"return_pct": ai_return,
 				"is_player": false,
 				"is_grandmaster_ai": meta.get("is_master_of_investment", false),
 				"prize_preview": _prize_for_rank(rank, target_tier),
@@ -433,14 +435,16 @@ func _calculate_player_tier_rank(season_return_pct: float) -> int:
 
 
 ## True if player's weekly return beats all AI in the same tier this week.
-## O(1) — 정렬 인덱스[0] (최고 AI 수익률)과 비교만 수행 (ADR-008).
+## O(1) — 전일 EOD 기준 정렬 인덱스[0] (최고 AI 수익률)과 비교 (ADR-008, GDD §3-3 재설계).
 func _is_player_weekly_top(weekly_return_pct: float) -> bool:
 	if _current_tier == TIER_FREE_MARKET:
 		return false
-	var sorted_indices: Array = AiCompetitor.get_sorted_indices(_current_tier)
+	var sorted_indices: Array[int] = AiCompetitor.get_sorted_indices(_current_tier)
 	if sorted_indices.is_empty():
 		return true
-	var top_ai_return: float = AiCompetitor.get_interpolated_return(_current_tier, sorted_indices[0])
+	var eod: Array[float] = AiCompetitor.get_eod_snapshot(_current_tier)
+	var top_idx: int = sorted_indices[0]
+	var top_ai_return: float = eod[top_idx] if top_idx < eod.size() else 0.0
 	return weekly_return_pct > top_ai_return
 
 

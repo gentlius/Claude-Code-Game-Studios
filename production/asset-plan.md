@@ -45,6 +45,10 @@ subtle neon reflections, photorealistic, high detail
 | S-04 | 슬롯 선택 SFX | `assets/audio/sfx/sfx_slot_select.ogg` | 306ms | P2 | Freesound #677860 (CC0) — el_boss | "UI Button Click Snap" |
 | S-05 | 슬롯 호버 SFX | `assets/audio/sfx/sfx_slot_hover.ogg` | 48ms | P2 | Freesound #448086 (CC0) — Breviceps | "Normal click", -6dB 권장 |
 | S-06 | 삭제 확인 SFX | `assets/audio/sfx/sfx_delete_confirm.ogg` | 짧은 에러음 | P2 | Freesound #445976 (CC0) — Breviceps | "Error Signal 1" |
+| S-07 | 수익 실현 소 SFX | `assets/audio/sfx/sfx_profit_small.ogg` | ~0.3초 | P3 (Beta) | Freesound "coin clink" CC0 (예: #362204) | 동전 1~2개 딸랑 |
+| S-08 | 수익 실현 중 SFX | `assets/audio/sfx/sfx_profit_medium.ogg` | ~1.0초 | P3 (Beta) | Freesound "win jingle short" CC0, 또는 Bfxr | 동전 여러 개 + 짧은 멜로디 |
+| S-09 | 수익 실현 대 SFX | `assets/audio/sfx/sfx_profit_large.ogg` | ~2.0초 | P3 (Beta) | Freesound "fanfare short" CC0 (예: #270402 확인) | 팡파레 풀버전 |
+| S-10 | 수익 실현 잭팟 SFX | `assets/audio/sfx/sfx_profit_jackpot.ogg` | ~3.0초 | P3 (Beta) | Freesound "jackpot big win" CC0, 또는 S-09+동전 Audacity 믹스 | 시그니처 잭팟 사운드 |
 
 ### S-01 BGM 검색 키워드
 
@@ -95,3 +99,46 @@ Bfxr (https://www.bfxr.net) 또는 로컬 실행:
 | P1 | S-03 저장 완료 SFX | 저장 완료 피드백 |
 | P2 | A-03 스피너 링 | Godot 기본 UI로 대체 가능 |
 | P2 | S-04~06 UI SFX | Bfxr로 당일 제작 가능 |
+| P3 (Beta) | A-VFX-01 금화 스프라이트 | 수익 팡파레 파티클 — Beta 전 확보 필요 |
+| P3 (Beta) | S-07~10 수익 팡파레 SFX | 4등급 각각. Freesound CC0 우선, 없으면 Audacity 믹스 |
+| P3 (Beta) | A-Housing-03~06 거주지 배경 | 실버~마스터+ 중간 4티어 (쪽방·펜트하우스 완료) |
+
+---
+
+## 5. Beta 추가 에셋 — 수급 상세
+
+### A-VFX-01 — 금화 스프라이트 (ProfitCelebration)
+
+| 항목 | 내용 |
+|------|------|
+| 파일 | `assets/art/vfx/coin_gold.png` |
+| 규격 | 32×32 또는 64×64 PNG 투명 배경 |
+| 용도 | `GPUParticles2D` 스프라이트 |
+| 수급 | OpenGameArt.org `"gold coin"` CC0, 또는 Kenney.nl UI Pack (CC0) |
+| 추천 | Kenney.nl → `kenney_ui-pack` → coin 스프라이트 추출 (CC0, 크레딧 불필요) |
+| 대안 | Figma에서 원형 + 골드 그라디언트 10분 제작 |
+
+### A-Housing-03~06 — 거주지 배경 중간 4티어
+
+| ID | 거주지 | 파일 | 수급 방법 |
+|----|-------|------|---------|
+| A-Housing-03 | 변두리 원룸 | `assets/art/housing/silver_oneroom.png` | AI 생성 (Midjourney/DALL-E). 프롬프트 아래 참조 |
+| A-Housing-04 | 도심 오피스텔 | `assets/art/housing/gold_officetel.png` | AI 생성 |
+| A-Housing-05 | 강남 아파트 | `assets/art/housing/platinum_gangnam_apt.png` | AI 생성 |
+| A-Housing-06 | 평창동 대저택 | `assets/art/housing/master_mansion.png` | AI 생성 |
+
+**AI 생성 프롬프트 템플릿**:
+```
+[거주지명] interior, Korean style, realistic photography, moody ambient lighting,
+dark background, cinematic composition, no people, 16:9 ratio,
+high detail, photorealistic
+```
+규격: 1280×720 이상 PNG/JPG. `bronze_jjokbang.png` / `diamond_penthouse.png` 톤 참조.
+
+### S-07~10 수급 우선순위
+
+```
+1. Freesound.org에서 CC0 검색 (DOWNLOAD_GUIDE.md §S-07~10 참조)
+2. 없으면 Bfxr 자체 생성 (S-07, S-08 가능)
+3. 없으면 Audacity로 기존 SFX 레이어 믹스 (S-10 추천)
+```

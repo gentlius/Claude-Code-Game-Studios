@@ -1,6 +1,6 @@
 # 게임 시계 (Game Clock)
 
-> **Status**: In Review
+> **Status**: Approved
 > **Author**: user + game-designer
 > **Last Updated**: 2026-04-02
 > **Implements Pillar**: 짧고 굵게 (Quick & Punchy)

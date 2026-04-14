@@ -14,6 +14,8 @@ var _summary_bar: HBoxContainer
 var _lbl_total_assets: Label
 var _lbl_return_rate: Label
 var _lbl_cash_info: Label
+var _lbl_seed_capital: Label
+var _lbl_slot_counter: Label  ## "X/5" or "X/10" slot counter (P1/P2)
 var _holdings_container: VBoxContainer
 var _tx_container: VBoxContainer
 
@@ -24,6 +26,7 @@ func _ready() -> void:
 	PortfolioManager.valuation_updated.connect(_on_valuation_updated)
 	PortfolioManager.holding_added.connect(_on_holding_added)
 	PortfolioManager.holding_removed.connect(_on_holding_removed)
+	SkillTree.on_skill_unlocked.connect(_on_skill_unlocked_refresh_slots)
 	tree_exiting.connect(_disconnect_signals)
 	# Initial render — valuation_updated may have fired during load_slot() before
 	# this node existed, so explicitly refresh on entry.
@@ -55,6 +58,17 @@ func _build_ui() -> void:
 	_lbl_cash_info.text = ""
 	ThemeSetup.style_label_secondary(_lbl_cash_info)
 	_summary_bar.add_child(_lbl_cash_info)
+
+	_lbl_seed_capital = Label.new()
+	_lbl_seed_capital.text = ""
+	ThemeSetup.style_label_dim(_lbl_seed_capital)
+	_summary_bar.add_child(_lbl_seed_capital)
+
+	# Slot counter — implements P1/P2 skill UI feedback (design/gdd/skill-tree.md §P1 §P2)
+	_lbl_slot_counter = Label.new()
+	_lbl_slot_counter.text = ""
+	ThemeSetup.style_label_secondary(_lbl_slot_counter)
+	_summary_bar.add_child(_lbl_slot_counter)
 
 	var sep: HSeparator = HSeparator.new()
 	add_child(sep)
@@ -115,6 +129,15 @@ func _disconnect_signals() -> void:
 		PortfolioManager.holding_added.disconnect(_on_holding_added)
 	if PortfolioManager.holding_removed.is_connected(_on_holding_removed):
 		PortfolioManager.holding_removed.disconnect(_on_holding_removed)
+	if SkillTree.on_skill_unlocked.is_connected(_on_skill_unlocked_refresh_slots):
+		SkillTree.on_skill_unlocked.disconnect(_on_skill_unlocked_refresh_slots)
+
+
+## Refreshes slot counter when P1 or P2 is unlocked.
+## Implements: design/gdd/skill-tree.md §P1 §P2 — immediate UI update on unlock.
+func _on_skill_unlocked_refresh_slots(skill_id: String) -> void:
+	if skill_id == "P1" or skill_id == "P2":
+		_refresh()
 
 
 func _on_valuation_updated(_total: int, _rate: float) -> void:
@@ -130,7 +153,7 @@ func _refresh() -> void:
 	var holding_count: int = summary["holding_count"]
 	var max_holdings: int = summary["max_holdings"]
 
-	_lbl_total_assets.text = tr("총 자산: ₩%s") % _format_number(total)
+	_lbl_total_assets.text = tr("총 평가금액: ₩%s") % _format_number(total)
 
 	_lbl_return_rate.text = "(%+.1f%%)" % rate
 	if rate > 0.0:
@@ -141,14 +164,20 @@ func _refresh() -> void:
 		_lbl_return_rate.add_theme_color_override("font_color", ThemeSetup.NEUTRAL_GRAY)
 
 	if reserved > 0:
-		_lbl_cash_info.text = tr("현금: ₩%s | 예약: ₩%s | %d/%d종목") % [
-			_format_number(cash), _format_number(reserved),
-			holding_count, max_holdings
+		_lbl_cash_info.text = tr("예수금: ₩%s | 미체결예약: ₩%s") % [
+			_format_number(cash), _format_number(reserved)
 		]
 	else:
-		_lbl_cash_info.text = tr("현금: ₩%s | %d/%d종목") % [
-			_format_number(cash), holding_count, max_holdings
-		]
+		_lbl_cash_info.text = tr("예수금: ₩%s") % _format_number(cash)
+
+	# Slot counter — separate label for P1/P2 skill feedback
+	_lbl_slot_counter.text = tr("슬롯: %d/%d") % [holding_count, max_holdings]
+
+	var seed: int = SeasonManager.get_season_start_capital()
+	if seed > 0:
+		_lbl_seed_capital.text = tr("시드: ₩%s") % _format_number(seed)
+	else:
+		_lbl_seed_capital.text = ""
 
 	_refresh_holdings()
 	_refresh_transactions()
@@ -174,8 +203,9 @@ func _refresh_holdings() -> void:
 
 		# Stock ID
 		var sid: String = h["stock_id"]
+		var sid_data: StockData = StockDatabase.get_stock(sid)
 		var lbl_stock: Label = Label.new()
-		lbl_stock.text = sid
+		lbl_stock.text = sid_data.get_display_name() if sid_data != null else sid
 		lbl_stock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		ThemeSetup.style_label_primary(lbl_stock)
 		row.add_child(lbl_stock)
@@ -249,8 +279,11 @@ func _refresh_transactions() -> void:
 		var pnl_str: String = ""
 		if tx["type"] == "SELL" and tx.get("realized_pnl", 0) != 0:
 			pnl_str = " (손익: %+d)" % tx["realized_pnl"]
-		lbl.text = tr("틱 %d | %s | %s %d주 @ ₩%s%s") % [
-			tx.get("tick", 0), type_str, tx["stock_id"],
+		var tx_sid: String = tx["stock_id"]
+		var tx_stock: StockData = StockDatabase.get_stock(tx_sid)
+		var tx_name: String = tx_stock.name_ko if tx_stock != null else tx_sid
+		lbl.text = tr("틱 %d | %s | %s(%s) %d주 @ ₩%s%s") % [
+			tx.get("tick", 0), type_str, tx_name, tx_sid,
 			tx["quantity"], _format_number(tx["price"]), pnl_str
 		]
 

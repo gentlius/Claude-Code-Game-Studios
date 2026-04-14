@@ -1,6 +1,6 @@
 # 주문 처리 엔진 (Order Engine)
 
-> **Status**: In Review
+> **Status**: Approved
 > **Author**: user + game-designer
 > **Last Updated**: 2026-04-03
 > **Implements Pillar**: 판단이 곧 실력 (Judgment is King), 짧고 굵게 (Quick & Punchy)

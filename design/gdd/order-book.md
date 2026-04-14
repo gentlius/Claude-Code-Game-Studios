@@ -1,6 +1,6 @@
 # Order Book (호가창) — Design Document
 
-> **Status**: Approved (2026-04-07)
+> **Status**: In Review
 
 ## 1. Overview
 

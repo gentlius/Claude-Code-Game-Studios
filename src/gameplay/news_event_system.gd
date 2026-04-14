@@ -661,7 +661,7 @@ func _resolve_text(
 
 	# System variables
 	if stock != null:
-		text = text.replace("{company}", "%s(%s)" % [stock.name_ko, stock.stock_id])
+		text = text.replace("{company}", stock.get_display_name())
 		text = text.replace("{ticker}", stock.stock_id)
 		text = text.replace("{sector_name}", stock.sector)
 
@@ -725,14 +725,22 @@ func _generate_overnight_events() -> void:
 	else:
 		count = 2
 
+	# Track mutex within this overnight batch to prevent same-group repeats
+	var overnight_mutex: Dictionary = {}
+
 	for _i: int in range(count):
 		# Overnight: MACRO or SECTOR only, SMALL/MEDIUM only, GRADUAL_SHIFT only
 		var scope: String = "MACRO" if randf() < OVERNIGHT_MACRO_PROB else "SECTOR"
 		var impact: String = "SMALL" if randf() < OVERNIGHT_SMALL_PROB else "MEDIUM"
 
-		var template: Dictionary = _select_overnight_template(scope, impact)
+		var template: Dictionary = _select_overnight_template(scope, impact, overnight_mutex)
 		if template.is_empty():
 			continue
+
+		# Register mutex to prevent same-group template in the next overnight slot
+		var mg: Variant = template.get("mutex_group")
+		if mg != null and mg is String and str(mg) != "":
+			overnight_mutex[str(mg)] = template["template_id"]
 
 		var direction: int = _resolve_direction(template)
 		var target_ids: Array[String] = []
@@ -801,16 +809,17 @@ func _generate_overnight_disclosures() -> void:
 			60, MarketEvent.DecayCurve.LINEAR
 		)
 
+		var display_name: String = stock.get_display_name()
 		var headline: String
 		if direction > 0:
-			headline = "%s, 호실적 잠정공시 발표" % stock.name_ko
+			headline = "%s, 호실적 잠정공시 발표" % display_name
 		else:
-			headline = "%s, 실적 부진 잠정공시" % stock.name_ko
+			headline = "%s, 실적 부진 잠정공시" % display_name
 
 		_overnight_buffer.append({
 			"market_event": market_event,
 			"headline": headline,
-			"body": "%s의 잠정 실적이 발표됐다." % stock.name_ko,
+			"body": "%s의 잠정 실적이 발표됐다." % display_name,
 			"impact_hint": "개별 공시",
 			"scope": "INDIVIDUAL",
 			"impact_tier": "SMALL",
@@ -855,8 +864,8 @@ func _deliver_pre_market_news() -> void:
 	# 버퍼 클리어는 다음 날 _generate_overnight_events() 첫 줄이 담당한다.
 
 
-func _select_overnight_template(scope: String, impact: String) -> Dictionary:
-	## Only GRADUAL_SHIFT templates for overnight
+func _select_overnight_template(scope: String, impact: String, overnight_mutex: Dictionary) -> Dictionary:
+	## Only GRADUAL_SHIFT templates for overnight; respects mutex to prevent same-group repeats.
 	var candidates: Array[Dictionary] = []
 	var weights: Array[float] = []
 
@@ -867,6 +876,11 @@ func _select_overnight_template(scope: String, impact: String) -> Dictionary:
 			continue
 		if t.get("event_type", "") != "GRADUAL_SHIFT":
 			continue
+		# Mutex check: skip if same mutex_group already used in this overnight batch
+		var mg: Variant = t.get("mutex_group")
+		if mg != null and mg is String and str(mg) != "":
+			if overnight_mutex.has(str(mg)):
+				continue
 		candidates.append(t)
 		weights.append(float(t.get("weight_base", 1.0)))
 
@@ -943,7 +957,7 @@ func _reset_season_stats() -> void:
 
 func _on_vi_triggered(stock_id: String, is_upper: bool, halt_ticks: int) -> void:
 	var stock: StockData = StockDatabase.get_stock(stock_id)
-	var display_name: String = "%s(%s)" % [stock.name_ko, stock.stock_id] if stock else stock_id
+	var display_name: String = stock.get_display_name() if stock else stock_id
 	var direction_text: String = "상승" if is_upper else "하락"
 	var halt_min: int = halt_ticks / GameClock.TICKS_PER_MINUTE
 	var headline: String = "⚠️ [VI발동] %s %s — %d분 거래정지" % [display_name, direction_text, halt_min]
@@ -965,7 +979,7 @@ func _on_vi_triggered(stock_id: String, is_upper: bool, halt_ticks: int) -> void
 
 func _on_vi_released(stock_id: String) -> void:
 	var stock: StockData = StockDatabase.get_stock(stock_id)
-	var display_name: String = "%s(%s)" % [stock.name_ko, stock.stock_id] if stock else stock_id
+	var display_name: String = stock.get_display_name() if stock else stock_id
 	var headline: String = "ℹ️ [VI해제] %s 거래 재개" % display_name
 	var entry: Dictionary = {
 		"headline": headline,

@@ -24,6 +24,7 @@ var _btn_speed_2x: Button
 var _btn_speed_4x: Button
 var _btn_pause: Button
 var _btn_market_open: Button
+var _speed_box: HBoxContainer  ## speed controls group — fixed-width sibling of _btn_market_open
 var _lbl_market_index: Label
 var _lbl_total_assets: Label
 var _lbl_cash: Label
@@ -63,29 +64,55 @@ func _build_row1() -> void:
 	var row1: HBoxContainer = HBoxContainer.new()
 	row1.add_theme_constant_override("separation", 8)
 	row1_panel.add_child(row1)
+
 	_lbl_season_info = Label.new()
 	_lbl_season_info.text = "1주차 월요일"
 	_lbl_season_info.add_theme_font_size_override("font_size", 12)
 	ThemeSetup.style_label_primary(_lbl_season_info)
 	row1.add_child(_lbl_season_info)
+
 	var sep1: VSeparator = VSeparator.new()
 	sep1.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
 	row1.add_child(sep1)
+
+	# Progress bar — custom-styled so it's visible on a light background
 	_progress_bar = ProgressBar.new()
 	_progress_bar.min_value = 0.0
 	_progress_bar.max_value = 100.0
-	_progress_bar.custom_minimum_size.x = 80
+	_progress_bar.custom_minimum_size = Vector2(80, 10)
 	_progress_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_progress_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_progress_bar.show_percentage = false
+	var pb_fill := StyleBoxFlat.new()
+	pb_fill.bg_color = ThemeSetup.BTN_ACCENT
+	pb_fill.set_corner_radius_all(3)
+	_progress_bar.add_theme_stylebox_override("fill", pb_fill)
+	var pb_bg := StyleBoxFlat.new()
+	pb_bg.bg_color = Color(0.82, 0.82, 0.85)
+	pb_bg.set_corner_radius_all(3)
+	_progress_bar.add_theme_stylebox_override("background", pb_bg)
 	row1.add_child(_progress_bar)
+
 	_lbl_tick_progress = Label.new()
 	_lbl_tick_progress.text = "틱 0/%d" % GameClock.TICKS_PER_DAY
 	_lbl_tick_progress.add_theme_font_size_override("font_size", 11)
 	row1.add_child(_lbl_tick_progress)
+
 	row1.add_child(VSeparator.new())
-	_build_speed_controls(row1)
+
+	# Right section: _speed_box and _btn_market_open are same-width siblings.
+	# Exactly one is visible at a time → total right-side width never changes.
+	const RIGHT_MIN_W: int = 210
+	_speed_box = HBoxContainer.new()
+	_speed_box.add_theme_constant_override("separation", 4)
+	_speed_box.custom_minimum_size.x = RIGHT_MIN_W
+	_speed_box.alignment = BoxContainer.ALIGNMENT_END
+	row1.add_child(_speed_box)
+	_build_speed_controls(_speed_box)
+
 	_btn_market_open = Button.new()
 	_btn_market_open.text = "시즌 시작 Enter"
+	_btn_market_open.custom_minimum_size.x = RIGHT_MIN_W
 	_btn_market_open.visible = false
 	_btn_market_open.pressed.connect(func() -> void: market_open_pressed.emit())
 	ThemeSetup.apply_accent_button(_btn_market_open)
@@ -122,27 +149,28 @@ func _build_speed_controls(row: HBoxContainer) -> void:
 
 func _build_row2() -> void:
 	var row2_panel: PanelContainer = PanelContainer.new()
+	row2_panel.custom_minimum_size.y = 42
 	row2_panel.add_theme_stylebox_override("panel", ThemeSetup.make_panel_style(ThemeSetup.BG_DARK, 0, ThemeSetup.BORDER_DIM))
 	add_child(row2_panel)
 	var row2: HBoxContainer = HBoxContainer.new()
-	row2.add_theme_constant_override("separation", 10)
+	row2.add_theme_constant_override("separation", 14)
 	row2_panel.add_child(row2)
 	_lbl_market_index = Label.new()
 	_lbl_market_index.text = "지수 1,000.0 (0.00%)"
-	_lbl_market_index.add_theme_font_size_override("font_size", 12)
+	_lbl_market_index.add_theme_font_size_override("font_size", 14)
 	ThemeSetup.style_label_primary(_lbl_market_index)
 	row2.add_child(_lbl_market_index)
 	var sep_r2: VSeparator = VSeparator.new()
 	sep_r2.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
 	row2.add_child(sep_r2)
 	_lbl_total_assets = Label.new()
-	_lbl_total_assets.text = "총 자산: ₩0"
-	_lbl_total_assets.add_theme_font_size_override("font_size", 13)
+	_lbl_total_assets.text = "총 평가금액: ₩0"
+	_lbl_total_assets.add_theme_font_size_override("font_size", 17)
 	ThemeSetup.style_label_primary(_lbl_total_assets)
 	row2.add_child(_lbl_total_assets)
 	_lbl_cash = Label.new()
-	_lbl_cash.text = "현금: ₩0"
-	_lbl_cash.add_theme_font_size_override("font_size", 12)
+	_lbl_cash.text = "예수금: ₩0"
+	_lbl_cash.add_theme_font_size_override("font_size", 15)
 	ThemeSetup.style_label_secondary(_lbl_cash)
 	row2.add_child(_lbl_cash)
 	var spacer: Control = Control.new()
@@ -230,7 +258,7 @@ func _update_row2() -> void:
 	var summary: Dictionary = PortfolioManager.get_portfolio_summary()
 	var total: int = summary["total_assets"]
 	var rate: float = summary["return_rate"]
-	_lbl_total_assets.text = tr("총 자산: ₩%s") % FormatUtils.number(total)
+	_lbl_total_assets.text = tr("총 평가금액: ₩%s") % FormatUtils.number(total)
 	if rate > 0.0:
 		_lbl_total_assets.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
 	elif rate < 0.0:
@@ -248,10 +276,10 @@ func _update_cash_label() -> void:
 	var holdings_count: int = PortfolioManager.get_all_holdings().size()
 	var max_holdings: int = SkillTree.get_max_holdings()
 	if reserved > 0:
-		_lbl_cash.text = tr("시드: ₩%s (예약: ₩%s) | 보유 %d/%d") % [
+		_lbl_cash.text = tr("예수금: ₩%s (미체결예약: ₩%s) | 보유 %d/%d") % [
 			FormatUtils.number(cash), FormatUtils.number(reserved), holdings_count, max_holdings]
 	else:
-		_lbl_cash.text = tr("시드: ₩%s | 보유 %d/%d") % [FormatUtils.number(cash), holdings_count, max_holdings]
+		_lbl_cash.text = tr("예수금: ₩%s | 보유 %d/%d") % [FormatUtils.number(cash), holdings_count, max_holdings]
 
 
 func _update_index_label() -> void:
@@ -293,14 +321,11 @@ func _apply_return_color(lbl: Label, value: float) -> void:
 
 
 ## Called by TradingScreen when UIState changes. Controls speed/pause visibility and SP alert.
+## _speed_box and _btn_market_open are same-width siblings — toggling one at a time keeps layout stable.
 func set_ui_state(state: int) -> void:
 	_ui_state = state
 	var speed_visible: bool = state == _STATE_MARKET_OPEN or state == _STATE_PAUSED
-	_btn_speed_1x.visible = speed_visible
-	_btn_speed_2x.visible = speed_visible
-	_btn_speed_4x.visible = speed_visible
-	_btn_pause.visible = speed_visible
-	_lbl_speed.visible = speed_visible
+	_speed_box.visible = speed_visible
 	_btn_market_open.visible = (state == _STATE_PRE_MARKET)
 	if state == _STATE_PRE_MARKET:
 		_btn_market_open.text = tr("장 시작 Enter") if SeasonManager.is_season_active() else tr("시즌 시작 Enter")

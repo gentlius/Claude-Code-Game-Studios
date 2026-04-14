@@ -79,7 +79,7 @@ season_xp = BASE_SEASON_XP + rank_bonus + return_bonus
 | 항목 | 공식 | 예시 |
 |------|------|------|
 | BASE_SEASON_XP | 200 (시즌 완주 보상) | 200 |
-| rank_bonus | `RANK_XP_TABLE[final_rank]` | §F2 테이블 참조 (1위: 500 … 11위+: 30) |
+| rank_bonus | `RANK_XP_TABLE[final_rank - 1].clamp_to(5)` | §F2 테이블 참조 (1위: 500 … 6위+: 50) |
 | completion_bonus | `20 if (return_pct ≥ 0% AND season_trade_count ≥ MIN_TRADES_FOR_RANK) else 0` | 조건 충족 시 +20 |
 | return_bonus | `floor(season_return_pct × RETURN_XP_SCALE)` | +25% → 25 × 10 = 250 |
 
@@ -111,7 +111,7 @@ required_xp(level) = BASE_LEVEL_XP × (level ^ LEVEL_EXPONENT)
 
 #### 규칙 4. 시그널 발행 시점
 
-- **`on_xp_gained(amount: int, new_total: int)`**: XP가 추가될 때마다 즉시 발신.
+- **`on_xp_gained(amount: int, new_total: int, source: String)`**: XP가 추가될 때마다 즉시 발신.
   - 일일 보너스: `on_market_close` 처리 중 1회 발신
   - 시즌 보너스: `on_season_end` 처리 중 1회 발신
   - UI(프로그레션 UI)가 XP 바 애니메이션 트리거로 사용
@@ -136,7 +136,7 @@ required_xp(level) = BASE_LEVEL_XP × (level ^ LEVEL_EXPONENT)
 |--------|------|-----------|
 | 주문 엔진 | → XP | `on_order_filled` — 일일 거래 유무 판정용 (체결 1건 이상 시 일일 보너스 활성화) |
 | 포트폴리오 | → XP | `get_return_rate()` → 일일/시즌 수익률 산출 (player_return_pct) |
-| 가격 엔진 | → XP | `get_market_average_return()` → 전체 종목 단순 평균 등락률 산출 (market_return_pct) |
+| 가격 엔진 | → XP | `get_market_avg_return_pct()` → 전체 종목 단순 평균 등락률 산출 (market_return_pct) |
 | 게임 시계 | → XP | `on_market_close` → 일일 보너스 산출 |
 | 시즌 관리 | → XP | `on_season_end` → 시즌 보너스 산출 (※ 시즌 관리 GDD 미설계 — provisional). `final_rank: int` (1-indexed) |
 | 스킬 트리 | XP → | `get_available_skill_points()` 조회, `on_level_up` 시그널 |
@@ -193,21 +193,17 @@ completion_bonus = 20 if (season_return_pct >= 0.0 AND season_trade_count >= MIN
 
 RANK_XP_TABLE:
 
-> 상세 규칙은 `design/gdd/season-manager.md §3-4` 참조.
+> `xp_system.gd` 코드 기준 (인덱스 0=1위, …, 5=6위+).
+> `[500, 350, 250, 150, 150, 50]` — 6개 구간.
 
-| 순위 | rank_bonus |
-|------|-----------|
-| 1위 | 500 |
-| 2위 | 350 |
-| 3위 | 250 |
-| 4위 | 180 |
-| 5위 | 150 |
-| 6위 | 120 |
-| 7위 | 100 |
-| 8위 | 80 |
-| 9위 | 60 |
-| 10위 | 50 |
-| 11위+ | 30 |
+| 순위 | rank_bonus | 코드 인덱스 |
+|------|-----------|------------|
+| 1위 | 500 | 0 |
+| 2위 | 350 | 1 |
+| 3위 | 250 | 2 |
+| 4위 | 150 | 3 |
+| 5위 | 150 | 4 |
+| 6위+ | 50 | 5 |
 
 예시: 시즌 3위, 수익률 +25%, 체결 ≥ 5회 → BASE_SEASON_XP(200) + rank_bonus(250) + return_bonus(250) + completion_bonus(20) = **720 XP**
 
@@ -285,7 +281,7 @@ get_cumulative_xp_for_level(target_level) = Σ required_xp(lv) for lv = 1 to (ta
 |--------|----------|--------|
 | 주문 엔진 | Soft | `on_order_filled` — 일일 거래 유무 판정용 (체결 1건 이상 시 일일 보너스 활성화) |
 | 포트폴리오 관리 | Hard | `get_return_rate()` → 일일/시즌 수익률 (player_return_pct) |
-| 가격 엔진 | Hard | `get_market_average_return()` → 전체 종목 단순 평균 등락률 (market_return_pct) |
+| 가격 엔진 | Hard | `get_market_avg_return_pct()` → 전체 종목 단순 평균 등락률 (market_return_pct) |
 | 게임 시계 | Hard | `on_market_close`, `on_season_end` 시그널 |
 | 시즌/대회 관리 | Soft | `final_rank: int` (1-indexed, 미설계 — MVP에서는 하드코딩 가능) |
 
@@ -294,7 +290,7 @@ get_cumulative_xp_for_level(target_level) = Σ required_xp(lv) for lv = 1 to (ta
 | 시스템 | 의존 유형 | 데이터 |
 |--------|----------|--------|
 | 스킬 트리 | Hard | `get_available_skill_points()`, `on_level_up(new_level: int, skill_points: int)` 시그널 |
-| UI (프로그레션 UI) | Soft | `get_total_xp()`, `get_current_level()`, `get_xp_progress()`, `get_cumulative_xp_for_level()`, `on_xp_gained(amount: int, new_total: int)` 시그널, `on_level_up(new_level: int, skill_points: int)` 시그널 (레벨업 배너 트리거) |
+| UI (프로그레션 UI) | Soft | `get_total_xp()`, `get_current_level()`, `get_xp_progress()`, `get_cumulative_xp_for_level()`, `on_xp_gained(amount: int, new_total: int, source: String)` 시그널, `on_level_up(new_level: int, skill_points: int)` 시그널 (레벨업 배너 트리거) |
 
 ## Tuning Knobs
 
@@ -303,7 +299,7 @@ get_cumulative_xp_for_level(target_level) = Σ required_xp(lv) for lv = 1 to (ta
 | BASE_DAILY_XP | 30 | 10~100 | 일일 플레이 보상 | 너무 높으면 시즌 보너스 무의미 |
 | BASE_SEASON_XP | 200 | 100~500 | 시즌 완주 동기 | 너무 낮으면 시즌 중도 이탈 |
 | RETURN_XP_SCALE | 10 | 5~30 | 수익률 대비 XP | 너무 높으면 고수만 빠른 성장 |
-| RANK_XP_TABLE | [500,350,250,150,50] | — | 순위 경쟁 동기 | 1위와 꼴찌 격차가 너무 크면 좌절감 |
+| RANK_XP_TABLE | [500,350,250,150,150,50] | — | 순위 경쟁 동기 | 1위와 꼴찌 격차가 너무 크면 좌절감 (인덱스 0=1위 … 5+=6위) |
 | BASE_LEVEL_XP | 100 | 50~200 | 초반 레벨업 속도 | 너무 낮으면 의미 없음 |
 | LEVEL_EXPONENT | 1.5 | 1.2~2.0 | 후반 성장 속도 | 너무 높으면 후반 정체감 |
 | daily_alpha_multiplier 테이블 | 규칙 1-1 참조 | — | alpha 구간별 보상 차이 | 최소 배율이 0이면 언더퍼폼 시 좌절감 심화 |
@@ -347,7 +343,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `XpSystem.get_current_level() -> int` 존재
 - [x] `XpSystem.get_xp_progress() -> float` 존재
 - [x] `XpSystem.get_available_skill_points() -> int` 존재
-- [x] `XpSystem.on_xp_gained(amount, source)` 시그널 존재
+- [x] `XpSystem.on_xp_gained(amount, new_total, source)` 시그널 존재
 - [x] `XpSystem.on_level_up(new_level, skill_points)` 시그널 존재
 - [x] `XpSystem.reset()` 존재
 

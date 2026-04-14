@@ -491,8 +491,8 @@ NewsQueueEntry {
 > (템플릿 풀 JSON이 아님), 발동 방향·정지 시간·종목명 등 동적 정보를 담는다.
 > - VI 발동: `"단기 급{방향}으로 VI가 발동됐다. {종목} 전후 {N}분간 단일가 매매로 전환, 이후 거래 재개."`
 > - VI 해제: `"변동성 완화 확인 후 VI가 해제됐다. {종목} 정규 연속 매매가 재개된다."`
-> - CB 1단계: `"시장 지수가 전일 대비 8% 이상 하락해 서킷브레이커 1단계가 발동됐다. 전 종목 {N}분간 거래가 정지된다."`
-> - CB 2단계: `"시장 지수가 전일 대비 15% 이상 하락해 서킷브레이커 2단계가 발동됐다. 당일 장이 즉시 마감된다."`
+> - CB 1단계: `"시장 지수가 전일 대비 12% 이상 하락해 서킷브레이커 1단계가 발동됐다. 전 종목 {N}분간 거래가 정지된다."`
+> - CB 2단계: `"시장 지수가 전일 대비 20% 이상 하락해 서킷브레이커 2단계가 발동됐다. 당일 장이 즉시 마감된다."`
 
 ```
 ```
@@ -664,8 +664,24 @@ eligible_templates = filter(scope in [MACRO, SECTOR],
 overnight_pool = [t for t in eligible_templates if t.event_type == "GRADUAL_SHIFT"]
 # INSTANT_SHOCK 템플릿은 야간 풀에서 제외 — 장중 이벤트로만 사용
 
-selected = weighted_random_choice(overnight_pool, count=overnight_count)
+# 야간 이벤트 간 mutex — 동일 야간에 같은 mutex_group 이벤트 중복 방지
+overnight_mutex = {}  # {mutex_group: template_id}
+selected = []
+for _ in range(overnight_count):
+    candidate = weighted_random_choice_filtered(
+        overnight_pool,
+        exclude=lambda t: t.mutex_group in overnight_mutex
+    )
+    if candidate:
+        selected.append(candidate)
+        if candidate.mutex_group:
+            overnight_mutex[candidate.mutex_group] = candidate.template_id
 ```
+
+> **구현 주의**: 야간 이벤트는 `_daily_mutex`(일일 mutex)와 별개의 `overnight_mutex`를
+> 사용한다. 야간은 동일 야간에 count=2인 경우 두 이벤트 간 모순을 방지해야 한다.
+> 예: "외국인 순매수" + "외국인 순매도"가 같은 밤에 발생하면 안 됨 (모두 `foreign_flow` 그룹).
+> `_daily_mutex`는 당일 장중 이벤트에 적용되며, 야간 이벤트는 다음날 새 `_daily_mutex`로 시작된다.
 
 ##### 7-2. 야간 버퍼
 

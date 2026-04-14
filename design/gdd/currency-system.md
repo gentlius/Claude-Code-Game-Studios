@@ -23,8 +23,14 @@
 
 ### Core Rules
 
-1. **계좌 구조**: 단일 계좌.
+1. **계좌 구조**: 2계좌 시스템.
    - **예수금 (`sim_cash`)**: 플레이어의 전 재산이자 투자 자금. 단위: 원 (₩). 시작: 1,000,000원.
+     매매·라이프스타일 소비·상금 입금 모두 이 계좌에서 이루어진다. 시즌 전환 시 이월.
+   - **상금 누적 계좌 (`deposit`)**: 시즌 상금이 입금되는 **별도 읽기 전용 집계 계좌**.
+     플레이어가 시즌 동안 받은 누적 상금 총액을 추적한다. `sim_cash`와 **독립적**으로 관리되며,
+     상금 입금 시 `award_prize(amount)` 가 `sim_cash`와 `deposit` 양쪽을 동시에 갱신한다.
+     UI(통계/업적)에서 "지금까지 받은 총 상금"을 표시하는 데 사용. 소비 불가.
+     API: `get_deposit() -> int`, 시그널: `deposit_changed(new_total: int)`.
    - API에서 `sim_` 접두어는 "simulation" (게임 경제)을 의미한다.
 
 2. **예수금 규칙**:
@@ -33,6 +39,7 @@
    - 시즌 상금이 여기로 입금된다.
    - 시즌 종료 시 보유 주식은 시장가로 강제 청산. 잔액은 다음 시즌으로 이월.
    - 음수 불가 — 잔액 부족 시 주문 거부.
+   - **라이프스타일 소비** (거주지, 사치품, 대안 투자 등)도 `sim_deduct()`로 차감. 소비는 비시즌 윈도우에서 발생하며, 소비 후 잔여가 다음 시즌 시드가 된다 (lifestyle-spending.md 참조).
 
 3. **시즌 전환 규칙**:
    - 시즌 종료 → **미체결 주문 전량 취소** (지정가 매수의 `reserved_cash` 전액 `sim_cash`로 복원, 지정가/PRE_MARKET 매도의 `locked_quantity` 해제) → 보유 주식 전량 시장가 청산 → 청산 대금 예수금 반영 → 순위 확정 → 상금 입금.
@@ -134,6 +141,7 @@ season_return_rate = (sim_total_assets - season_start_cash) / season_start_cash 
 | 주문 처리 엔진 | 주문이 이 시스템에 의존 | `get_sim_cash()`, `sim_deduct()`, `sim_add()`. **Hard** |
 | 포트폴리오 관리 | 포트폴리오가 이 시스템에 의존 | `get_sim_cash()`로 현금 잔액 조회. 총 자산 계산은 포트폴리오가 수행. **Hard** |
 | 시즌/대회 관리 | 시즌이 이 시스템에 의존 | 시즌 청산/상금 입금. **Hard** |
+| 라이프스타일 소비 | 라이프스타일가 이 시스템에 의존 | 거주지·사치품·대안 투자 소비 `sim_deduct()`. 임대 수익·스타트업 엑싯 `sim_add()`. **Hard** |
 | 트레이딩 스크린 (UI) | UI가 이 시스템에 의존 | 잔액 표시. **Soft** |
 | 경험치 시스템 | XP가 이 시스템에 의존 | 수익 실현 이벤트 시 XP 부여. **Soft** |
 | 게임 시계 | 재화가 이 시스템에 의존 (시그널만) | `on_season_end` → 시즌 정산 트리거, `on_season_start` → `season_start_cash` 스냅샷. **Soft** (시그널 구독만) |
@@ -198,6 +206,9 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `CurrencySystem.sim_deduct(amount: int) -> bool` 존재
 - [x] `CurrencySystem.init_first_season()` 존재
 - [x] `CurrencySystem.reset()` 존재
+- [x] `CurrencySystem.get_deposit() -> int` 존재 (누적 상금 조회)
+- [x] `CurrencySystem.award_prize(amount: int)` 존재 (sim_cash + deposit 동시 갱신)
+- [x] `CurrencySystem.deposit_changed(new_total: int)` 시그널 존재
 
 ### AC → 테스트 매핑
 

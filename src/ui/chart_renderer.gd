@@ -659,7 +659,7 @@ func _update_header() -> void:
 		return
 
 	var price: int = PriceEngine.get_current_price(_stock_id)
-	_lbl_stock_name.text = "%s (%s)" % [stock.name_ko, _stock_id]
+	_lbl_stock_name.text = stock.get_display_name()
 	_lbl_current_price.text = "₩%s" % _format_number(price)
 
 	# 전일 종가 대비 등락률 (HTS 표준)

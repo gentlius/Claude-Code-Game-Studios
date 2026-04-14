@@ -43,8 +43,10 @@
 | 17 | 프로그레션 UI (Progression UI) | UI | V-Slice | In Review | ✅ Done | [progression-ui.md](progression-ui.md) | 경험치 시스템, 스킬 트리, 게임 시계, 트레이딩 스크린 |
 | 18 | 세이브/로드 (Save/Load) | Persistence | Alpha | Approved | ✅ Done | [save-load.md](save-load.md) | 포트폴리오, 스킬 트리, 시즌, 경험치 |
 | 19 | 오디오 시스템 (Audio) | Audio | Alpha | Approved | ✅ Done | [audio.md](audio.md) | 주문 엔진, 뉴스 시스템 |
-| 20 | 튜토리얼 (Tutorial) | Meta | Full | Not Started | — | — | 전체 게임플레이 시스템 |
-| 21 | 설정 (Settings) | Meta | Full | Not Started | — | — | — |
+| 20 | 라이프스타일 소비 (Lifestyle Spending) | Economy | Beta | Draft | — | [lifestyle-spending.md](lifestyle-spending.md) | 재화 시스템, 시즌 관리, 세이브/로드 |
+| 21 | 수익 실현 팡파레 (Profit Celebration) | UI | Beta | Draft | — | [profit-celebration.md](profit-celebration.md) | 주문 엔진, 오디오, 트레이딩 스크린 |
+| 22 | 튜토리얼 (Tutorial) | Meta | Full | Not Started | — | — | 전체 게임플레이 시스템 |
+| 23 | 설정 (Settings) | Meta | Full | Not Started | — | — | — |
 
 ---
 
@@ -164,7 +166,7 @@
 
 | Metric | Count |
 |--------|-------|
-| Total systems identified | 21 |
+| Total systems identified | 23 |
 | Design docs started | 17 |
 | Design docs reviewed (2차 리뷰 완료) | 17 |
 | Design docs approved | 9 (종목 DB, 포트폴리오, XP, AI 경쟁자, 시즌/대회 관리, 리그/시즌 UI, currency-system, save-load, audio) |

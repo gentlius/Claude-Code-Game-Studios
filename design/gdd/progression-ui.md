@@ -1,9 +1,13 @@
 # 프로그레션 UI (Progression UI)
 
-> **Status**: In Review
+> **Status**: Superseded
+> **Superseded by**: `growth-screen.md` (2026-04-14)
 > **Author**: user + game-designer + ux-designer
-> **Last Updated**: 2026-04-02
+> **Last Updated**: 2026-04-14
 > **Implements Pillar**: 체감있는 성장 (Feel the Growth)
+>
+> ⚠️ **이 문서는 폐기됨.** F3 탭 Growth Screen 설계(`growth-screen.md`)가 이 문서를 대체한다.
+> K키 SkillTreeOverlay, 상태바 XP바 등 여기 기술된 아키텍처는 구현하지 않는다.
 
 ## Overview
 

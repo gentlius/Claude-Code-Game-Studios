@@ -152,7 +152,7 @@ func _holdings_section(summary: Dictionary) -> String:
 	var bbcode: String = "\n"
 	for h: Dictionary in holdings:
 		var stock: StockData = StockDatabase.get_stock(h["stock_id"])
-		var name_str: String = "%s(%s)" % [stock.name_ko, stock.stock_id] if stock else h["stock_id"]
+		var name_str: String = stock.get_display_name() if stock else h["stock_id"]
 		var pnl_pct: float = h.get("unrealized_pnl_pct", 0.0)
 		var c: String = "EB3833" if pnl_pct >= 0.0 else "2E6BE6"
 		var sign: String = "+" if pnl_pct >= 0.0 else ""

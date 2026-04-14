@@ -1,7 +1,7 @@
 # League & Season UI
 
 *Created: 2026-04-03*
-*Status: Approved*
+*Status: In Review*
 *Sprint: S2-02*
 
 ---
@@ -79,8 +79,8 @@ MainScreen.tscn
 | 항목 | 표시 형식 | 갱신 주기 | 클릭 동작 |
 |------|----------|---------|---------|
 | 티어명 + 순위 | `브론즈 38위` | 매 틱 | F2 탭으로 이동 |
-| 시즌 수익률 | `시즌 +12.3%` (양수 초록, 음수 빨강) | 매 틱 | F2 탭으로 이동 |
-| 주간 수익률 | `주간 +2.1%` (양수 초록, 음수 빨강) | 매 틱 | F2 탭으로 이동 |
+| 시즌 수익률 | `시즌 +12.3%` (양수 빨강(`ThemeSetup.PRICE_UP`), 음수 파랑(`ThemeSetup.PRICE_DOWN`) — KRX 관행) | 매 틱 | F2 탭으로 이동 |
+| 주간 수익률 | `주간 +2.1%` (양수 빨강(`ThemeSetup.PRICE_UP`), 음수 파랑(`ThemeSetup.PRICE_DOWN`) — KRX 관행) | 매 틱 | F2 탭으로 이동 |
 
 > `trading-screen.md` 규칙 2의 상태바 다이어그램을 이 명세 기준으로 업데이트해야 한다.
 
@@ -220,7 +220,7 @@ context_rows = SeasonManager.get_leaderboard(tier, my_rank - LEADERBOARD_CONTEXT
 #### 상태바 HUD
 
 - [ ] AC-01: 거래 화면 상태바에 티어명+순위, 시즌 수익률, 주간 수익률, Day X/20이 항상 표시된다
-- [ ] AC-02: 시즌 수익률과 주간 수익률은 양수 초록, 음수 빨강으로 색상 구분된다
+- [ ] AC-02: 시즌 수익률과 주간 수익률은 양수 빨강(`ThemeSetup.PRICE_UP`), 음수 파랑(`ThemeSetup.PRICE_DOWN`) — KRX 관행으로 색상 구분된다
 - [ ] AC-03: 상태바의 순위/수익률 영역 클릭 시 F2 탭으로 이동한다
 
 #### 탭 전환 및 일시정지

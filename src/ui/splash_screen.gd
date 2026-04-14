@@ -28,13 +28,71 @@ func _build_ui() -> void:
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
 
-	var logo: TextureRect = TextureRect.new()
-	logo.texture = load("res://assets/ui/logo.svg") as Texture2D
-	logo.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	logo.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(logo)
+	# Logo built with native nodes — SVG <text> elements don't render in Godot's nanosvg importer.
+	var center: CenterContainer = CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(center)
+
+	var logo_hbox: HBoxContainer = HBoxContainer.new()
+	logo_hbox.add_theme_constant_override("separation", 18)
+	logo_hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	center.add_child(logo_hbox)
+
+	# Chart bars (ascending)
+	var bars_vbox: VBoxContainer = VBoxContainer.new()
+	bars_vbox.alignment = BoxContainer.ALIGNMENT_END
+	bars_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	logo_hbox.add_child(bars_vbox)
+
+	var bars_row: HBoxContainer = HBoxContainer.new()
+	bars_row.add_theme_constant_override("separation", 4)
+	bars_row.alignment = BoxContainer.ALIGNMENT_END
+	bars_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bars_vbox.add_child(bars_row)
+
+	var bar_heights: Array[int] = [32, 52, 76, 98, 120]
+	var bar_colors: Array[Color] = [
+		Color(0.118, 0.290, 0.478),
+		Color(0.141, 0.353, 0.561),
+		Color(0.169, 0.416, 0.667),
+		Color(0.196, 0.471, 0.753),
+		Color(0.290, 0.565, 0.851),
+	]
+	for i: int in range(bar_heights.size()):
+		var bar: ColorRect = ColorRect.new()
+		bar.color = bar_colors[i]
+		bar.custom_minimum_size = Vector2(14, bar_heights[i])
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bars_row.add_child(bar)
+
+	# Vertical separator
+	var vsep: ColorRect = ColorRect.new()
+	vsep.color = Color(0.173, 0.173, 0.173)
+	vsep.custom_minimum_size = Vector2(2, 130)
+	vsep.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	logo_hbox.add_child(vsep)
+
+	# Text column
+	var text_vbox: VBoxContainer = VBoxContainer.new()
+	text_vbox.add_theme_constant_override("separation", 0)
+	text_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	logo_hbox.add_child(text_vbox)
+
+	var lbl_seed: Label = Label.new()
+	lbl_seed.text = "SEED"
+	lbl_seed.add_theme_font_size_override("font_size", 72)
+	lbl_seed.add_theme_color_override("font_color", Color(0.922, 0.922, 0.922))
+	lbl_seed.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	text_vbox.add_child(lbl_seed)
+
+	var lbl_money: Label = Label.new()
+	lbl_money.text = "M O N E Y"
+	lbl_money.add_theme_font_size_override("font_size", 28)
+	lbl_money.add_theme_color_override("font_color", Color(0.302, 0.431, 0.600))
+	lbl_money.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	text_vbox.add_child(lbl_money)
+
 	AudioManager.play_sfx("sfx_logo_sting")
 
 	# 페이드 오버레이

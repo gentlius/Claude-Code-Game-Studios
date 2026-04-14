@@ -199,7 +199,7 @@ func set_stock(stock_id: String) -> void:
 	var stock: StockData = StockDatabase.get_stock(stock_id)
 	if stock == null:
 		return
-	_lbl_order_stock_name.text = "%s (%s)" % [stock.name_ko, stock_id]
+	_lbl_order_stock_name.text = stock.get_display_name()
 	refresh_limit_price_bounds()
 	_spin_limit_price.value = PriceEngine.get_current_price(stock_id)
 	_update_order_panel_price()
@@ -363,9 +363,12 @@ func _make_pending_row(order: Dictionary) -> HBoxContainer:
 	var row: HBoxContainer = HBoxContainer.new()
 	var side_str: String = "매수" if order["side"] == "BUY" else "매도"
 	var info: Label = Label.new()
-	info.text = "%s %s %s×%d주" % [
-		side_str, order["stock_id"],
-		FormatUtils.number(order.get("limit_price", PriceEngine.get_current_price(order["stock_id"]))),
+	var pending_sid: String = order["stock_id"]
+	var pending_stock: StockData = StockDatabase.get_stock(pending_sid)
+	var pending_name: String = pending_stock.name_ko if pending_stock != null else pending_sid
+	info.text = "%s %s(%s) %s×%d주" % [
+		side_str, pending_name, pending_sid,
+		FormatUtils.number(order.get("limit_price", PriceEngine.get_current_price(pending_sid))),
 		order["quantity"]]
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ThemeSetup.style_label_primary(info)

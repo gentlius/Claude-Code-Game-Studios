@@ -22,6 +22,21 @@
 
 ---
 
+## Producer 운영 규칙 (위반 시 마일스톤/스프린트 마감 불가)
+
+### P-RULE-01: DoD 즉시 체크
+작업 완료를 확인한 그 자리에서 해당 스프린트 DoD 항목을 `[x]`로 업데이트하고 커밋한다.
+세션 말미에 몰아서 처리하면 안 된다. 확인 → 체크 → 커밋이 하나의 원자적 행동이다.
+
+**위반 증상**: "이미 다 했는데 다음 세션에 또 `[ ]`로 남아있는" 항목이 생긴다.
+
+### P-RULE-02: 마일스톤 마감 전 스프린트 DoD 교차 확인
+마일스톤(milestone.md)을 Closed로 변경하기 전에, 해당 마일스톤을 담당하는 **모든 스프린트의 DoD가 전부 `[x]`** 인지 먼저 확인한다. 스프린트 DoD에 `[ ]` 항목이 하나라도 남아있으면 마일스톤 마감 불가.
+
+**확인 순서**: `sprint-NN.md` DoD 전 항목 `[x]` 확인 → 그 다음에 `milestone.md` Status → Closed.
+
+---
+
 1. **Vertical Delegation**: Leadership agents delegate to department leads, who
    delegate to specialists. Never skip a tier for complex decisions.
 2. **Horizontal Consultation**: Agents at the same tier may consult each other

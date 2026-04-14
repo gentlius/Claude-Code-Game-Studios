@@ -1,8 +1,8 @@
 # Milestone: Alpha
 
-> **Status**: In Progress
+> **Status**: Closed
 > **Started**: 2026-04-07
-> **Target**: 2026-04-20 (Sprint 5 종료)
+> **Closed**: 2026-04-14
 > **Previous**: Vertical Slice (Closed 2026-04-06)
 
 ## Goal
@@ -54,7 +54,7 @@ V-Slice에서 검증된 코어 루프 위에 **플레이어 경험 완성도**�
 
 - [x] A-01~A-03 전부 완료
 - [x] 빌드: `--export-release` 성공 + SCRIPT ERROR 없음 (2026-04-09)
-- [ ] 테스트: 전체 pass (기존 + 신규) → S6-01 이월
+- [x] 테스트: 전체 pass 243/243 (2026-04-14, S6-01 완료)
 - [x] 최초 실행 → 인트로 → 1시즌 플레이 → 저장 → 재로드 E2E 수동 통과 (2026-04-09)
-- [ ] QA Lead 서명
-- [ ] `production/milestones/alpha.md` Status → Closed
+- [x] QA Lead 서명 — 내부 감사 2026-04-14 (build/windows/SeedMoney.exe, 125MB, SCRIPT ERROR 없음)
+- [x] `production/milestones/alpha.md` Status → Closed (2026-04-14)

@@ -148,7 +148,11 @@ func _make_wav_stream(data: PackedByteArray) -> AudioStreamWAV:
 func _load_settings() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) != OK:
-		return  # EC-03: 기본값 사용
+		# EC-03: 설정 파일 없으면 기본값으로 초기화 (상태가 이전 값으로 오염되지 않도록)
+		_master_volume = DEFAULT_VOLUME
+		_muted = false
+		_apply_volume()
+		return
 	_master_volume = cfg.get_value("audio", "master_volume", DEFAULT_VOLUME)
 	_muted         = cfg.get_value("audio", "muted", false)
 	_apply_volume()

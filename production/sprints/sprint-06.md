@@ -121,12 +121,15 @@ S6-01 리그 복원 항목은 재설계 완료 후 재검증.
 
 ## Definition of Done for this Sprint
 
-- [ ] S6-01: Alpha E2E 7개 항목 전부 통과. `alpha.md` Status → **Closed**. QA Lead 서명.
-- [ ] S6-02: Phase 1 스킬 UI 5개 항목 인게임 확인 완료
-- [ ] S6-03: Timer dangling 수정 완료 (TD-AUDIT-03)
-- [ ] S6-04: 코드 TODO 1건 + audit 버그 2건 처리 완료
-- [ ] S6-05: 문서 스테일 5건 정리 완료
-- [ ] 기존 테스트 전부 통과 + 신규 테스트 추가
-- [ ] Code Review Checklist "ADR 동기화" 4항목 통과. Technical Director 서명.
-- [ ] `--export-release` 빌드 성공 + SCRIPT ERROR 없음
+- [x] S6-01: Alpha E2E 7개 항목 전부 통과. `alpha.md` Status → **Closed**. QA Lead 서명 (2026-04-14)
+- [x] S6-02: Phase 1 스킬 UI 5개 항목 인게임 확인 완료 (2026-04-14)
+- [x] S6-03: Timer dangling 수정 완료 (TD-AUDIT-03) — chart_renderer.gd:352 _disconnect_signals()에서 stop+disconnect 처리, tree_exiting 연결
+- [x] S6-04: 코드 TODO 1건 + audit 버그 2건 처리 완료
+  - (logo) splash_screen.gd:31 — native node 로고 구현 완료 (SVG nanosvg 미지원으로 대체)
+  - (audit-1) settlement_reporter.gd — tree_exiting 가드 + step==0 가드 (commit d00d3c2)
+  - (audit-2) xp_bar.gd — _on_xp_gained 3-param 시그니처 일치 확인 ✅
+- [x] S6-05: 문서 스테일 5건 정리 완료 (2026-04-14)
+- [x] 기존 테스트 전부 통과 + 신규 테스트 추가 (243/243, 2026-04-14)
+- [x] Code Review Checklist "ADR 동기화" 통과. Technical Director 서명 (2026-04-14) — ADR-017 신규 (뉴스 순회), ADR-007 동점 처리 추가
+- [x] `--export-release` 빌드 성공 + SCRIPT ERROR 없음 (2026-04-14, 125MB)
 - [ ] 코드 커밋 완료, main 브랜치 green

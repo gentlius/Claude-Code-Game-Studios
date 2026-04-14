@@ -57,8 +57,25 @@
        - 프리마켓 참가자: `XPSystem.grant_season_bonus(final_rank=0, is_free_market=true, season_return_pct)`
          → rank_bonus 없음. 완주 보너스(20 XP)는 수익률 ≥ 0% AND 체결 ≥ 5회 충족 시 지급 (§4-7 참조)
   ⑥ sim_total_assets ≥ 100,000,000,000원 → 거장 엔딩 자동 발동
-  ⑦ 그 외 → 시즌 결과 화면 표시 → 다음 시즌 대기
+  ⑦ 그 외 → 시즌 결과 화면 표시
+  ↓
+[비시즌 정산] — LifestyleManager.process_offseason() 자동 실행
+  ⑧ 부동산 임대 수익 → sim_cash 입금
+  ⑨ 스타트업 엑싯 이벤트 (만기 도달 시) → sim_cash 입금 또는 0원
+  ⑩ Recurring 비용 차감 (골프 클럽 연회비 등)
+     → 결과: 시즌 결산 자산 확정
+  ↓
+[라이프스타일 소비 화면] — 시즌 결산 자산에서 선택 소비 (lifestyle-spending.md 참조)
+  ↓
+[다음 시즌 시작 대기] — 소비 후 잔여 sim_cash = 다음 시즌 시드 = 티어 배정 기준
 ```
+
+> **티어 배정 기준**: 다음 시즌 시작 버튼을 누르는 시점의 sim_cash (라이프스타일 소비 후 잔여). 비시즌 정산 수익과 라이프스타일 소비가 모두 반영된 최종값.
+
+> **⚠️ Alpha 단계 폴백 (LifestyleManager 미구현 기간)**:
+> LifestyleManager 및 LifestyleSpending UI가 구현되기 전까지 ⑧~⑩(비시즌 정산)과 라이프스타일 소비 화면은 스킵된다.
+> ⑦ 시즌 결과 화면 종료 직후 → 다음 시즌 시작 대기 화면으로 진입.
+> 이 기간의 티어 배정 기준 = 시즌 종료 직후 sim_cash (청산 + 상금 반영, 소비 없음).
 
 ### 3-2. 리그 티어 테이블 (The Ladder)
 
@@ -141,14 +158,14 @@
 | 1위 | × 50% | 500 XP |
 | 2위 | × 30% | 350 XP |
 | 3위 | × 15% | 250 XP |
-| 4위 | × 8% | 180 XP |
+| 4위 | × 8% | 150 XP |
 | 5위 | × 5% | 150 XP |
-| 6위 | × 3% | 120 XP |
-| 7위 | × 3% | 100 XP |
-| 8위 | × 3% | 80 XP |
-| 9위 | × 3% | 60 XP |
+| 6위 | × 3% | 50 XP |
+| 7위 | × 3% | 50 XP |
+| 8위 | × 3% | 50 XP |
+| 9위 | × 3% | 50 XP |
 | 10위 | × 3% | 50 XP |
-| 11위+ | — | 30 XP |
+| 11위+ | — | 50 XP |
 
 예) 브론즈 1위: 1,000,000 × 50% = **+500,000원**
 예) 다이아 1위: 300,000,000 × 50% = **+150,000,000원**
@@ -319,11 +336,13 @@ daily_xp_granted = base_daily_xp × (FREE_MARKET_XP_RATE if is_free_market else 
 | `GameClock` | 구독 | `on_season_end` 시그널 수신 → 강제 청산 + 정산 실행 |
 | `AiCompetitor` | 쓰기 | 시즌 시작 시 티어별 AI 참가자 생성 및 초기화; 시즌 종료 시 AI 수익률 수집 |
 | `TradingScreen (UI)` | 신호 수신 | `on_season_started`, `on_season_ended`, `on_tier_assigned`, `on_leaderboard_updated` 시그널 구독 |
+| `LifestyleManager` | 쓰기 | 시즌 종료 정산 완료 후 `LifestyleManager.process_offseason()` 호출. 비시즌 정산(임대 수익, 스타트업 엑싯, Recurring 비용) 처리 위임 |
 
 **이 문서가 역참조되어야 하는 GDD:**
 - `ai-competitor.md` — AI 참가자 수익률 분포 설계 시 이 문서의 티어 구조 참조
 - `xp-system.md` — 프리마켓 XP 패널티 조건 반영
 - `currency-system.md` — 상금 지급 및 시즌 자본금 스냅샷 메서드 추가 필요
+- `lifestyle-spending.md` — 비시즌 윈도우 플로우, 티어 배정 기준 상세
 
 ## 7. Tuning Knobs
 
@@ -456,7 +475,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | AC-10 상금 입금 | `tests/unit/test_season_manager.gd` | `test_bronze_first_prize_amount()` | ✅ 구현됨 |
 | AC-14 타이브레이커 | `tests/unit/test_season_manager.gd` | `test_tie_breaker_by_join_timestamp()` | ✅ 구현됨 |
 | AC-15 거장 AI | `tests/unit/test_season_manager.gd` | `test_master_tier_in_leaderboard()` | ✅ 구현됨 |
-| AC-16 처리 순서 | 통합 테스트 — E2E 검증 (S3-07) | — | ⬜ S6-01 E2E 검증 중 |
+| AC-16 처리 순서 | 통합 테스트 — E2E 검증 (S3-07) | — | ✅ S6-01 E2E 통과 (2026-04-14) |
 | AC-17~20 프리마켓 XP | `tests/unit/test_season_manager.gd` | `test_free_market_xp_*` | ✅ 구현됨 |
 
 ### 빌드 검증

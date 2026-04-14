@@ -4,8 +4,11 @@ extends GutTest
 # ── Helpers ──
 
 ## Reset SeasonManager's internal state before each test.
+## GameClock도 리셋: is_season_active()가 GameClock._season_active를 참조하므로
+## 다른 테스트 파일의 GameClock 상태 오염을 방지한다.
 func before_each() -> void:
 	SeasonManager.reset()
+	GameClock.reset()
 
 
 # ─────────────────────────────────────────────

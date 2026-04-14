@@ -70,6 +70,27 @@ global_rank = (모든 티어 AI + 플레이어를 return_pct 내림차순 정렬
 전체 정렬은 시즌 종료 시 1회 수행한다 (정확한 최종 순위 결정).
 일 중 글로벌 순위 추정은 ADR-004에서 정의한 버킷 기반 추정(O(log N))을 사용한다.
 
+### 동점 처리: 플레이어 우선 (2026-04-14 추가)
+
+`estimate_player_rank()`의 이진 탐색은 **동점 시 플레이어가 앞 순위**를 갖도록 설계한다.
+
+```gdscript
+# sorted eod 배열에서 플레이어의 삽입 위치 탐색
+if eod[sorted_idx[mid]] > player_return_pct:   # 엄격한 > (>=이 아님)
+    lo = mid + 1
+else:
+    hi = mid
+return lo + 1   # 1-based rank
+```
+
+`>` 조건(엄격한 부등호)을 사용하면 `eod[mid] == player_return_pct`일 때 `hi = mid`로
+이동하여 플레이어가 해당 AI와 같은 위치(또는 앞)에 삽입된다.
+`>=`를 사용하면 동점 AI 뒤로 밀려난다.
+
+**설계 근거**: 플레이어에게 유리한 경험을 제공한다. 동점이 발생하는 경우는 드물며
+(연속 float 값이 일치할 확률이 낮음), 발생하더라도 플레이어가 더 낮은 순위를 받는 것은
+불공정한 인상을 준다.
+
 ### AC-02 단조성 테스트
 
 `AiCompetitor._validate_tier_monotonicity()`가 `init_season()` 시점에

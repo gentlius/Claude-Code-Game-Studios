@@ -105,10 +105,13 @@ func test_season_manager_api():
 
 func test_ai_competitor_api():
 	assert_true(AiCompetitor.has_method("init_season"),            "init_season 존재")
-	assert_true(AiCompetitor.has_method("get_tier_return_pct"),    "get_tier_return_pct 존재")
-	assert_true(AiCompetitor.has_method("get_all_return_pcts"),    "get_all_return_pcts 존재")
-	assert_true(AiCompetitor.has_method("get_participant_meta"),   "get_participant_meta 존재")
+	assert_true(AiCompetitor.has_method("get_eod_snapshot"),       "get_eod_snapshot 존재")
+	assert_true(AiCompetitor.has_method("get_sorted_indices"),     "get_sorted_indices 존재")
 	assert_true(AiCompetitor.has_method("estimate_player_rank"),   "estimate_player_rank 존재")
+	assert_true(AiCompetitor.has_method("get_participant_meta"),   "get_participant_meta 존재")
+	assert_true(AiCompetitor.has_method("get_save_data"),          "get_save_data 존재")
+	assert_true(AiCompetitor.has_method("load_save_data"),         "load_save_data 존재")
+	assert_true(AiCompetitor.has_method("reset"),                  "reset 존재")
 
 
 # ── PriceEngine ──────────────────────────────────────────────────────

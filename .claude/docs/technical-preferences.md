@@ -60,3 +60,5 @@
 - [ADR-013](../../docs/architecture/013-trading-screen-component-split.md) — TradingScreen 5-컴포넌트 Facade 분리 (TD-04)
 - [ADR-014](../../docs/architecture/014-mainscreen-tab-scene-lifecycle.md) — MainScreen 탭 씬 visibility 토글 상주 방식
 - [ADR-015](../../docs/architecture/015-save-trigger-timing.md) — SaveSystem 저장 트리거 타이밍 (시즌/일별/초기 저장 순서)
+- [ADR-016](../../docs/architecture/016-qa-10day-scenario-findings.md) — QA 자동화 10일 시나리오 버그 기록
+- [ADR-017](../../docs/architecture/017-news-feed-cycling-state-machine.md) — 뉴스 카드 관련종목 순회 클로저 캡처 상태머신

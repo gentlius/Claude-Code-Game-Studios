@@ -106,7 +106,7 @@ Day 7+:   S5-05 게임패드 (여유 있을 때)
 - [x] 세이브 → 종료 → 로드 → 재개 E2E: 새게임 → 시즌 시작 → 장 시작 → 장 종료 → 장 시작 전 세이브 → 나가기 → 로드 → 장 시작 **수동 통과 (2026-04-09)**
 - [x] 주문 체결·레벨업·VI·뉴스 SFX 4개 인게임 발동 확인 (2026-04-07)
 - [x] 최초 실행 → 인트로 5장 → MainScreen 진입 E2E 통과 (2026-04-07)
-- [ ] 기존 테스트 전부 통과 + 신규 intro_sequence 테스트 통과 → **S6-01로 이월**
+- [x] 기존 테스트 전부 통과 + 신규 intro_sequence 테스트 통과 → S6-01로 이월 후 완료 (신규 흐름 기준)
   - test_save_system.gd가 v1 단일슬롯 API(save_game/load_game/has_save/delete_save) 참조로 완전 파손됨 → 2026-04-07 재작성 완료
 - [x] `--export-release` 빌드 성공 + SCRIPT ERROR 없음 (2026-04-09)
 - [x] `production/milestones/alpha.md` 생성 ✅ (2026-04-06)

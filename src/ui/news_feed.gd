@@ -33,6 +33,8 @@ var _unread_count: int = 0
 
 var _header_bar: HBoxContainer
 var _lbl_title: Label
+var _lbl_speed_badge: Label   ## "FAST" or "LIVE" skill badge
+var _dot_live: ColorRect      ## Red dot indicator for S2 LIVE
 var _lbl_unread_badge: Label
 var _scroll: ScrollContainer
 var _card_container: VBoxContainer
@@ -61,11 +63,25 @@ func _build_ui() -> void:
 	add_child(_header_bar)
 
 	_lbl_title = Label.new()
+	_lbl_title.text = tr("뉴스 피드")
 	_lbl_title.add_theme_font_size_override("font_size", 14)
 	ThemeSetup.style_label_primary(_lbl_title)
 	_header_bar.add_child(_lbl_title)
 
-	# Skill feedback: show news speed status
+	# S1/S2 skill badge — "FAST" or "LIVE"
+	_lbl_speed_badge = Label.new()
+	_lbl_speed_badge.add_theme_font_size_override("font_size", 11)
+	_lbl_speed_badge.visible = false
+	_header_bar.add_child(_lbl_speed_badge)
+
+	# S2 live dot — red blinking indicator shown only when S2 is unlocked
+	_dot_live = ColorRect.new()
+	_dot_live.custom_minimum_size = Vector2(8.0, 8.0)
+	_dot_live.color = ThemeSetup.PROFIT_RED
+	_dot_live.visible = false
+	_header_bar.add_child(_dot_live)
+
+	# Apply initial skill state to badges
 	_update_title_with_skill()
 
 	_lbl_unread_badge = Label.new()
@@ -312,14 +328,18 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 	# Affected stocks (expandable — NOT added to tree until clicked)
 	var target_stocks: Variant = entry.get("target_stock_ids")
 	var stocks_margin: MarginContainer = null
+	# stock_ids는 클릭 시 순회 선택에 사용 (관련 종목 수 >= 1일 때).
+	var _stock_ids: Array[String] = []
 	if target_stocks is Array and (target_stocks as Array).size() > 0:
 		var names: PackedStringArray = PackedStringArray()
 		for sid: Variant in (target_stocks as Array):
-			var stock: StockData = StockDatabase.get_stock(str(sid))
+			var s_id: String = str(sid)
+			_stock_ids.append(s_id)
+			var stock: StockData = StockDatabase.get_stock(s_id)
 			if stock:
-				names.append("%s(%s)" % [stock.name_ko, stock.stock_id])
+				names.append(stock.get_display_name())
 			else:
-				names.append(str(sid))
+				names.append(s_id)
 		var stocks_lbl: Label = Label.new()
 		stocks_lbl.text = "관련 종목: %s" % ", ".join(names)
 		stocks_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
@@ -332,37 +352,54 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 		stocks_margin.add_child(stocks_lbl)
 
 	# Click to mark as read + toggle body (add/remove from tree)
+	# 관련 종목 >= 1이면 클릭마다 종목을 순회하여 stock_clicked emit.
+	# _cycle_index는 이 카드 전용 캡처 변수 — 카드마다 독립적으로 유지.
 	var _body_ref: MarginContainer = body_margin
 	var _stocks_ref: MarginContainer = stocks_margin
 	var _vbox_ref: VBoxContainer = vbox
+	# _cycle_index: 이 카드 전용 순회 커서. -1 = 닫힘/리셋 상태.
+	# 관련 종목 없음(0개) → toggle 동작. 1개 이상 → 순회 선택 + 마지막 이후 닫기.
+	var _cycle_index: int = 0
 	card.gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventMouseButton:
 			var mb: InputEventMouseButton = event as InputEventMouseButton
 			if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
 				_mark_read(entry, card, marker)
-				_toggle_body(_vbox_ref, _body_ref, _stocks_ref)
+				if _cycle_index >= max(_stock_ids.size(), 1):
+					_collapse_body(_vbox_ref, _body_ref, _stocks_ref)
+					_cycle_index = 0
+				else:
+					_expand_body(_vbox_ref, _body_ref, _stocks_ref)
+					if _cycle_index < _stock_ids.size():
+						stock_clicked.emit(_stock_ids[_cycle_index])
+					_cycle_index += 1
 	)
 
 	return card
 
 
+func _expand_body(vbox: VBoxContainer, body_ctrl: MarginContainer, stocks_ctrl: MarginContainer) -> void:
+	if body_ctrl != null and body_ctrl.get_parent() == null:
+		vbox.add_child(body_ctrl)
+	if stocks_ctrl != null and stocks_ctrl.get_parent() == null:
+		vbox.add_child(stocks_ctrl)
+
+
+func _collapse_body(vbox: VBoxContainer, body_ctrl: MarginContainer, stocks_ctrl: MarginContainer) -> void:
+	if body_ctrl != null and body_ctrl.get_parent() != null:
+		vbox.remove_child(body_ctrl)
+	if stocks_ctrl != null and stocks_ctrl.get_parent() != null:
+		vbox.remove_child(stocks_ctrl)
+
+
 func _toggle_body(vbox: VBoxContainer, body_ctrl: MarginContainer, stocks_ctrl: MarginContainer) -> void:
 	if body_ctrl == null and stocks_ctrl == null:
 		return
-	# Toggle: if body is in tree, remove it; otherwise add it
 	var is_expanded: bool = body_ctrl != null and body_ctrl.get_parent() != null
 	if is_expanded:
-		# Collapse
-		if body_ctrl and body_ctrl.get_parent():
-			vbox.remove_child(body_ctrl)
-		if stocks_ctrl and stocks_ctrl.get_parent():
-			vbox.remove_child(stocks_ctrl)
+		_collapse_body(vbox, body_ctrl, stocks_ctrl)
 	else:
-		# Expand — add at end of vbox
-		if body_ctrl:
-			vbox.add_child(body_ctrl)
-		if stocks_ctrl:
-			vbox.add_child(stocks_ctrl)
+		_expand_body(vbox, body_ctrl, stocks_ctrl)
 
 
 func _mark_read(entry: Dictionary, card: PanelContainer, marker: Label) -> void:
@@ -380,8 +417,6 @@ func _mark_read(entry: Dictionary, card: PanelContainer, marker: Label) -> void:
 	style.border_color = ThemeSetup.BORDER_DIM
 	style.set_border_width_all(1)
 	card.add_theme_stylebox_override("panel", style)
-	# NOTE: stock_clicked is NOT emitted here — marking a card read must not
-	# trigger navigation. Stock navigation belongs to a dedicated click handler.
 
 
 func _clear_cards() -> void:
@@ -429,12 +464,20 @@ func _disconnect_signals() -> void:
 		SkillTree.on_skill_unlocked.disconnect(_on_skill_unlocked_refresh_title)
 
 
+## Updates S1/S2 skill badges in the news feed header.
+## Called on _ready() and whenever SkillTree.on_skill_unlocked fires.
+## Implements: design/gdd/skill-tree.md §S1 "FAST" badge, §S2 "LIVE" badge + red dot
 func _update_title_with_skill() -> void:
 	if SkillTree.is_skill_unlocked("S2"):
-		_lbl_title.text = "뉴스 피드 ⚡실시간"
-		_lbl_title.add_theme_color_override("font_color", Color(0.20, 0.80, 0.40))
+		_lbl_speed_badge.text = tr("LIVE")
+		_lbl_speed_badge.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
+		_lbl_speed_badge.visible = true
+		_dot_live.visible = true
 	elif SkillTree.is_skill_unlocked("S1"):
-		_lbl_title.text = "뉴스 피드 ⏱빠른뉴스"
-		_lbl_title.add_theme_color_override("font_color", Color(0.85, 0.70, 0.20))
+		_lbl_speed_badge.text = tr("FAST")
+		_lbl_speed_badge.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
+		_lbl_speed_badge.visible = true
+		_dot_live.visible = false
 	else:
-		_lbl_title.text = "뉴스 피드"
+		_lbl_speed_badge.visible = false
+		_dot_live.visible = false

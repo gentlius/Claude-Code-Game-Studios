@@ -144,20 +144,77 @@ OGG 포맷으로 다운로드하거나 WAV → OGG 변환(Audacity).
 
 ---
 
+### S-11 — 주문 체결음 (OrderPanel)
+
+**파일명**: `sfx/sfx_order_filled.ogg`  
+**설명**: 체결 확정 2펄스 블립. 차갑고 정밀한 전자음. 0.2초 이내.  
+**추천 소스**: Bfxr (https://www.bfxr.net) 자체 생성 권장  
+**Bfxr 설정**: Electronic → Frequency 220→280Hz, 길이 0.08s × 2개 이어붙이기 (50ms 무음 삽입)  
+**Freesound 대안**: 검색어 `"blip double"` `"UI beep short"` CC0  
+- ID 242502 "Short Blip" by f4ngy — CC0 (단음 × 2 복사·붙여넣기)  
+
+**처리**: 총 200ms. 첫 블립 80ms → 무음 40ms → 두 번째 블립 80ms. Normalize -3dB. OGG Quality 6.
+
+---
+
+### S-12 — 레벨업 (LevelUpBanner)
+
+**파일명**: `sfx/sfx_level_up.ogg`  
+**설명**: 3음 상승 아르페지오 (C4→E4→G4 계열). 달성 만족감. 0.4초 이내.  
+**추천 소스**: Freesound.org 검색어 `"level up short"` `"arpeggio up"` CC0  
+**추천 후보**:
+- ID 512763 "Level Up 01" by rhodesmas — CC0  
+- **대안**: Bfxr → Powerup → Wave: Sine, Frequency 상승, 길이 0.35s  
+
+**처리**: 0.35~0.4초. Normalize -3dB. OGG Quality 6.
+
+---
+
+### S-13 — VI/서킷 브레이커 경보 (TradingScreen)
+
+**파일명**: `sfx/sfx_vi_alert.ogg`  
+**설명**: 2음 상승 경보 톤. 4종 중 가장 긴장감 있는 알림 — 즉각 반응 요구. S-06(삭제 경고)과 음색 겹치지 않게 주의. 0.35초 이내.  
+**추천 소스**: Freesound.org — Breviceps Signal 시리즈 탐색  
+- https://freesound.org/people/Breviceps/ → CC0, 짧은 전자 시그널 다수 보유  
+- "Warning Signal" 또는 "Signal 2" 계열  
+- **대안**: 검색어 `"alert beep two note"` `"warning tone short"` CC0  
+
+**처리**: 0.3초 이내. Normalize -2dB (4종 중 가장 크게 — 경보이므로). OGG Quality 6.
+
+---
+
+### S-14 — 뉴스 알림 (ToastManager)
+
+**파일명**: `sfx/sfx_news_alert.ogg`  
+**설명**: 2음 하강 소프트 알림. 정보 수신 느낌. 4종 중 가장 조용하게. 0.25초 이내.  
+**추천 소스**: Freesound.org 검색어 `"notification tone"` `"soft blip"` CC0  
+**추천 후보**:
+- ID 341696 "Notification" by rhodesmas — CC0  
+- **대안**: Bfxr → Blip/Select → Frequency 440→330Hz 하강, Wave: Sine, 길이 0.2s  
+
+**처리**: 0.2~0.25초. Normalize -4dB (뉴스는 부수적 정보 — 놓쳐도 재확인 가능). OGG Quality 6.
+
+---
+
 ## 다운로드 순서 (우선순위)
 
 ```
-1. bgm_start_screen   — P0, 가장 먼저 (ID: 155139)
-2. sfx_logo_sting     — P1 (ID: 335860, 또는 Bfxr 자체 생성)
-3. sfx_save_complete  — P1 (ID: 452998)
-4. sfx_slot_select    — P2 (ID: 677860)
-5. sfx_slot_hover     — P2 (ID: 448086)
-6. sfx_delete_confirm — P2 (ID: 445976)
-── Beta 추가 ──
-7. sfx_profit_small   — P3 (S-07, Freesound "coin clink" CC0)
-8. sfx_profit_medium  — P3 (S-08, Freesound 또는 Bfxr 자체 생성)
-9. sfx_profit_large   — P3 (S-09, Freesound "fanfare short" CC0)
-10. sfx_profit_jackpot — P3 (S-10, Freesound "jackpot" CC0 또는 Audacity 믹스)
+1. bgm_start_screen   — P0, 가장 먼저 (ID: 155139) ✅ 완료
+2. sfx_logo_sting     — P1 (ID: 335860, 또는 Bfxr 자체 생성) ✅ 완료
+3. sfx_save_complete  — P1 (ID: 452998) ✅ 완료
+4. sfx_slot_select    — P2 (ID: 677860) ✅ 완료
+5. sfx_slot_hover     — P2 (ID: 448086) ✅ 완료
+6. sfx_delete_confirm — P2 (ID: 445976) ✅ 완료
+── Beta 코어 SFX (B-05) ──
+7. sfx_vi_alert       — P1 (S-13, Breviceps Signal 시리즈 CC0)
+8. sfx_order_filled   — P2 (S-11, Bfxr 자체 생성 권장)
+9. sfx_level_up       — P2 (S-12, Freesound ID 512763 CC0)
+10. sfx_news_alert    — P3 (S-14, Freesound ID 341696 또는 Bfxr)
+── Beta 수익 실현 ──
+11. sfx_profit_small   — P3 (S-07, Freesound "coin clink" CC0)
+12. sfx_profit_medium  — P3 (S-08, Freesound 또는 Bfxr 자체 생성)
+13. sfx_profit_large   — P3 (S-09, Freesound "fanfare short" CC0)
+14. sfx_profit_jackpot — P3 (S-10, Freesound "jackpot" CC0 또는 Audacity 믹스)
 ```
 
 ---

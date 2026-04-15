@@ -50,8 +50,10 @@
 | 24 | 스타트 스크린 (Start Screen) | UI | Alpha | In Review | ✅ Done | [start-screen.md](start-screen.md) | 세이브/로드 |
 | 25 | 인트로 시퀀스 (Intro Sequence) | UI | Alpha | Approved | ✅ Done | [intro-sequence.md](intro-sequence.md) | — |
 | 26 | 크레딧 화면 (Credits Screen) | UI | Full | Draft | — | [credits-screen.md](credits-screen.md) | — |
-| 27 | 튜토리얼 (Tutorial) | Meta | Full | Not Started | — | — | 전체 게임플레이 시스템 |
-| 28 | 설정 (Settings) | Meta | Beta | Not Started | — | — | 오디오, 게임 시계 |
+| 27 | A3 재무제표 (Financial Statements) | UI | Beta | In Review | — | [financial-statements.md](financial-statements.md) | 스킬 트리, StockData, 가격 엔진 |
+| 28 | S3 루머 채널 (Rumor Channel) | Gameplay | Beta | In Review | — | [rumor-channel.md](rumor-channel.md) | 스킬 트리, 뉴스/이벤트, 뉴스 피드 UI |
+| 29 | 설정 화면 (Settings Screen) | UI | Beta | In Review | — | [settings-screen.md](settings-screen.md) | AudioManager, GameClock |
+| 30 | 튜토리얼 (Tutorial) | Meta | Full | Not Started | — | — | 전체 게임플레이 시스템 |
 
 > **¹ 라이프스타일 소비 Alpha 폴백**: Alpha 빌드에서 `LifestyleManager`는 존재하지 않으며 `tangible_assets = 0`으로 고정. `SeasonManager`는 시즌 종료 후 라이프스타일 처리 단계를 건너뛴다. Beta Sprint 9(B-02)에서 첫 기능 활성화 예정. 상세 내용: `lifestyle-spending.md §1 Overview Alpha 폴백 박스` 참조.
 

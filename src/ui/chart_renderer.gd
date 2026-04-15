@@ -660,7 +660,7 @@ func _update_header() -> void:
 
 	var price: int = PriceEngine.get_current_price(_stock_id)
 	_lbl_stock_name.text = stock.get_display_name()
-	_lbl_current_price.text = "₩%s" % _format_number(price)
+	_lbl_current_price.text = FormatUtils.currency(price)
 
 	# 전일 종가 대비 등락률 (HTS 표준)
 	var limits: Dictionary = PriceEngine.get_daily_limits(_stock_id)
@@ -1217,7 +1217,7 @@ func _draw_crosshair() -> void:
 		draw_string(
 			ThemeDB.fallback_font,
 			Vector2(_chart_rect.position.x + _chart_rect.size.x + 4, _crosshair_pos.y + 4),
-			"₩%s" % _format_number(snapped_price), HORIZONTAL_ALIGNMENT_LEFT,
+			FormatUtils.currency(snapped_price), HORIZONTAL_ALIGNMENT_LEFT,
 			-1, 10, ThemeSetup.TEXT_PRIMARY
 		)
 

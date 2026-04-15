@@ -137,7 +137,7 @@ func _update_left_panel() -> void:
 
 	var start_cap: int = SeasonManager.get_season_start_deposit()
 	var current_assets: int = PortfolioManager.get_total_assets()
-	_lbl_season_value.text = "₩%s → ₩%s" % [_fmt_comma(start_cap), _fmt_comma(current_assets)]
+	_lbl_season_value.text = "%s → %s" % [FormatUtils.currency(start_cap), FormatUtils.currency(current_assets)]
 
 	_lbl_weekly_return.text = _fmt_pct(weekly_pct)
 	_lbl_weekly_return.add_theme_color_override("font_color",
@@ -275,7 +275,7 @@ func _add_row(entry: Dictionary) -> void:
 		lbl_prize.text = tr("체결 부족")
 		lbl_prize.add_theme_color_override("font_color", COLOR_NEGATIVE)
 	elif prize_raw is int and prize_raw > 0:
-		lbl_prize.text = "₩%s" % _fmt_comma(prize_raw)
+		lbl_prize.text = FormatUtils.currency(prize_raw)
 	else:
 		lbl_prize.text = "—"
 	hbox.add_child(lbl_prize)

@@ -129,18 +129,44 @@ func test_skill_tree_api():
 	assert_true(SkillTree.has_method("is_skill_unlocked"),   "is_skill_unlocked 존재")
 
 
+# ── StopTakeSystem ───────────────────────────────────────────────────
+
+func test_stop_take_system_api():
+	assert_true(StopTakeSystem.has_method("set_condition"),    "set_condition 존재")
+	assert_true(StopTakeSystem.has_method("clear_condition"),  "clear_condition 존재")
+	assert_true(StopTakeSystem.has_method("get_setting"),      "get_setting 존재")
+	assert_true(StopTakeSystem.has_method("get_all_settings"), "get_all_settings 존재")
+	assert_true(StopTakeSystem.has_method("check_and_trigger"),"check_and_trigger 존재")
+	assert_true(StopTakeSystem.has_method("get_save_data"),    "get_save_data 존재")
+	assert_true(StopTakeSystem.has_method("load_save_data"),   "load_save_data 존재")
+	assert_true(StopTakeSystem.has_method("reset"),            "reset 존재")
+
+
+func test_stop_take_triggered_signal_params():
+	## on_stop_take_triggered는 (stock_id, reason, filled_price) 3개 파라미터여야 한다.
+	var signal_list: Array = StopTakeSystem.get_signal_list()
+	var sig: Dictionary = {}
+	for s: Dictionary in signal_list:
+		if s["name"] == "on_stop_take_triggered":
+			sig = s
+			break
+	assert_false(sig.is_empty(), "on_stop_take_triggered 시그널 존재")
+	assert_eq(sig["args"].size(), 3, "on_stop_take_triggered 파라미터 3개 (stock_id, reason, filled_price)")
+
+
 # ── reset() 계약 ─────────────────────────────────────────────────────
 ## 모든 autoload 시스템이 reset()을 구현해야 한다.
 ## 실패 = 테스트 격리 불가 → 상태 오염으로 인한 플레이크 테스트
 
 func test_all_systems_have_reset():
-	assert_true(GameClock.has_method("reset"),       "GameClock.reset 존재")
-	assert_true(CurrencySystem.has_method("reset"),  "CurrencySystem.reset 존재")
-	assert_true(PortfolioManager.has_method("reset"),"PortfolioManager.reset 존재")
-	assert_true(OrderEngine.has_method("reset"),     "OrderEngine.reset 존재")
-	assert_true(XpSystem.has_method("reset"),        "XpSystem.reset 존재")
-	assert_true(SkillTree.has_method("reset"),       "SkillTree.reset 존재")
-	assert_true(PriceEngine.has_method("reset"),     "PriceEngine.reset 존재")
-	assert_true(NewsEventSystem.has_method("reset"), "NewsEventSystem.reset 존재")
-	assert_true(AiCompetitor.has_method("reset"),    "AiCompetitor.reset 존재")
-	assert_true(SeasonManager.has_method("reset"),   "SeasonManager.reset 존재")
+	assert_true(GameClock.has_method("reset"),         "GameClock.reset 존재")
+	assert_true(CurrencySystem.has_method("reset"),    "CurrencySystem.reset 존재")
+	assert_true(PortfolioManager.has_method("reset"),  "PortfolioManager.reset 존재")
+	assert_true(OrderEngine.has_method("reset"),       "OrderEngine.reset 존재")
+	assert_true(XpSystem.has_method("reset"),          "XpSystem.reset 존재")
+	assert_true(SkillTree.has_method("reset"),         "SkillTree.reset 존재")
+	assert_true(PriceEngine.has_method("reset"),       "PriceEngine.reset 존재")
+	assert_true(NewsEventSystem.has_method("reset"),   "NewsEventSystem.reset 존재")
+	assert_true(AiCompetitor.has_method("reset"),      "AiCompetitor.reset 존재")
+	assert_true(SeasonManager.has_method("reset"),     "SeasonManager.reset 존재")
+	assert_true(StopTakeSystem.has_method("reset"),    "StopTakeSystem.reset 존재")

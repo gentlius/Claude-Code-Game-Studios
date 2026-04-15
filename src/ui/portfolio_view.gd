@@ -294,7 +294,7 @@ func _refresh_holdings() -> void:
 		var refs: Dictionary = _holding_rows[sid]
 		refs["lbl_qty"].text = tr("%d주") % h["quantity"]
 		var current_price: int = h.get("current_value", 0) / maxi(h.get("quantity", 1), 1)
-		refs["lbl_price"].text = "₩%s" % _format_number(current_price)
+		refs["lbl_price"].text = FormatUtils.currency(current_price)
 		var pnl_pct: float = h.get("unrealized_pnl_pct", 0.0)
 		refs["lbl_rate"].text = "%+.1f%%" % pnl_pct
 		if pnl_pct > 0.0:
@@ -303,7 +303,7 @@ func _refresh_holdings() -> void:
 			refs["lbl_rate"].add_theme_color_override("font_color", ThemeSetup.LOSS_BLUE)
 		else:
 			refs["lbl_rate"].add_theme_color_override("font_color", ThemeSetup.NEUTRAL_GRAY)
-		refs["lbl_value"].text = "₩%s" % _format_number(h.get("current_value", 0))
+		refs["lbl_value"].text = FormatUtils.currency(h.get("current_value", 0))
 		# S/T button color: 손절만=빨강, 익절만=초록, 양쪽=주황, 없음=기본
 		if refs.has("btn_st"):
 			var btn: Button = refs["btn_st"] as Button

@@ -26,3 +26,9 @@ static func number(value: int) -> String:
 static func pct(value: float) -> String:
 	var sign_str: String = "+" if value >= 0.0 else ""
 	return "%s%.1f%%" % [sign_str, value]
+
+
+## 정수를 ₩ 접두사 + 쉼표 구분 통화 문자열로 반환. 단일 소유 포맷.
+## 예) 1234567 → "₩1,234,567"  통화 기호 변경 시 여기만 수정.
+static func currency(value: int) -> String:
+	return "₩%s" % number(value)

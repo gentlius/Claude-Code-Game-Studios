@@ -140,10 +140,10 @@ func _refresh_assets() -> void:
 	var total: int = PortfolioManager.get_total_assets()
 	var cash: int = CurrencySystem.get_cash_assets()
 	var account: int = PortfolioManager.get_account_total_value()
-	_lbl_total_assets.text = "총 자산  ₩%s" % FormatUtils.number(total)
-	_lbl_cash_assets.text = "현금 자산 ₩%s" % FormatUtils.number(cash)
-	_lbl_account_value.text = "계좌  ₩%s" % FormatUtils.number(account)
-	_lbl_tangible.text = "유형 ₩0"  ## Beta: LifestyleManager.get_tangible_value() 추가 예정
+	_lbl_total_assets.text = tr("총 자산  %s") % FormatUtils.currency(total)
+	_lbl_cash_assets.text = tr("현금 자산 %s") % FormatUtils.currency(cash)
+	_lbl_account_value.text = tr("계좌  %s") % FormatUtils.currency(account)
+	_lbl_tangible.text = tr("유형 ₩0")  ## Beta: LifestyleManager.get_tangible_value() 추가 예정
 
 # ── UI Construction ──
 

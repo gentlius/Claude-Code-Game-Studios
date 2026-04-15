@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- 3/4 arc (270°): starts at top (270°), goes clockwise to left (180°) -->
+  <!-- Arc path: large-arc=1 for 270° sweep -->
+  <!-- Start point: 270° = (24, 4) top -->
+  <!-- End point: 180° = (4, 24) left -->
+  <!-- Base ring (dim, 15% opacity) -->
+  <circle cx="24" cy="24" r="20"
+    fill="none"
+    stroke="#EBEBEB"
+    stroke-width="4"
+    stroke-opacity="0.15"/>
+  <!-- Main 270° arc: top → right → bottom → left (clockwise) -->
+  <path d="M 24 4 A 20 20 0 1 1 4 24"
+    fill="none"
+    stroke="#EBEBEB"
+    stroke-width="4"
+    stroke-linecap="round"/>
+  <!-- Accent tip: last ~45° segment ending at the gap, in #4D99FF -->
+  <!-- From 135° to 180°: start=(9.86,9.86) end=(4,24) -->
+  <path d="M 9.86 38.14 A 20 20 0 0 1 4 24"
+    fill="none"
+    stroke="#4D99FF"
+    stroke-width="4"
+    stroke-linecap="round"/>
+</svg>

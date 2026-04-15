@@ -140,9 +140,11 @@ func start_season() -> void:
 
 
 ## Called by UI when player confirms PRE_MARKET → opens the market.
+## Initializes order books for the new trading day before opening (GDD order-book.md §3-1, §9).
 func confirm_market_open() -> void:
 	if _market_state != MarketState.PRE_MARKET:
 		return
+	PriceEngine.initialize_order_books()
 	_change_state(MarketState.MARKET_OPEN)
 	on_market_open.emit()
 

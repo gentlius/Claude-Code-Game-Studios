@@ -13,7 +13,7 @@ signal save_completed
 
 # ── Constants ──
 
-const SAVE_VERSION: int = 3
+const SAVE_VERSION: int = 4
 const INDEX_VERSION: int = 1
 const SAVE_INDEX_PATH: String = "user://save_index.json"
 const LEGACY_SAVE_PATH: String = "user://save_data.json"  ## v1 단일 슬롯 경로 (마이그레이션용)
@@ -139,6 +139,8 @@ func load_slot(id: int) -> bool:
 		CurrencySystem.load_save_data(data["currency"])
 	if data.has("portfolio"):
 		PortfolioManager.load_save_data(data["portfolio"])
+	if data.has("lifestyle"):
+		LifestyleManager.load_save_data(data["lifestyle"])
 
 	# GameClock 복원 — is_season_active()의 권한자. 위 시스템들의 load_save_data()는
 	# GameClock.is_season_active()를 내부에서 호출하지 않으므로 순서는 안전.
@@ -186,6 +188,7 @@ func save_slot(id: int) -> bool:
 		"ai": AiCompetitor.get_save_data(),
 		"news": NewsEventSystem.get_save_data(),
 		"stop_take": StopTakeSystem.get_save_data(),
+		"lifestyle": LifestyleManager.get_save_data(),
 	}
 
 	var path: String = "user://save_slot_%d.json" % id

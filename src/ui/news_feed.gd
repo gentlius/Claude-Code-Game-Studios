@@ -21,6 +21,8 @@ const SCOPE_LABELS: Dictionary = {
 	"SECTOR": "업종",
 	"INDIVIDUAL": "개별",
 }
+## Implements: design/gdd/rumor-channel.md §3-2 — dim background for rumor cards
+const RUMOR_BG_COLOR: Color = Color(0.22, 0.22, 0.22)
 
 # ── State ──
 
@@ -47,6 +49,7 @@ func _ready() -> void:
 	NewsEventSystem.on_news_display.connect(_on_news_display)
 	NewsEventSystem.on_pre_market_news.connect(_on_pre_market_news)
 	NewsEventSystem.on_theme_hint.connect(_on_theme_hint)
+	NewsEventSystem.on_rumor_hint.connect(_on_rumor_hint)
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
 	SkillTree.on_skill_unlocked.connect(_on_skill_unlocked_refresh_title)
 	# Deliver any pre-market news that fired during load_slot() before this node existed.
@@ -128,6 +131,27 @@ func _on_pre_market_news(entries: Array[Dictionary]) -> void:
 	_pre_market_entries = entries
 	_is_pre_market_mode = true
 	_show_pre_market_bundle()
+
+
+## Implements: design/gdd/rumor-channel.md §3-1 — show rumor card in news feed
+func _on_rumor_hint(rumor: Dictionary) -> void:
+	var entry: Dictionary = {
+		"headline":   rumor.get("text", "[루머]"),
+		"body":       "※ 정확도 %d%% — 교차 확인 권장" % int(SkillTree.RUMOR_BASE_ACCURACY * 100),
+		"scope":      rumor.get("scope", "MACRO"),
+		"impact_tier": "SMALL",
+		"impact_hint": "",
+		"display_tick": GameClock.get_current_tick(),
+		"is_read":    false,
+		"is_rumor":   true,
+		"target_stock_ids": ([rumor["stock_id"]] if rumor.get("stock_id", "") != "" else []),
+	}
+	_news_entries.insert(0, entry)
+	if _news_entries.size() > MAX_VISIBLE_NEWS:
+		_news_entries.resize(MAX_VISIBLE_NEWS)
+	_unread_count += 1
+	_update_unread_badge()
+	_add_news_card(entry, true)
 
 
 func _on_theme_hint(hint_text: String) -> void:
@@ -221,7 +245,10 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 	var style: StyleBoxFlat = StyleBoxFlat.new()
 
 	var is_read: bool = entry.get("is_read", false)
-	if is_read:
+	var is_rumor: bool = entry.get("is_rumor", false)
+	if is_rumor:
+		style.bg_color = RUMOR_BG_COLOR
+	elif is_read:
 		style.bg_color = ThemeSetup.BG_DARK
 	else:
 		style.bg_color = ThemeSetup.BG_CARD
@@ -258,8 +285,12 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 	var target_sector: Variant = entry.get("target_sector")
 	if scope == "SECTOR" and target_sector != null and str(target_sector) != "" and str(target_sector) != "null":
 		scope_label = str(target_sector)
-	badge.text = "[%s]" % scope_label
-	badge.add_theme_color_override("font_color", SCOPE_COLORS.get(scope, Color.WHITE))
+	if is_rumor:
+		badge.text = "[루머]"
+		badge.add_theme_color_override("font_color", Color(0.65, 0.65, 0.65))
+	else:
+		badge.text = "[%s]" % scope_label
+		badge.add_theme_color_override("font_color", SCOPE_COLORS.get(scope, Color.WHITE))
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row1.add_child(badge)
 
@@ -458,6 +489,8 @@ func _disconnect_signals() -> void:
 		NewsEventSystem.on_pre_market_news.disconnect(_on_pre_market_news)
 	if NewsEventSystem.on_theme_hint.is_connected(_on_theme_hint):
 		NewsEventSystem.on_theme_hint.disconnect(_on_theme_hint)
+	if NewsEventSystem.on_rumor_hint.is_connected(_on_rumor_hint):
+		NewsEventSystem.on_rumor_hint.disconnect(_on_rumor_hint)
 	if GameClock.on_market_state_changed.is_connected(_on_market_state_changed):
 		GameClock.on_market_state_changed.disconnect(_on_market_state_changed)
 	if SkillTree.on_skill_unlocked.is_connected(_on_skill_unlocked_refresh_title):

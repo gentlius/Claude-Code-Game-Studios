@@ -120,9 +120,18 @@ func test_ai_competitor_api():
 # ── PriceEngine ──────────────────────────────────────────────────────
 
 func test_price_engine_api():
-	assert_true(PriceEngine.has_method("get_current_price"),   "get_current_price 존재")
-	assert_true(PriceEngine.has_method("get_market_index"),    "get_market_index 존재")
+	assert_true(PriceEngine.has_method("get_current_price"),    "get_current_price 존재")
+	assert_true(PriceEngine.has_method("get_market_index"),     "get_market_index 존재")
 	assert_true(PriceEngine.has_method("get_index_change_pct"), "get_index_change_pct 존재")
+	# Order book API (GDD order-book.md §6)
+	assert_true(PriceEngine.has_method("initialize_order_books"), "initialize_order_books 존재")
+	assert_true(PriceEngine.has_method("get_order_book"),          "get_order_book 존재")
+	assert_true(PriceEngine.has_method("consume_order_book"),      "consume_order_book 존재")
+	# A3 재무제표 API (GDD financial-statements.md §8)
+	assert_true(PriceEngine.has_method("get_per_display"),      "get_per_display 존재")
+	assert_true(PriceEngine.has_method("get_pbr_display"),      "get_pbr_display 존재")
+	assert_true(PriceEngine.has_method("get_roe_display"),      "get_roe_display 존재")
+	assert_true(PriceEngine.has_method("get_dividend_display"), "get_dividend_display 존재")
 
 
 # ── SkillTree ────────────────────────────────────────────────────────
@@ -157,19 +166,65 @@ func test_stop_take_triggered_signal_params():
 	assert_eq(sig["args"].size(), 3, "on_stop_take_triggered 파라미터 3개 (stock_id, reason, filled_price)")
 
 
+# ── NewsEventSystem — S3 루머 채널 시그널 ────────────────────────────
+## Implements: design/gdd/rumor-channel.md §9 Implementation Checklist
+
+func test_news_event_system_rumor_signal():
+	var signal_list: Array = NewsEventSystem.get_signal_list()
+	var sig: Dictionary = {}
+	for s: Dictionary in signal_list:
+		if s["name"] == "on_rumor_hint":
+			sig = s
+			break
+	assert_false(sig.is_empty(), "on_rumor_hint 시그널 존재")
+	assert_eq(sig["args"].size(), 1, "on_rumor_hint 파라미터 1개 (rumor: Dictionary)")
+
+
+# ── CurrencySystem (S8-06 dual-economy 확장) ─────────────────────────
+
+func test_currency_system_cash_assets_api():
+	assert_true(CurrencySystem.has_method("get_cash_assets"),       "get_cash_assets 존재")
+	assert_true(CurrencySystem.has_method("get_total_prize_earned"), "get_total_prize_earned 존재")
+	assert_true(CurrencySystem.has_method("cash_add"),              "cash_add 존재")
+	assert_true(CurrencySystem.has_method("cash_deduct"),           "cash_deduct 존재")
+	assert_true(CurrencySystem.has_method("auto_deposit_to_sim"),   "auto_deposit_to_sim 존재")
+
+
+# ── LifestyleManager ──────────────────────────────────────────────────
+
+func test_lifestyle_manager_api():
+	assert_true(LifestyleManager.has_method("get_tangible_value"),      "get_tangible_value 존재")
+	assert_true(LifestyleManager.has_method("get_residence_tier"),      "get_residence_tier 존재")
+	assert_true(LifestyleManager.has_method("get_residence_name"),      "get_residence_name 존재")
+	assert_true(LifestyleManager.has_method("get_titles"),              "get_titles 존재")
+	assert_true(LifestyleManager.has_method("has_luxury"),              "has_luxury 존재")
+	assert_true(LifestyleManager.has_method("upgrade_residence"),       "upgrade_residence 존재")
+	assert_true(LifestyleManager.has_method("purchase_luxury"),         "purchase_luxury 존재")
+	assert_true(LifestyleManager.has_method("purchase_property"),       "purchase_property 존재")
+	assert_true(LifestyleManager.has_method("add_recurring_cost"),      "add_recurring_cost 존재")
+	assert_true(LifestyleManager.has_method("mark_luxury_owned"),       "mark_luxury_owned 존재")
+	assert_true(LifestyleManager.has_method("purchase_network_item"),   "purchase_network_item 존재")
+	assert_true(LifestyleManager.has_method("purchase_social_item"),    "purchase_social_item 존재")
+	assert_true(LifestyleManager.has_method("donate"),                  "donate 존재")
+	assert_true(LifestyleManager.has_method("invest_startup"),          "invest_startup 존재")
+	assert_true(LifestyleManager.has_method("process_offseason"),       "process_offseason 존재")
+	assert_true(LifestyleManager.has_method("reset"),                   "LifestyleManager.reset 존재")
+
+
 # ── reset() 계약 ─────────────────────────────────────────────────────
 ## 모든 autoload 시스템이 reset()을 구현해야 한다.
 ## 실패 = 테스트 격리 불가 → 상태 오염으로 인한 플레이크 테스트
 
 func test_all_systems_have_reset():
-	assert_true(GameClock.has_method("reset"),         "GameClock.reset 존재")
-	assert_true(CurrencySystem.has_method("reset"),    "CurrencySystem.reset 존재")
-	assert_true(PortfolioManager.has_method("reset"),  "PortfolioManager.reset 존재")
-	assert_true(OrderEngine.has_method("reset"),       "OrderEngine.reset 존재")
-	assert_true(XpSystem.has_method("reset"),          "XpSystem.reset 존재")
-	assert_true(SkillTree.has_method("reset"),         "SkillTree.reset 존재")
-	assert_true(PriceEngine.has_method("reset"),       "PriceEngine.reset 존재")
-	assert_true(NewsEventSystem.has_method("reset"),   "NewsEventSystem.reset 존재")
-	assert_true(AiCompetitor.has_method("reset"),      "AiCompetitor.reset 존재")
-	assert_true(SeasonManager.has_method("reset"),     "SeasonManager.reset 존재")
-	assert_true(StopTakeSystem.has_method("reset"),    "StopTakeSystem.reset 존재")
+	assert_true(GameClock.has_method("reset"),          "GameClock.reset 존재")
+	assert_true(CurrencySystem.has_method("reset"),     "CurrencySystem.reset 존재")
+	assert_true(PortfolioManager.has_method("reset"),   "PortfolioManager.reset 존재")
+	assert_true(OrderEngine.has_method("reset"),        "OrderEngine.reset 존재")
+	assert_true(XpSystem.has_method("reset"),           "XpSystem.reset 존재")
+	assert_true(SkillTree.has_method("reset"),          "SkillTree.reset 존재")
+	assert_true(PriceEngine.has_method("reset"),        "PriceEngine.reset 존재")
+	assert_true(NewsEventSystem.has_method("reset"),    "NewsEventSystem.reset 존재")
+	assert_true(AiCompetitor.has_method("reset"),       "AiCompetitor.reset 존재")
+	assert_true(SeasonManager.has_method("reset"),      "SeasonManager.reset 존재")
+	assert_true(StopTakeSystem.has_method("reset"),     "StopTakeSystem.reset 존재")
+	assert_true(LifestyleManager.has_method("reset"),   "LifestyleManager.reset 존재")

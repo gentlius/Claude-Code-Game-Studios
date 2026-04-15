@@ -147,6 +147,8 @@ func _load_stocks_from_json() -> void:
 		stock.sector_sensitivity = float(entry.get("sector_sensitivity", 1.0))
 		stock.listed_shares = int(entry.get("listed_shares", 1000000))
 		stock.per = float(entry.get("per", 0.0))
+		stock.pbr = float(entry.get("pbr", 0.0))
+		stock.roe = float(entry.get("roe", 0.0))
 		stock.dividend_yield = float(entry.get("dividend_yield", 0.0))
 		var tags: Array = entry.get("event_tags", [])
 		stock.event_tags = Array(tags, TYPE_STRING, &"", null)

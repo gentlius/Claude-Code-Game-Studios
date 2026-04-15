@@ -17,6 +17,10 @@ signal on_theme_hint(hint_text: String)
 ## Emitted for debug: when an event is generated (before delay).
 signal on_event_generated(event: Dictionary)
 
+## Emitted when S3 rumor channel produces a pre-event hint (advance_ticks before the real event).
+## entry keys: headline, body, scope, impact_tier, direction (may be inverted), is_rumor=true, is_fake
+signal on_rumor_hint(entry: Dictionary)
+
 # ── Enums ──
 
 enum SystemState { UNINITIALIZED, READY, ACTIVE, DAY_END, SEASON_END }
@@ -78,6 +82,27 @@ const OVERNIGHT_SMALL_PROB: float = 0.6   ## SMALL vs MEDIUM split
 const MIN_DECAY_MINUTES: int = 8    ## ~8 game-minutes
 const DEFAULT_DECAY_MINUTES: int = 15  ## ~15 game-minutes
 
+# ── Constants: S3 Rumor Channel (GDD Rule 5-4, F6) ──
+
+## Rumor probability by impact tier: LARGE/MEGA=1.0, MEDIUM=0.3, SMALL=0.0 (GDD F6)
+const RUMOR_PROBS: Dictionary = {"LARGE": 1.0, "MEGA": 1.0, "MEDIUM": 0.3, "SMALL": 0.0}
+
+## Number of fake rumors generated per trading day (GDD §5-4, Tuning Knobs)
+const FAKE_RUMOR_PER_DAY: int = 2
+
+## Fake rumor tick distribution: placed between tick 30 and 360 (= 7.5–90 game-minutes)
+const FAKE_RUMOR_TICK_MIN: int = 30
+const FAKE_RUMOR_TICK_MAX: int = 360
+
+## Scope display labels used only inside news_event_system to build rumor headlines.
+## UI must NOT import this — UI reads scope field and uses its own mapping.
+## (UI no-reference rule: gameplay-code.md §NO direct references to UI code)
+const _SCOPE_DISPLAY: Dictionary = {
+	"MACRO": "시장 전반",
+	"SECTOR": "업종",
+	"INDIVIDUAL": "종목",
+}
+
 # ── State ──
 
 ## ADR-018: 세션별 엔트로피 격리. PriceEngine._rng와 독립된 인스턴스.
@@ -109,6 +134,10 @@ var _recent_individual_targets: Dictionary = {}
 var _last_slot_scope: String = ""
 ## Mutex group tracking: resolved_mutex_key -> template_id (GDD Rule 3-1)
 var _daily_mutex: Dictionary = {}
+
+## Scheduled fake rumor ticks for the current trading day.
+## Populated by _schedule_fake_rumors() on each market open.
+var _fake_rumor_ticks: Array[int] = []
 
 ## Season statistics
 var _season_stats: Dictionary = {
@@ -237,6 +266,7 @@ func reset() -> void:
 	_news_delay_queue.clear()
 	_daily_event_count = 0
 	_loaded_news_bundle.clear()
+	_fake_rumor_ticks.clear()
 	_state = SystemState.UNINITIALIZED
 
 
@@ -250,6 +280,7 @@ func _on_season_start() -> void:
 	_recent_individual_targets.clear()
 	_news_delay_queue.clear()
 	_overnight_buffer.clear()
+	_fake_rumor_ticks.clear()
 	_daily_mega_fired = false
 	_daily_event_count = 0
 	_last_slot_scope = ""
@@ -267,6 +298,7 @@ func _on_market_open() -> void:
 	_generate_daily_schedule()
 	_daily_event_count = 0
 	_daily_mega_fired = false
+	_schedule_fake_rumors()
 	_last_slot_scope = ""
 	_daily_mutex.clear()
 	_state = SystemState.ACTIVE
@@ -307,6 +339,9 @@ func process_tick(tick: int, _day: int, _week: int) -> void:
 
 	# Check scheduled slots
 	_check_scheduled_slots(tick)
+
+	# Check fake rumor schedule (S3 채널 — GDD Rule 5-4)
+	_check_fake_rumors(tick)
 
 	# Process news delay queue
 	_process_news_delay_queue(tick)
@@ -537,6 +572,93 @@ func _fire_event_from_slot(scope: String, impact: String, tick: int) -> void:
 	_season_stats["by_impact"][tier_key] = _season_stats["by_impact"].get(tier_key, 0) + 1
 
 	on_event_generated.emit(news_entry)
+
+	# S3 루머 채널: 이벤트 발생 후 rumor_advance_ticks 전에 루머 힌트 발행 (GDD Rule 5-4, F6)
+	_emit_rumor_if_eligible(news_entry, template, direction, tick)
+
+# ── S3 Rumor Channel (GDD Rule 5-4, F6) ──
+
+## Number of ticks a rumor leads the real event. GDD F6: 15분 × 4TPM = 60틱.
+const RUMOR_ADVANCE_TICKS: int = 60
+
+## Direction accuracy: 70% chance rumor direction matches real event (GDD F6).
+const RUMOR_ACCURACY: float = 0.70
+
+## Schedules FAKE_RUMOR_PER_DAY fake rumor ticks for the current trading day.
+## Called by _on_market_open(). Ticks are stored in _fake_rumor_ticks and
+## checked each tick in process_tick() → _check_scheduled_slots().
+func _schedule_fake_rumors() -> void:
+	_fake_rumor_ticks.clear()
+	if not SkillTree.has_rumor_channel():
+		return
+	for _i: int in range(FAKE_RUMOR_PER_DAY):
+		var t: int = _rng.randi_range(FAKE_RUMOR_TICK_MIN, FAKE_RUMOR_TICK_MAX)
+		_fake_rumor_ticks.append(t)
+
+
+## Emits on_rumor_hint if S3 is unlocked and the event's impact tier qualifies.
+## Called at the end of _fire_event_from_slot() for each real intra-day event.
+## GDD F6: rumor_tick = event_tick - RUMOR_ADVANCE_TICKS (clamped to 0).
+func _emit_rumor_if_eligible(
+	news_entry: Dictionary, template: Dictionary, real_direction: int, event_tick: int
+) -> void:
+	if not SkillTree.has_rumor_channel():
+		return
+
+	var impact_tier: String = str(template.get("impact_tier", "SMALL"))
+	var prob: float = float(RUMOR_PROBS.get(impact_tier, 0.0))
+	if prob <= 0.0:
+		return
+	if _rng.randf() > prob:
+		return
+
+	# Direction: 70% accurate, 30% inverted (GDD F6 rumor_accuracy = 0.70)
+	var rumor_direction: int = real_direction
+	if _rng.randf() > RUMOR_ACCURACY:
+		rumor_direction = -real_direction
+
+	var scope: String = str(news_entry.get("scope", "MACRO"))
+	var scope_label: String = _SCOPE_DISPLAY.get(scope, scope)
+
+	# Vague headline — no specific company/template details revealed
+	var rumor_headline: String = "[루머] %s 관련 중요 공시 임박 — 출처 미확인" % scope_label
+
+	var rumor_entry: Dictionary = {
+		"headline": rumor_headline,
+		"body": "S3 루머 채널: 이벤트 발생 약 %d틱 전 힌트. 방향 및 규모 불확실." % RUMOR_ADVANCE_TICKS,
+		"scope": scope,
+		"impact_tier": impact_tier,
+		"direction": rumor_direction,
+		"is_rumor": true,
+		"is_fake": false,
+		"display_tick": maxi(0, event_tick - RUMOR_ADVANCE_TICKS),
+		"day": GameClock.get_current_day(),
+	}
+	on_rumor_hint.emit(rumor_entry)
+
+
+## Checks whether any fake rumor should fire at this tick and emits it.
+## Called from process_tick(). Fake rumors have is_fake=true (GDD §5-4).
+func _check_fake_rumors(tick: int) -> void:
+	if not SkillTree.has_rumor_channel():
+		return
+	for i: int in range(_fake_rumor_ticks.size() - 1, -1, -1):
+		if tick >= _fake_rumor_ticks[i]:
+			_fake_rumor_ticks.remove_at(i)
+			var scope: String = _pick_scope()
+			var scope_label: String = _SCOPE_DISPLAY.get(scope, scope)
+			var rumor_entry: Dictionary = {
+				"headline": "[루머] %s 관련 이상 징후 — 미확인 정보" % scope_label,
+				"body": "S3 루머 채널: 출처 불명. 신뢰도 낮음.",
+				"scope": scope,
+				"impact_tier": "SMALL",
+				"direction": 1 if _rng.randf() < 0.5 else -1,
+				"is_rumor": true,
+				"is_fake": true,
+				"display_tick": tick,
+				"day": GameClock.get_current_day(),
+			}
+			on_rumor_hint.emit(rumor_entry)
 
 # ── Template Selection (GDD Rule 2-5) ──
 

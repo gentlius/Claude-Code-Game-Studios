@@ -9,6 +9,7 @@ var _splash: Control = null
 var _start_screen: Control = null
 var _main_screen: Control = null
 var _intro: Control = null
+var _lifestyle_screen: Control = null
 var _saving_overlay: Node = null
 
 ## Track whether the current MainScreen was created via new game (needs initial save).
@@ -109,11 +110,40 @@ func _load_main_screen() -> void:
 	_main_screen = screen_scene.instantiate()
 	add_child(_main_screen)
 	_main_screen.exit_to_start_requested.connect(_on_exit_to_start_requested)
+	LifestyleManager.offseason_settled.connect(_show_lifestyle_screen)
 
 	# 새 게임: MainScreen 준비 완료 후 초기 상태 1회 저장 (GDD §3-5 Step 6)
 	if _pending_initial_save and SaveSystem.active_slot_id >= 0:
 		_pending_initial_save = false
 		SaveSystem.save_slot(SaveSystem.active_slot_id)
+
+
+# ── Lifestyle Screen ──
+
+## Shows LifestyleScreen after off-season auto-settlement completes.
+## GDD lifestyle-spending.md §3-1: offseason_settled → show spending screen.
+func _show_lifestyle_screen() -> void:
+	# Guard: only show during off-season (season not active). Ignore stale signals.
+	if SeasonManager.is_season_active():
+		return
+	# Guard: don't stack screens if already showing (e.g. duplicate signal).
+	if _lifestyle_screen != null:
+		return
+
+	_lifestyle_screen = load("res://src/ui/lifestyle_screen.gd").new()
+	add_child(_lifestyle_screen)
+	# LifestyleScreen emits lifestyle_screen_closed when the player clicks "다음 시즌 시작".
+	_lifestyle_screen.lifestyle_screen_closed.connect(_on_lifestyle_screen_closed)
+
+	# Save immediately on screen entry (GDD §5 EC: 라이프스타일 소비 화면 중 앱 종료 → 화면 진입 시 즉시 세이브)
+	if SaveSystem.active_slot_id >= 0:
+		SaveSystem.save_slot(SaveSystem.active_slot_id)
+
+
+func _on_lifestyle_screen_closed() -> void:
+	if _lifestyle_screen != null:
+		_lifestyle_screen.queue_free()
+		_lifestyle_screen = null
 
 
 func _on_exit_to_start_requested() -> void:

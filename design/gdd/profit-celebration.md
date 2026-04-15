@@ -250,7 +250,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [ ] `audio.gd` (audio.md): SFX 4종 등록 — `sfx_profit_small`, `sfx_profit_medium`, `sfx_profit_large`, `sfx_profit_jackpot`
 
 ### 에셋 수급
-- [ ] `assets/art/vfx/coin_gold.png` — 금화 스프라이트 확보 (production/asset-plan.md §VFX 참조)
+- [ ] `assets/art/vfx/coin_gold.png` — 금화 스프라이트 확보 (Kenney.nl UI Pack CC0 또는 Figma 원형+골드그라디언트 직접 제작, 32×32 또는 64×64 PNG 투명)
 - [ ] `assets/audio/sfx/sfx_profit_small.ogg` — 확보 (DOWNLOAD_GUIDE.md §S-07)
 - [ ] `assets/audio/sfx/sfx_profit_medium.ogg` — 확보 (DOWNLOAD_GUIDE.md §S-08)
 - [ ] `assets/audio/sfx/sfx_profit_large.ogg` — 확보 (DOWNLOAD_GUIDE.md §S-09)

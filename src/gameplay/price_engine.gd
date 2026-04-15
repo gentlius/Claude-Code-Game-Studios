@@ -77,6 +77,25 @@ const VOL_BREAKOUT_SCALE: Array[float] = [0.30, 1.00, 2.00, 4.00]
 const VOL_PATTERN_SCALE: Array[float]  = [0.60, 1.00, 1.30, 1.80]
 const VOL_AMPLIFIER: Array[float]      = [0.60, 1.00, 1.40, 2.00]
 
+# ── Constants: Order Book (GDD order-book.md §4) ──
+
+## Daily volume by volatility profile (LOW..EXTREME). Used for base_qty_per_level.
+const DAILY_VOLUME_BY_PROFILE: Array[int] = [50_000, 200_000, 800_000, 2_000_000]
+
+## Level weight: index 0 = 호가1 (best), index 4 = 호가5 (far). Far levels have more qty.
+const LEVEL_WEIGHT: Array[float] = [1.0, 1.3, 1.6, 2.0, 2.5]
+
+## Tick-level inflow/outflow base rates (GDD §4-2).
+const ORDER_BOOK_INFLOW_RATE: float  = 0.08
+const ORDER_BOOK_OUTFLOW_RATE: float = 0.06
+
+## Clamp range for volume_factor in order book updates (GDD §4-2).
+const ORDER_BOOK_VOLUME_FACTOR_MIN: float = 0.1
+const ORDER_BOOK_VOLUME_FACTOR_MAX: float = 5.0
+
+## Number of levels on each side of the book.
+const ORDER_BOOK_LEVELS: int = 5
+
 # ── Constants: Volume (GDD Rule 4) ──
 
 const BASE_VOLUME_RANGE: Array = [
@@ -276,6 +295,7 @@ func initialize_for_load(save_data: Dictionary) -> void:
 			"stock_id":           stock_id,
 			"current_price":      cur_price,
 			"base_price":         stock.base_price,
+			"season_open_price":  saved.get("season_open_price", cur_price),
 			"prev_day_close":     prev_close,
 			"volatility_profile": stock.volatility_profile,
 			"macro_sensitivity":  stock.macro_sensitivity,
@@ -288,6 +308,7 @@ func initialize_for_load(save_data: Dictionary) -> void:
 			"ohlcv_daily":        ohlcv_daily,
 			"event_queue":        [] as Array,
 			"gradual_events":     [] as Array,
+			"order_book":         {"ask": [], "bid": []},
 		}
 		_transition_matrices[stock_id] = _build_transition_matrix(
 			stock.volatility_profile, bias
@@ -325,12 +346,13 @@ func get_save_data() -> Dictionary:
 	for stock_id: String in _stock_states:
 		var s: Dictionary = _stock_states[stock_id]
 		stocks_data[stock_id] = {
-			"current_price":  s.get("current_price",  0),
-			"prev_day_close": s.get("prev_day_close", 0),
-			"season_bias":    int(s.get("season_bias", SeasonBias.NEUTRAL)),
-			"ohlcv_daily":    s.get("ohlcv_daily",    []),
-			"tick_prices":    s.get("tick_prices",     []),
-			"tick_volumes":   s.get("tick_volumes",    []),
+			"current_price":     s.get("current_price",     0),
+			"prev_day_close":    s.get("prev_day_close",    0),
+			"season_open_price": s.get("season_open_price", s.get("current_price", 0)),
+			"season_bias":       int(s.get("season_bias", SeasonBias.NEUTRAL)),
+			"ohlcv_daily":       s.get("ohlcv_daily",       []),
+			"tick_prices":       s.get("tick_prices",        []),
+			"tick_volumes":      s.get("tick_volumes",       []),
 		}
 	return {
 		"stocks": stocks_data,
@@ -405,6 +427,61 @@ func get_daily_limits(stock_id: String) -> Dictionary:
 	return {"upper": upper, "lower": lower, "prev_close": prev_close}
 
 
+## Returns the PER display string adjusted for current price vs season open.
+## GDD financial-statements.md §Formulas: PER_display = base_per * (current_price / season_open_price).
+## per == 0.0 (적자기업) → "N/A". 표시 포맷 단일 소유.
+func get_per_display(stock_id: String) -> String:
+	var stock: StockData = StockDatabase.get_stock(stock_id)
+	if stock == null or stock.per == 0.0:
+		return "N/A"
+	var state: Dictionary = _stock_states.get(stock_id, {})
+	var open_price: int = state.get("season_open_price", 0)
+	var cur_price: int = state.get("current_price", 0)
+	if open_price <= 0:
+		return "%.1fx" % stock.per
+	return "%.1fx" % (stock.per * (float(cur_price) / float(open_price)))
+
+
+## Returns the PBR display string adjusted for current price vs season open.
+## GDD financial-statements.md §Formulas: PBR_display = base_pbr * (current_price / season_open_price).
+## pbr == 0.0 (적자/음수 자본) → "N/A". 표시 포맷 단일 소유.
+func get_pbr_display(stock_id: String) -> String:
+	var stock: StockData = StockDatabase.get_stock(stock_id)
+	if stock == null or stock.pbr == 0.0:
+		return "N/A"
+	var state: Dictionary = _stock_states.get(stock_id, {})
+	var open_price: int = state.get("season_open_price", 0)
+	var cur_price: int = state.get("current_price", 0)
+	if open_price <= 0:
+		return "%.1fx" % stock.pbr
+	return "%.1fx" % (stock.pbr * (float(cur_price) / float(open_price)))
+
+
+## Returns the ROE display string. ROE is static — not affected by price movement.
+## roe == 0.0 (적자기업) → "N/A". 표시 포맷 단일 소유.
+func get_roe_display(stock_id: String) -> String:
+	var stock: StockData = StockDatabase.get_stock(stock_id)
+	if stock == null or stock.roe == 0.0:
+		return "N/A"
+	return "%.1f%%" % stock.roe
+
+
+## Returns the dividend yield display string adjusted for current price vs season open.
+## GDD financial-statements.md §Formulas: dividend_display = base_yield / (current_price / season_open_price).
+## 표시 포맷 단일 소유.
+func get_dividend_display(stock_id: String) -> String:
+	var stock: StockData = StockDatabase.get_stock(stock_id)
+	if stock == null or stock.dividend_yield <= 0.0:
+		return "N/A"
+	var state: Dictionary = _stock_states.get(stock_id, {})
+	var open_price: int = state.get("season_open_price", 0)
+	var cur_price: int = state.get("current_price", 0)
+	if open_price <= 0 or cur_price <= 0:
+		return "%.1f%%" % (stock.dividend_yield * 100.0)
+	var adjusted: float = stock.dividend_yield / (float(cur_price) / float(open_price))
+	return "%.1f%%" % (adjusted * 100.0)
+
+
 ## Returns the current Markov state for a stock.
 func get_markov_state(stock_id: String) -> MarkovState:
 	var state: Dictionary = _stock_states.get(stock_id, {})
@@ -452,6 +529,7 @@ func init_first_season() -> void:
 			"current_price":      stock.base_price,
 			"base_price":         stock.base_price,
 			"prev_day_close":     stock.base_price,
+			"season_open_price":  stock.base_price,
 			"volatility_profile": stock.volatility_profile,
 			"macro_sensitivity":  stock.macro_sensitivity,
 			"sector_sensitivity": stock.sector_sensitivity,
@@ -463,6 +541,7 @@ func init_first_season() -> void:
 			"ohlcv_daily":        [] as Array[Dictionary],
 			"event_queue":        [] as Array,
 			"gradual_events":     [] as Array,
+			"order_book":         {"ask": [], "bid": []},
 		}
 		_transition_matrices[stock_id] = _build_transition_matrix(
 			stock.volatility_profile, bias
@@ -486,18 +565,21 @@ func init_first_season() -> void:
 ## so prices carry forward naturally across seasons. Called every season start (Season 1
 ## and N+1). No emit — prices are unchanged so UI dirty flags will not trigger; the chart
 ## renderer re-fetches its buffers on the next MARKET_OPEN state transition.
+## season_open_price is captured here so PER/PBR display methods reflect season-start price.
 func _reset_season_mechanics() -> void:
 	for stock_id: String in _stock_states:
 		var state: Dictionary = _stock_states[stock_id]
 		var bias: SeasonBias = _random_bias()
-		state["markov_state"]   = MarkovState.SIDEWAYS
-		state["state_duration"] = 0
-		state["season_bias"]    = bias
-		state["tick_prices"]    = [] as Array[int]
-		state["tick_volumes"]   = [] as Array[float]
-		state["ohlcv_daily"]    = [] as Array[Dictionary]
-		state["event_queue"]    = [] as Array
-		state["gradual_events"] = [] as Array
+		state["markov_state"]      = MarkovState.SIDEWAYS
+		state["state_duration"]    = 0
+		state["season_bias"]       = bias
+		state["season_open_price"] = state.get("current_price", state.get("base_price", 0))
+		state["tick_prices"]       = [] as Array[int]
+		state["tick_volumes"]      = [] as Array[float]
+		state["ohlcv_daily"]       = [] as Array[Dictionary]
+		state["event_queue"]       = [] as Array
+		state["gradual_events"]    = [] as Array
+		state["order_book"]        = {"ask": [], "bid": []}
 		# current_price, prev_day_close: carry forward — not touched
 		_transition_matrices[stock_id] = _build_transition_matrix(
 			state["volatility_profile"], bias
@@ -532,6 +614,11 @@ func process_tick(tick_number: int, _day: int, _week: int) -> void:
 		on_price_updated.emit(tick_number)
 		return
 
+	# Capture old prices before price updates for order book re-anchoring (GDD order-book.md §3-2)
+	var old_prices: Dictionary = {}
+	for stock_id: String in _stock_states:
+		old_prices[stock_id] = _stock_states[stock_id].get("current_price", 0)
+
 	for stock_id: String in _stock_states:
 		# VI halt check (GDD Rule 2-4)
 		var vi: Dictionary = _vi_states.get(stock_id, {})
@@ -553,6 +640,9 @@ func process_tick(tick_number: int, _day: int, _week: int) -> void:
 		# start, so the first random delta can falsely exceed VI_THRESHOLD.
 		if tick_number > 0:
 			_check_vi(stock_id)
+
+	# Update order books after all prices are confirmed (GDD order-book.md §3-2)
+	_update_order_books(old_prices)
 
 	_update_index()
 	_check_circuit_breaker()
@@ -914,6 +1004,10 @@ func _end_trading_day() -> void:
 		# chart_renderer는 MARKET_OPEN마다 _aggregate_candles()로 전체 재집계하여
 		# 1분/5분/15분봉에서 과거 일자 스크롤을 지원한다.
 
+	# Clear order books at market close — KRX 미체결 잔량 장 마감 시 전량 초기화 (GDD order-book.md §3-1)
+	for stock_id: String in _stock_states:
+		_stock_states[stock_id]["order_book"] = {"ask": [], "bid": []}
+
 	# Reset VI daily counters (GDD Rule 2-4: max 1 per day resets each day)
 	for stock_id: String in _vi_states:
 		_vi_states[stock_id]["count_today"] = 0
@@ -926,6 +1020,223 @@ func _end_trading_day() -> void:
 
 	# Save end-of-day index
 	_prev_day_index = _current_index
+
+# ── Order Book (GDD order-book.md) ──
+
+## Initializes 10-level order books for all stocks.
+## Called by GameClock.confirm_market_open() — GDD §3-1, §9 진입점.
+## Books are NOT saved/loaded; they are rebuilt fresh each trading day.
+func initialize_order_books() -> void:
+	for stock_id: String in _stock_states:
+		var s: Dictionary = _stock_states[stock_id]
+		var vol: int = s["volatility_profile"]
+		var price: int = s["current_price"]
+		var base_qty: float = _order_book_base_qty(vol)
+		var ask_levels: Array = []
+		var bid_levels: Array = []
+		# ask: price + (level+1)*tick_size, level 0..4
+		for level: int in range(ORDER_BOOK_LEVELS):
+			var level_price: int = price
+			for _i: int in range(level + 1):
+				level_price += get_tick_size(level_price)
+			var qty: int = maxi(1, int(base_qty * LEVEL_WEIGHT[level] * _rng.randf_range(0.7, 1.3)))
+			ask_levels.append({"price": level_price, "qty": qty})
+		# bid: price - level*tick_size, level 0..4
+		for level: int in range(ORDER_BOOK_LEVELS):
+			var level_price: int = price
+			for _i: int in range(level):
+				level_price -= get_tick_size(level_price)
+				level_price = maxi(1, level_price)
+			var qty: int = maxi(1, int(base_qty * LEVEL_WEIGHT[level] * _rng.randf_range(0.7, 1.3)))
+			bid_levels.append({"price": level_price, "qty": qty})
+		s["order_book"] = {"ask": ask_levels, "bid": bid_levels}
+
+
+## Returns the order book for a stock as {ask: [{price, qty}...], bid: [{price, qty}...]}.
+## ask[0] = best ask (lowest sell), bid[0] = best bid (highest buy = current price).
+## Returns empty book if stock not found. GDD §6 — UI·OrderEngine 조회용.
+func get_order_book(stock_id: String) -> Dictionary:
+	var s: Dictionary = _stock_states.get(stock_id, {})
+	return s.get("order_book", {"ask": [], "bid": []})
+
+
+## Consume order book for a buy or sell order. Returns {filled_qty, avg_price, remaining_qty}.
+## side = "buy" sweeps ask levels from best to worst; side = "sell" sweeps bid levels.
+## limit_price = -1 for market order (no price limit). GDD §3-4.
+func consume_order_book(
+	stock_id: String, side: String, order_qty: int, limit_price: int
+) -> Dictionary:
+	var s: Dictionary = _stock_states.get(stock_id, {})
+	if s.is_empty():
+		return {"filled_qty": 0, "avg_price": 0, "remaining_qty": order_qty}
+	var book: Dictionary = s.get("order_book", {"ask": [], "bid": []})
+	var levels: Array = book["ask"] if side == "buy" else book["bid"]
+	var remaining: int = order_qty
+	var total_cost: int = 0
+	var filled_qty: int = 0
+	var vol: int = s["volatility_profile"]
+	var prev_close: int = s.get("prev_day_close", 0)
+
+	# Use while loop so remove_at(i) does not cause index skip (for-range iterates
+	# a fixed snapshot of size; removing an element shifts subsequent elements left).
+	var i: int = 0
+	while i < levels.size() and remaining > 0:
+		var level: Dictionary = levels[i]
+		# Limit price check (GDD §3-4)
+		if limit_price != -1:
+			if side == "buy" and level["price"] > limit_price:
+				break
+			elif side == "sell" and level["price"] < limit_price:
+				break
+		var fill: int = mini(remaining, level["qty"])
+		total_cost += fill * level["price"]
+		filled_qty += fill
+		remaining -= fill
+		level["qty"] -= fill
+		# Level exhausted → remove and add new far level (GDD §3-3)
+		if level["qty"] == 0:
+			levels.remove_at(i)
+			_add_far_level(levels, side, book, vol, prev_close)
+			# Do NOT increment i — next element has shifted into position i
+		else:
+			i += 1
+
+	var avg_price: int = 0
+	if filled_qty > 0:
+		avg_price = round_to_tick(float(total_cost) / float(filled_qty))
+	return {"filled_qty": filled_qty, "avg_price": avg_price, "remaining_qty": remaining}
+
+
+## Update order books for all stocks after price changes. Called from process_tick().
+## Two-phase: 1) re-anchor levels to new price, 2) volume-correlated qty fluctuation.
+## GDD order-book.md §3-2.
+func _update_order_books(old_prices: Dictionary) -> void:
+	for stock_id: String in _stock_states:
+		var s: Dictionary = _stock_states[stock_id]
+		var book: Dictionary = s.get("order_book", {"ask": [], "bid": []})
+		if book["ask"].is_empty() and book["bid"].is_empty():
+			continue  # Not yet initialized (before confirm_market_open)
+		# VI-halted stocks: freeze the book (GDD EC-05, AC-11)
+		if is_vi_halted(stock_id):
+			continue
+		var new_price: int = s["current_price"]
+		var old_price: int = old_prices.get(stock_id, new_price)
+		var vol: int = s["volatility_profile"]
+		var prev_close: int = s.get("prev_day_close", 0)
+		var ask_levels: Array = book["ask"]
+		var bid_levels: Array = book["bid"]
+
+		# ── Phase 1: Re-anchor on price movement ──
+		if new_price > old_price:
+			# ask: remove levels where price <= new_price (bought through)
+			var removed_count: int = 0
+			var i: int = 0
+			while i < ask_levels.size():
+				if ask_levels[i]["price"] <= new_price:
+					ask_levels.remove_at(i)
+					removed_count += 1
+				else:
+					i += 1
+			# Add new far ask levels to restore 5 levels
+			for _j: int in range(removed_count):
+				_add_far_level(ask_levels, "buy", book, vol, prev_close)
+			# bid: insert new_price as new bid1
+			var ts_new: int = get_tick_size(new_price)
+			var base_q: float = _order_book_base_qty(vol)
+			var new_bid_qty: int = maxi(1, int(base_q * LEVEL_WEIGHT[4] * _rng.randf_range(0.7, 1.3)))
+			bid_levels.insert(0, {"price": new_price, "qty": new_bid_qty})
+			if bid_levels.size() > ORDER_BOOK_LEVELS:
+				bid_levels.resize(ORDER_BOOK_LEVELS)
+			# Verify invariant: ask1 must be > new_price
+			if not ask_levels.is_empty() and ask_levels[0]["price"] <= new_price:
+				ask_levels[0]["price"] = new_price + ts_new
+		elif new_price < old_price:
+			# bid: remove levels where price > new_price (sold through)
+			var removed_count: int = 0
+			var i: int = 0
+			while i < bid_levels.size():
+				if bid_levels[i]["price"] > new_price:
+					bid_levels.remove_at(i)
+					removed_count += 1
+				else:
+					i += 1
+			# Add new far bid levels
+			for _j: int in range(removed_count):
+				_add_far_level(bid_levels, "sell", book, vol, prev_close)
+			# ask: insert new_price + tick_size as new ask1
+			var ts: int = get_tick_size(new_price)
+			var base_q: float = _order_book_base_qty(vol)
+			var new_ask_qty: int = maxi(1, int(base_q * LEVEL_WEIGHT[4] * _rng.randf_range(0.7, 1.3)))
+			ask_levels.insert(0, {"price": new_price + ts, "qty": new_ask_qty})
+			if ask_levels.size() > ORDER_BOOK_LEVELS:
+				ask_levels.resize(ORDER_BOOK_LEVELS)
+			# Verify invariant: bid1 must not exceed new_price
+			if not bid_levels.is_empty() and bid_levels[0]["price"] > new_price:
+				bid_levels[0]["price"] = new_price
+
+		# ── Phase 2: Volume-correlated qty fluctuation ──
+		var daily_vol: int = maxi(1, DAILY_VOLUME_BY_PROFILE[vol])
+		var tick_volume: float = 0.0
+		if not s["tick_volumes"].is_empty():
+			tick_volume = s["tick_volumes"][s["tick_volumes"].size() - 1]
+		var volume_factor: float = clampf(
+			tick_volume / (float(daily_vol) / float(maxi(1, GameClock.TICKS_PER_DAY))),
+			ORDER_BOOK_VOLUME_FACTOR_MIN, ORDER_BOOK_VOLUME_FACTOR_MAX
+		)
+		var base_qty: float = _order_book_base_qty(vol)
+		for rank: int in range(ask_levels.size()):
+			var level: Dictionary = ask_levels[rank]
+			var base_q: float = base_qty * LEVEL_WEIGHT[mini(rank, ORDER_BOOK_LEVELS - 1)]
+			var inflow: int = int(base_q * ORDER_BOOK_INFLOW_RATE * volume_factor * _rng.randf_range(0.5, 1.5))
+			var outflow: int = int(base_q * ORDER_BOOK_OUTFLOW_RATE * volume_factor * _rng.randf_range(0.5, 1.5))
+			level["qty"] = maxi(0, level["qty"] + inflow - outflow)
+			if level["qty"] == 0:
+				ask_levels.remove_at(rank)
+				_add_far_level(ask_levels, "buy", book, vol, prev_close)
+		for rank: int in range(bid_levels.size()):
+			var level: Dictionary = bid_levels[rank]
+			var base_q: float = base_qty * LEVEL_WEIGHT[mini(rank, ORDER_BOOK_LEVELS - 1)]
+			var inflow: int = int(base_q * ORDER_BOOK_INFLOW_RATE * volume_factor * _rng.randf_range(0.5, 1.5))
+			var outflow: int = int(base_q * ORDER_BOOK_OUTFLOW_RATE * volume_factor * _rng.randf_range(0.5, 1.5))
+			level["qty"] = maxi(0, level["qty"] + inflow - outflow)
+			if level["qty"] == 0:
+				bid_levels.remove_at(rank)
+				_add_far_level(bid_levels, "sell", book, vol, prev_close)
+
+
+## Compute base qty per level from daily volume profile (GDD §4-1).
+func _order_book_base_qty(vol: int) -> float:
+	return maxf(1.0, float(DAILY_VOLUME_BY_PROFILE[vol]) / float(maxi(1, GameClock.TICKS_PER_DAY)) / 5.0)
+
+
+## Add a new far-end level to the given levels array.
+## For ask ("buy" sweep), new level goes at price beyond the current farthest ask.
+## For bid ("sell" sweep), new level goes at price below the current farthest bid.
+## Respects upper/lower daily limits (GDD §4-4, EC-01, EC-02).
+func _add_far_level(
+	levels: Array, side: String, _book: Dictionary, vol: int, prev_close: int
+) -> void:
+	var base_qty: float = _order_book_base_qty(vol)
+	var new_qty: int = maxi(1, int(base_qty * LEVEL_WEIGHT[ORDER_BOOK_LEVELS - 1] * _rng.randf_range(0.7, 1.3)))
+	if side == "buy":  # ask side
+		var upper_limit: int = round_to_tick(float(prev_close) * (1.0 + DAILY_LIMIT_PCT)) if prev_close > 0 else 999_999_999
+		var new_price: int
+		if levels.is_empty():
+			return  # Cannot determine anchor without existing levels
+		var far_price: int = levels[levels.size() - 1]["price"]
+		new_price = far_price + get_tick_size(far_price)
+		if new_price <= upper_limit:
+			levels.append({"price": new_price, "qty": new_qty})
+	else:  # bid side
+		var lower_limit: int = round_to_tick(float(prev_close) * (1.0 - DAILY_LIMIT_PCT)) if prev_close > 0 else 1
+		if levels.is_empty():
+			return
+		var far_price: int = levels[levels.size() - 1]["price"]
+		var ts: int = get_tick_size(far_price)
+		var new_price: int = maxi(1, far_price - ts)
+		if new_price >= lower_limit:
+			levels.append({"price": new_price, "qty": new_qty})
+
 
 # ── Market Index (시총가중지수) ──
 

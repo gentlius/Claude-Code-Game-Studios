@@ -26,6 +26,7 @@ XpSystem="*res://src/gameplay/xp_system.gd"
 SkillTree="*res://src/gameplay/skill_tree.gd"
 AiCompetitor="*res://src/gameplay/ai_competitor.gd"
 SeasonManager="*res://src/gameplay/season_manager.gd"
+LifestyleManager="*res://src/gameplay/lifestyle_manager.gd"
 SaveSystem="*res://src/core/save_system.gd"
 AudioManager="*res://src/core/audio_manager.gd"
 

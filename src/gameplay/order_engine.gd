@@ -349,59 +349,115 @@ func _process_pre_market_queue() -> void:
 
 # ── Fill Helpers ──
 
+## Market order fill —장중(MARKET_OPEN/PAUSED-resume) 체결.
+## Sweeps ask/bid levels via consume_order_book() (GDD order-book.md §3-4).
+## remaining_qty > 0: re-queue for next tick (GDD §3-4 "시장가 미체결" 규칙).
 func _fill_market_order(order: Dictionary) -> void:
-	var filled_price: int = PriceEngine.get_current_price(order["stock_id"])
+	var side_lower: String = order["side"].to_lower()
+	var result: Dictionary = PriceEngine.consume_order_book(
+		order["stock_id"], side_lower, order["quantity"], -1
+	)
+
+	if result["filled_qty"] == 0:
+		# No liquidity this tick — re-queue for next tick (market order stays live)
+		_market_order_queue.append(order)
+		return
+
+	var filled_price: int = result["avg_price"]
 
 	if order["side"] == "BUY":
-		var actual_cost: int = filled_price * order["quantity"]
+		var actual_cost: int = filled_price * result["filled_qty"]
 		var reserved: int = order.get("reserved_cash", 0)
-		var refund: int = reserved - actual_cost
+		# reserved covers the original quantity; refund the unconsumed portion proportionally
+		var proportional_reserved: int = int(
+			float(reserved) * float(result["filled_qty"]) / float(order["quantity"])
+		) if order["quantity"] > 0 else reserved
+		var refund: int = proportional_reserved - actual_cost
 		if refund > 0:
 			CurrencySystem.sim_add(refund)
 		elif refund < 0:
-			# Price went up since deduction — need more cash
 			if not CurrencySystem.sim_deduct(-refund):
-				CurrencySystem.sim_add(reserved)
+				CurrencySystem.sim_add(proportional_reserved)
 				order["status"] = "REJECTED"
 				order["reject_reason"] = "잔액 부족 (가격 변동)"
 				_history_append(order)
 				on_order_rejected.emit(order)
 				return
-		PortfolioManager.add_holding(order["stock_id"], order["quantity"], filled_price)
+		PortfolioManager.add_holding(order["stock_id"], result["filled_qty"], filled_price)
 
 	elif order["side"] == "SELL":
-		_unlock_sell_quantity(order["stock_id"], order["quantity"])
-		var proceeds: int = filled_price * order["quantity"]
+		_unlock_sell_quantity(order["stock_id"], result["filled_qty"])
+		var proceeds: int = filled_price * result["filled_qty"]
 		CurrencySystem.sim_add(proceeds)
-		PortfolioManager.remove_holding(order["stock_id"], order["quantity"], filled_price)
+		PortfolioManager.remove_holding(order["stock_id"], result["filled_qty"], filled_price)
 
 	order["status"] = "FILLED"
 	order["filled_price"] = filled_price
+	order["filled_qty"] = result["filled_qty"]
 	order["filled_tick"] = GameClock.get_current_tick()
 	_history_append(order)
 	on_order_filled.emit(order)
 
+	# Partial fill: re-queue remaining quantity for next tick (GDD order-book.md §3-4)
+	if result["remaining_qty"] > 0:
+		var remainder: Dictionary = order.duplicate()
+		remainder["order_id"] = _next_order_id
+		_next_order_id += 1
+		remainder["quantity"] = result["remaining_qty"]
+		remainder["reserved_cash"] = 0  # already deducted in original order
+		remainder["status"] = "PENDING"
+		_market_order_queue.append(remainder)
 
-func _fill_limit_order(order: Dictionary, current_price: int) -> void:
+
+## Limit order fill — 장중 체결. Sweeps order book for actual avg price (GDD order-book.md §3-4).
+## remaining_qty > 0: order goes back to _pending_limit_orders (GDD §3-4 "지정가 미체결" 규칙).
+func _fill_limit_order(order: Dictionary, _current_price: int) -> void:
+	var side_lower: String = order["side"].to_lower()
+	var limit_price: int = order.get("limit_price", -1)
+	var result: Dictionary = PriceEngine.consume_order_book(
+		order["stock_id"], side_lower, order["quantity"], limit_price
+	)
+
+	if result["filled_qty"] == 0:
+		# Price condition not met at book level — keep in pending
+		_pending_limit_orders.append(order)
+		return
+
+	var filled_price: int = result["avg_price"]
+
 	if order["side"] == "BUY":
-		var actual_cost: int = current_price * order["quantity"]
-		var reserved: int = order["reserved_cash"]
-		var refund: int = reserved - actual_cost
+		var actual_cost: int = filled_price * result["filled_qty"]
+		var reserved: int = order.get("reserved_cash", 0)
+		var proportional_reserved: int = int(
+			float(reserved) * float(result["filled_qty"]) / float(order["quantity"])
+		) if order["quantity"] > 0 else reserved
+		var refund: int = proportional_reserved - actual_cost
 		if refund > 0:
 			CurrencySystem.sim_add(refund)
-		PortfolioManager.add_holding(order["stock_id"], order["quantity"], current_price)
+		PortfolioManager.add_holding(order["stock_id"], result["filled_qty"], filled_price)
 
 	elif order["side"] == "SELL":
-		_unlock_sell_quantity(order["stock_id"], order["quantity"])
-		var proceeds: int = current_price * order["quantity"]
+		_unlock_sell_quantity(order["stock_id"], result["filled_qty"])
+		var proceeds: int = filled_price * result["filled_qty"]
 		CurrencySystem.sim_add(proceeds)
-		PortfolioManager.remove_holding(order["stock_id"], order["quantity"], current_price)
+		PortfolioManager.remove_holding(order["stock_id"], result["filled_qty"], filled_price)
 
 	order["status"] = "FILLED"
-	order["filled_price"] = current_price
+	order["filled_price"] = filled_price
+	order["filled_qty"] = result["filled_qty"]
 	order["filled_tick"] = GameClock.get_current_tick()
 	_history_append(order)
 	on_order_filled.emit(order)
+
+	# Partial fill: remaining stays in pending with reduced quantity (GDD §3-4)
+	if result["remaining_qty"] > 0:
+		var remainder: Dictionary = order.duplicate()
+		remainder["order_id"] = _next_order_id
+		_next_order_id += 1
+		remainder["quantity"] = result["remaining_qty"]
+		remainder["reserved_cash"] = 0  # already deducted
+		remainder["status"] = "PENDING"
+		_pending_limit_orders.append(remainder)
 
 # ── Expiry ──
 

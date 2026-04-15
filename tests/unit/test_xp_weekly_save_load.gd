@@ -22,26 +22,26 @@ func test_weekly_xp_starts_at_zero() -> void:
 
 
 func test_weekly_xp_accumulates_on_grant() -> void:
-	# Arrange / Act
-	XpSystem.grant_daily_bonus(10.0, 10.0, 10.0, 1000000, false)  # some XP granted
-	# We can't know exact XP granted without matching formula, so just check > 0
-	assert_true(XpSystem.get_weekly_xp() >= 0,
-		"XP 지급 후 주간 XP가 증가하거나 유지돼야 함")
+	# Arrange / Act — grant_weekly_prize_xp → _grant_xp → _weekly_xp++
+	XpSystem.grant_weekly_prize_xp(30)
+
+	# Assert
+	assert_eq(XpSystem.get_weekly_xp(), 30, "주간 XP 30 누산")
 
 
 func test_weekly_xp_increments_with_each_grant() -> void:
-	# Arrange — directly inspect: grant → weekly_xp matches total granted
-	var before: int = XpSystem.get_weekly_xp()
-	# Use a grant that definitely gives XP: 5% alpha
-	XpSystem.grant_daily_bonus(5.0, 0.0, 0.0, 1000000, true)
-	var after: int = XpSystem.get_weekly_xp()
-	assert_true(after >= before, "grant 후 weekly_xp는 감소하지 않아야 함")
+	# Arrange
+	XpSystem.grant_weekly_prize_xp(20)
+	XpSystem.grant_weekly_prize_xp(15)
+
+	# Assert
+	assert_eq(XpSystem.get_weekly_xp(), 35, "두 번 누산: 20 + 15 = 35")
 
 
 func test_reset_weekly_xp_clears_counter() -> void:
-	# Arrange — grant some XP
-	XpSystem.grant_daily_bonus(5.0, 0.0, 0.0, 1000000, true)
-	# Assume weekly_xp > 0 now
+	# Arrange
+	XpSystem.grant_weekly_prize_xp(50)
+	assert_eq(XpSystem.get_weekly_xp(), 50, "전제: 50 누산")
 
 	# Act
 	XpSystem.reset_weekly_xp()
@@ -52,7 +52,7 @@ func test_reset_weekly_xp_clears_counter() -> void:
 
 func test_total_xp_unaffected_by_reset_weekly_xp() -> void:
 	# Arrange
-	XpSystem.grant_daily_bonus(5.0, 0.0, 0.0, 1000000, true)
+	XpSystem.grant_weekly_prize_xp(50)
 	var total_before: int = XpSystem.get_total_xp()
 
 	# Act
@@ -67,41 +67,41 @@ func test_total_xp_unaffected_by_reset_weekly_xp() -> void:
 
 func test_get_save_data_includes_weekly_xp() -> void:
 	# Arrange
-	XpSystem.grant_daily_bonus(5.0, 0.0, 0.0, 1000000, true)
+	XpSystem.grant_weekly_prize_xp(40)
 
 	# Act
 	var data: Dictionary = XpSystem.get_save_data()
 
 	# Assert
 	assert_true(data.has("weekly_xp"), "get_save_data()에 weekly_xp 키 있어야 함")
-	assert_eq(data["weekly_xp"], XpSystem.get_weekly_xp(), "저장값이 현재 weekly_xp와 일치해야 함")
+	assert_eq(data["weekly_xp"], 40, "저장값이 현재 weekly_xp와 일치해야 함")
 
 
 func test_load_save_data_restores_weekly_xp() -> void:
 	# Arrange — grant XP, save, reset, load
-	XpSystem.grant_daily_bonus(5.0, 0.0, 0.0, 1000000, true)
-	var weekly_before: int = XpSystem.get_weekly_xp()
+	XpSystem.grant_weekly_prize_xp(40)
 	var data: Dictionary = XpSystem.get_save_data()
 	XpSystem.reset()
+	assert_eq(XpSystem.get_weekly_xp(), 0, "reset 후 0")
 
 	# Act
 	XpSystem.load_save_data(data)
 
 	# Assert
-	assert_eq(XpSystem.get_weekly_xp(), weekly_before,
-		"로드 후 weekly_xp가 저장 전 값과 일치해야 함")
+	assert_eq(XpSystem.get_weekly_xp(), 40,
+		"로드 후 weekly_xp 40 복원")
 
 
 func test_weekly_xp_survives_mid_week_save_load() -> void:
 	## Core regression: simulate Mon-Wed play → save → quit → load → Thu-Fri play
 	## Weekly XP after reload must include Mon-Wed XP, not just Thu-Fri.
 
-	# Arrange — "월화수" 3일치 XP
-	XpSystem.grant_daily_bonus(3.0, 0.0, 0.0, 1000000, true)  # Day 1
-	XpSystem.grant_daily_bonus(2.0, 0.0, 0.0, 1000000, true)  # Day 2
-	XpSystem.grant_daily_bonus(4.0, 0.0, 0.0, 1000000, true)  # Day 3
-	var xp_after_wed: int = XpSystem.get_weekly_xp()
-	assert_true(xp_after_wed > 0, "전제: 월화수 XP > 0")
+	# "월화수" 3일치 XP
+	XpSystem.grant_weekly_prize_xp(20)  # Day 1
+	XpSystem.grant_weekly_prize_xp(15)  # Day 2
+	XpSystem.grant_weekly_prize_xp(25)  # Day 3
+	var xp_after_wed: int = XpSystem.get_weekly_xp()  # 60
+	assert_eq(xp_after_wed, 60, "전제: 월화수 XP = 60")
 
 	# 세이브 → 리셋 (세션 종료 시뮬레이션)
 	var saved: Dictionary = XpSystem.get_save_data()
@@ -110,36 +110,33 @@ func test_weekly_xp_survives_mid_week_save_load() -> void:
 
 	# 로드 (세션 재개 시뮬레이션)
 	XpSystem.load_save_data(saved)
+	assert_eq(XpSystem.get_weekly_xp(), 60, "로드 직후 60 복원")
 
 	# "목금" 추가 XP
-	XpSystem.grant_daily_bonus(3.0, 0.0, 0.0, 1000000, true)  # Day 4
-	var xp_total_week: int = XpSystem.get_weekly_xp()
+	XpSystem.grant_weekly_prize_xp(10)  # Day 4
+	XpSystem.grant_weekly_prize_xp(10)  # Day 5
 
-	# Assert — 목금 XP만이 아니라 월화수 포함해야 함
-	assert_true(xp_total_week >= xp_after_wed,
-		"로드 후 주간 XP에 월화수 XP가 포함돼야 함")
+	# Assert — 월화수 포함한 주간 합산
+	assert_eq(XpSystem.get_weekly_xp(), 80,
+		"로드 후 주간 XP에 월화수 포함: 60 + 10 + 10 = 80")
 
 
 func test_weekly_xp_resets_after_weekly_report() -> void:
-	# Arrange — grant XP
-	XpSystem.grant_daily_bonus(5.0, 0.0, 0.0, 1000000, true)
-	assert_true(XpSystem.get_weekly_xp() > 0, "전제: 주간 XP > 0")
+	# Arrange
+	XpSystem.grant_weekly_prize_xp(50)
+	assert_eq(XpSystem.get_weekly_xp(), 50, "전제: 주간 XP 50")
 
 	# Act — simulate weekly settlement calling reset_weekly_xp()
 	XpSystem.reset_weekly_xp()
-
-	# Next week starts fresh
 	assert_eq(XpSystem.get_weekly_xp(), 0, "주간 리포트 후 weekly XP 초기화")
 
-	# Grant more for next week
-	XpSystem.grant_daily_bonus(2.0, 0.0, 0.0, 1000000, true)
-	# Only post-reset XP counted
-	var next_week_xp: int = XpSystem.get_weekly_xp()
-	assert_true(next_week_xp > 0, "다음 주 XP는 리셋 후부터 누산")
+	# Next week starts fresh
+	XpSystem.grant_weekly_prize_xp(30)
+	assert_eq(XpSystem.get_weekly_xp(), 30, "다음 주 XP는 리셋 후부터 누산")
 
 
 func test_load_save_data_weekly_xp_clamped_non_negative() -> void:
-	# Arrange — malformed save data
+	# Arrange — malformed save data with negative weekly_xp
 	var data: Dictionary = {
 		"total_xp": 0,
 		"current_level": 1,
@@ -156,7 +153,8 @@ func test_load_save_data_weekly_xp_clamped_non_negative() -> void:
 
 func test_reset_also_clears_weekly_xp() -> void:
 	# Arrange
-	XpSystem.grant_daily_bonus(5.0, 0.0, 0.0, 1000000, true)
+	XpSystem.grant_weekly_prize_xp(50)
+	assert_eq(XpSystem.get_weekly_xp(), 50)
 
 	# Act
 	XpSystem.reset()

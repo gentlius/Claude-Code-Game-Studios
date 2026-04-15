@@ -67,7 +67,10 @@ func test_xp_system_api():
 	assert_true(XpSystem.has_method("get_available_skill_points"),  "get_available_skill_points 존재")
 	assert_true(XpSystem.has_method("get_cumulative_xp_for_level"), "get_cumulative_xp_for_level 존재")
 	assert_true(XpSystem.has_method("grant_season_bonus"),          "grant_season_bonus 존재")
+	assert_true(XpSystem.has_method("grant_weekly_prize_xp"),       "grant_weekly_prize_xp 존재")
 	assert_true(XpSystem.has_method("spend_skill_point"),           "spend_skill_point 존재")
+	assert_true(XpSystem.has_method("get_weekly_xp"),               "get_weekly_xp 존재")
+	assert_true(XpSystem.has_method("reset_weekly_xp"),             "reset_weekly_xp 존재")
 
 
 func test_xp_gained_signal_has_source_param():

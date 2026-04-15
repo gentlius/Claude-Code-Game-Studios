@@ -28,16 +28,28 @@ fi
 
 WARNINGS=""
 
-# Check design documents for required sections
+# Check design documents for required sections + incomplete Implementation Checklist
 DESIGN_FILES=$(echo "$STAGED" | grep -E '^design/gdd/')
 if [ -n "$DESIGN_FILES" ]; then
     while IFS= read -r file; do
         if [[ "$file" == *.md ]] && [ -f "$file" ]; then
+            # Required sections check
             for section in "Overview" "Player Fantasy" "Detailed" "Formulas" "Edge Cases" "Dependencies" "Tuning Knobs" "Acceptance Criteria"; do
                 if ! grep -qi "$section" "$file"; then
                     WARNINGS="$WARNINGS\nDESIGN: $file missing required section: $section"
                 fi
             done
+
+            # Implementation Checklist 미완 항목 블록 -- [ ] 항목이 남아있으면 커밋 불가
+            # 구현 완료 커밋에 GDD를 포함했으나 체크리스트를 갱신하지 않은 경우를 잡는다
+            if grep -q "Implementation Checklist" "$file" 2>/dev/null; then
+                UNCHECKED=$(awk '/Implementation Checklist/,0' "$file" | grep -c "^- \[ \]" 2>/dev/null || echo 0)
+                if [ "$UNCHECKED" -gt 0 ]; then
+                    echo "BLOCKED: $file — Implementation Checklist에 미완 항목 ${UNCHECKED}개 남음." >&2
+                    echo "  DoD 체크 전 GDD Implementation Checklist를 전부 [x]로 갱신하라." >&2
+                    exit 2
+                fi
+            fi
         fi
     done <<< "$DESIGN_FILES"
 fi

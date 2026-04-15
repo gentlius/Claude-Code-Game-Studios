@@ -9,16 +9,30 @@ will be compacted or lost. Files on disk persist across compactions and session 
 
 ### Session State File
 
-Maintain `production/session-state/active.md` as a living checkpoint. Update it
-after each significant milestone:
+Maintain `production/session-state/active.md` as a living checkpoint.
 
-- Design section approved and written to file
-- Architecture decision made
-- Implementation milestone reached
-- Test results obtained
+**필수 형식** (이 형식을 정확히 따라야 pre-compact.sh가 AUTO-RESUME을 감지한다):
 
-The state file should contain: current task, progress checklist, key decisions
-made, files being worked on, and open questions.
+```markdown
+## TASK: [작업명 — 예: 코드 리뷰, GDD 체크리스트 갱신]
+## STATUS: IN PROGRESS
+## COMPLETED:
+- ✅ [완료 항목]
+- ✅ [완료 항목]
+## REMAINING:
+- [ ] [남은 항목 — 구체적으로]
+- [ ] [남은 항목]
+## NEXT: [재개 시 첫 번째 액션 — 예: "stock_list_panel.gd 107번 줄 확인"]
+```
+
+**작성 시점** (선택이 아님):
+- 3단계 이상 도구 호출이 필요한 작업 시작 전 즉시 작성
+- 각 항목 완료 후 COMPLETED/REMAINING 갱신
+- 작업 완전 완료 시 STATUS를 DONE으로 변경 (session-stop.sh가 자동 아카이브)
+
+**STATUS: IN PROGRESS 파일이 존재하면:**
+pre-compact.sh가 AUTO-RESUME REQUIRED 블록을 출력한다.
+컴팩션 후 Claude는 사용자 재지시 없이 NEXT 항목부터 즉시 실행해야 한다.
 
 ### Status Line Block (Production+ only)
 

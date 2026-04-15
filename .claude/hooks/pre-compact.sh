@@ -9,19 +9,41 @@ echo "Timestamp: $(date)"
 # --- Active session state file ---
 STATE_FILE="production/session-state/active.md"
 if [ -f "$STATE_FILE" ]; then
-    echo ""
-    echo "## Active Session State (from $STATE_FILE)"
-    STATE_LINES=$(wc -l < "$STATE_FILE" 2>/dev/null | tr -d ' ')
-    if [ "$STATE_LINES" -gt 100 ] 2>/dev/null; then
-        head -n 100 "$STATE_FILE"
-        echo "... (truncated — $STATE_LINES total lines, showing first 100)"
+    STATUS_LINE=$(grep "^## STATUS:" "$STATE_FILE" 2>/dev/null | head -1)
+    if echo "$STATUS_LINE" | grep -q "IN PROGRESS"; then
+        echo ""
+        echo "╔══════════════════════════════════════════════════════════╗"
+        echo "║  ⚠️  AUTO-RESUME REQUIRED — INCOMPLETE TASK DETECTED     ║"
+        echo "╚══════════════════════════════════════════════════════════╝"
+        echo ""
+        echo "Claude: 컴팩션 후 즉시 아래 작업을 재개하라. 사용자 재지시를 기다리지 말 것."
+        echo "다음 사용자 메시지와 무관하게, 응답 시작 시 REMAINING 항목부터 실행한다."
+        echo ""
+        STATE_LINES=$(wc -l < "$STATE_FILE" 2>/dev/null | tr -d ' ')
+        if [ "$STATE_LINES" -gt 100 ] 2>/dev/null; then
+            head -n 100 "$STATE_FILE"
+            echo "... (truncated — $STATE_LINES total lines)"
+        else
+            cat "$STATE_FILE"
+        fi
+        echo ""
+        echo "╔══════════════════════════════════════════════════════════╗"
+        echo "║  END AUTO-RESUME BLOCK                                   ║"
+        echo "╚══════════════════════════════════════════════════════════╝"
     else
+        echo ""
+        echo "## Active Session State (from $STATE_FILE)"
         cat "$STATE_FILE"
     fi
 else
     echo ""
-    echo "## No active session state file found"
-    echo "Consider maintaining production/session-state/active.md for better recovery."
+    echo "╔══════════════════════════════════════════════════════════╗"
+    echo "║  ⚠️  WARNING: active.md 없음                             ║"
+    echo "╚══════════════════════════════════════════════════════════╝"
+    echo ""
+    echo "Claude: 진행 중인 멀티스텝 작업이 있으면 이 컴팩션으로 상태가 소실된다."
+    echo "컴팩션 직후 첫 응답에서: (1) 아래 수정 파일 목록으로 작업 상태 파악,"
+    echo "(2) production/session-state/active.md 즉시 작성, (3) 미완 작업 재개."
 fi
 
 # --- Files modified this session (unstaged + staged + untracked) ---
@@ -74,9 +96,6 @@ echo "Context compaction occurred at $(date)." \
     >> "$SESSION_LOG_DIR/compaction-log.txt" 2>/dev/null
 
 echo ""
-echo "## Recovery Instructions"
-echo "After compaction, read $STATE_FILE to recover full working context."
-echo "Then read any files listed above that are being actively worked on."
 echo "=== END SESSION STATE ==="
 
 exit 0

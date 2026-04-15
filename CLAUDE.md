@@ -57,6 +57,22 @@ Not every decision requires user input. Use this table to determine who decides:
 > **First session?** If the project has no engine configured and no game concept,
 > run `/start` to begin the guided onboarding flow.
 
+## Auto-Resume Protocol
+
+세션 시작 또는 컴팩션 후 다음을 확인하고 실행한다:
+
+1. `production/session-state/active.md` 가 존재하고 `STATUS: IN PROGRESS` 이면:
+   - 사용자 재지시를 기다리지 않는다
+   - 첫 응답에서 `## NEXT:` 항목부터 즉시 재개한다
+   - 완료 후 `STATUS: DONE` 으로 갱신한다
+
+2. `active.md` 가 없고 pre-compact 경고가 있으면:
+   - 수정 파일 목록으로 진행 중이던 작업을 파악한다
+   - `active.md` 를 작성하고 파악한 미완 작업을 재개한다
+
+**리뷰 작업 (코드 리뷰 / GDD 리뷰 / 디자인 리뷰)은 반드시 active.md 작성 후 시작한다.**
+컨텍스트 한계로 중단되더라도 active.md → AUTO-RESUME 메커니즘으로 사용자 재지시 없이 완결까지 반복 진행한다.
+
 ## Coding Standards
 
 @.claude/docs/coding-standards.md

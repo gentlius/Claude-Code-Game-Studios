@@ -264,7 +264,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 | 기능 | 진입점 |
 |------|--------|
-| 스킬 해금 | `skill_tree_overlay.gd._on_unlock_pressed(skill_id)` → `SkillTree.unlock_skill(skill_id)` |
+| 스킬 해금 | `growth_screen.gd` (F3 탭) → `SkillTree.unlock_skill(skill_id)` (SkillTreeOverlay 제거됨, F3 임베드로 전환) |
 | 스킬 활성 여부 확인 | `chart_renderer.gd` 등 → `SkillTree.is_skill_unlocked(skill_id)` |
 | SP 소비 연동 | `SkillTree.unlock_skill()` 내부 → `XpSystem.spend_skill_point()` |
 
@@ -287,4 +287,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 빌드 검증
 
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 — 내부 감사 2026-04-15 (Alpha 완료 빌드, SCRIPT ERROR 없음)

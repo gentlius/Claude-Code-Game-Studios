@@ -40,7 +40,7 @@
 | 14 | 뉴스 피드 UI (News Feed UI) | UI | MVP | In Review | ✅ Done | [news-feed-ui.md](news-feed-ui.md) | 뉴스/이벤트 시스템, 게임 시계 |
 | 15 | 포트폴리오 UI (Portfolio UI) | UI | MVP | In Review | ✅ Done | [portfolio-ui.md](portfolio-ui.md) | 포트폴리오 관리, 게임 시계 |
 | 16 | 리그/시즌 UI (League & Season UI) | UI | V-Slice | Approved | ✅ Done | [league-ui.md](league-ui.md) | 시즌/대회 관리, AI 경쟁자, 게임 시계 |
-| 17 | 프로그레션 UI (Progression UI) | UI | V-Slice | In Review | ✅ Done | [progression-ui.md](progression-ui.md) | 경험치 시스템, 스킬 트리, 게임 시계, 트레이딩 스크린 |
+| 17 | ~~프로그레션 UI (Progression UI)~~ → **F3 성장 화면** | UI | V-Slice→Beta | In Review | ✅ Done | [growth-screen.md](growth-screen.md) | 경험치 시스템, 스킬 트리, 게임 시계, 트레이딩 스크린 · ⚠️ 구 progression-ui.md → `design/gdd/archive/` |
 | 18 | 세이브/로드 (Save/Load) | Persistence | Alpha | Approved | ✅ Done | [save-load.md](save-load.md) | 포트폴리오, 스킬 트리, 시즌, 경험치 |
 | 19 | 오디오 시스템 (Audio) | Audio | Alpha | Approved | ✅ Done | [audio.md](audio.md) | 주문 엔진, 뉴스 시스템 |
 | 20 | 라이프스타일 소비 (Lifestyle Spending) | Economy | Beta | Draft | — ¹ | [lifestyle-spending.md](lifestyle-spending.md) | 재화 시스템, 시즌 관리, 세이브/로드 |

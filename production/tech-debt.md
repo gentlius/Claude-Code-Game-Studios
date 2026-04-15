@@ -119,3 +119,36 @@
 - ~~`season_active` 다중 소스 (CurrencySystem + SeasonManager + GameClock 각자 관리)~~ → `GameClock._season_active` 단일 소스. `CurrencySystem._season_active` 제거. `SeasonManager.is_season_active()` → `GameClock.is_season_active()` 위임. `GameClock.get_save_data()` / `load_save_data()` 에 `season_active` + `market_state` 포함. `SaveSystem` 로드 순서 GameClock 우선으로 재정렬. 구버전 세이브 하위 호환 처리.
 - ~~`PriceEngine` UI 생성 전 가격 미초기화 (₩0 플래시)~~ → `init_first_season()` 신규 메서드: `game_main.gd`에서 MainScreen 생성 전 호출. `_reset_season_mechanics()`: 시즌 전환 시 `current_price` / `prev_day_close` 유지, Markov/bias/히스토리만 리셋.
 - ~~`SeasonManager.start_season()` 시그널 순서 버그 (리그 화면 미전환)~~ → `GameClock.start_season()` 먼저 호출 후 `on_season_started.emit()`. Godot 시그널 동기 호출 특성상 emit 시점에 `is_season_active()` == true 보장 필요.
+
+---
+
+## 디자인 리뷰 2026-04-15 식별 항목
+
+### TD-DR-01. trading-screen.md 미완 구현 5개 (Sprint 8 예정)
+
+**출처**: 2026-04-15 전체 GDD 디자인 리뷰  
+**우선순위**: Medium  
+**목표 스프린트**: Sprint 8
+
+미완 항목:
+- `MainScreen` 탭바에 `[나가기]` 버튼 추가 (F1/F2/F3 우측)
+- `MainScreen._input(event)`: F4 감지 → `SavingOverlay.visible` 체크 → StartScreen 전환
+- `StockListPanel._row_nodes` — `_ready()`에서 1회 빌드, `get_children()` 런타임 호출 없음
+- `StockListPanel._last_prices` — dirty flag skip 동작
+- `StockListPanel._sel_style` / `_desel_style` — `_ready()` 1회 캐시, 런타임 `StyleBoxFlat.new()` 없음
+
+### TD-DR-02. price-engine.md AC 35개 미검증
+
+**출처**: 2026-04-15 전체 GDD 디자인 리뷰  
+**우선순위**: Low  
+**목표 스프린트**: Sprint 8 (오더북 구현과 병행)
+
+price-engine.md Acceptance Criteria 35개가 모두 `[ ]` 상태.  
+PriceEngine은 구현 완료됐으나 AC 항목별 검증이 공식 기록에 없음.  
+Sprint 8에서 QA Lead가 AC 체크리스트 기반 검증 실행 후 갱신.
+
+### TD-DR-03. skill_tree_overlay.gd orphan 파일
+
+**출처**: 2026-04-15 전체 GDD 디자인 리뷰  
+**우선순위**: Low → 처리 완료 2026-04-15  
+**결과**: `src/deprecated/skill_tree_overlay.gd`로 이동. 코드/씬에서 미참조 확인됨.

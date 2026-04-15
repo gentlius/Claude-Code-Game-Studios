@@ -290,7 +290,8 @@ get_cumulative_xp_for_level(target_level) = Σ required_xp(lv) for lv = 1 to (ta
 | 시스템 | 의존 유형 | 데이터 |
 |--------|----------|--------|
 | 스킬 트리 | Hard | `get_available_skill_points()`, `on_level_up(new_level: int, skill_points: int)` 시그널 |
-| UI (프로그레션 UI) | Soft | `get_total_xp()`, `get_current_level()`, `get_xp_progress()`, `get_cumulative_xp_for_level()`, `on_xp_gained(amount: int, new_total: int, source: String)` 시그널, `on_level_up(new_level: int, skill_points: int)` 시그널 (레벨업 배너 트리거) |
+| F3 성장 화면 (GrowthScreen) | Soft | `get_total_xp()`, `get_current_level()`, `get_xp_progress()`, `get_available_skill_points()`, `on_xp_gained(amount: int, new_total: int, source: String)` 시그널, `on_level_up(new_level: int, skill_points: int)` 시그널 |
+| 레벨업 배너 (LevelUpBanner) | Soft | `on_level_up(new_level, skill_points)` 시그널 → 배너 표시 트리거 |
 
 ## Tuning Knobs
 

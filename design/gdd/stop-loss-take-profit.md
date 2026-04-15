@@ -303,25 +303,25 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | 설정 저장 | `portfolio_view.gd._on_stop_take_confirmed()` → `StopTakeSystem.set_condition()` |
 | 설정 해제 | `portfolio_view.gd._on_stop_take_clear()` → `StopTakeSystem.clear_condition()` |
 | 매 틱 감시 발동 | `order_engine.gd._on_tick()` 3-d → `StopTakeSystem.check_and_trigger(market_state)` |
-| 보유 소멸 시 정리 | `order_engine.gd._on_holding_removed()` → `StopTakeSystem.on_holding_cleared()` |
+| 보유 소멸 시 정리 | `PortfolioManager.holding_removed` 시그널 → `StopTakeSystem._on_holding_removed()` (private callback) |
 
 ### 호출 경로
 
-- [ ] `StopTakeSystem.set_condition(stock_id, stop_loss_price, take_profit_price, quantity) -> bool`
-- [ ] `StopTakeSystem.clear_condition(stock_id) -> void`
-- [ ] `StopTakeSystem.get_setting(stock_id) -> Variant` (null = 미설정)
-- [ ] `StopTakeSystem.get_all_settings() -> Array[Dictionary]`
-- [ ] `StopTakeSystem.check_and_trigger(market_state: GameClock.MarketState) -> void`
-- [ ] `StopTakeSystem.on_holding_cleared(stock_id: String) -> void`
-- [ ] `StopTakeSystem.on_stop_take_triggered` 시그널 (stock_id, reason, filled_price)
-- [ ] `SkillTree.is_skill_unlocked("TR1")` / `("TR2")` 존재 확인
-- [ ] `PriceEngine.get_daily_limits(stock_id)` 존재 확인
-- [ ] `OrderEngine.submit_market_order("SELL", stock_id, qty)` 존재 확인
-- [ ] `PortfolioManager.get_holding(stock_id)` 존재 확인
-- [ ] `order_engine.gd._on_tick()` 내부 3-d 단계 삽입
-- [ ] `order-engine.md` 틱 처리 순서 섹션 개정 (3-d 단계 명시)
-- [ ] `stop_take_config.json` `assets/data/`에 생성
-- [ ] `SaveSystem` 직렬화 대상에 StopTakeSystem 추가
+- [x] `StopTakeSystem.set_condition(stock_id, stop_loss_price, take_profit_price, quantity) -> bool`
+- [x] `StopTakeSystem.clear_condition(stock_id) -> void`
+- [x] `StopTakeSystem.get_setting(stock_id) -> Variant` (null = 미설정)
+- [x] `StopTakeSystem.get_all_settings() -> Array[Dictionary]`
+- [x] `StopTakeSystem.check_and_trigger(market_state: GameClock.MarketState) -> void`
+- [x] 보유 소멸 시 설정 정리 — `PortfolioManager.holding_removed` → `StopTakeSystem._on_holding_removed()` private callback (공개 API 불필요)
+- [x] `StopTakeSystem.on_stop_take_triggered` 시그널 (stock_id, reason, filled_price)
+- [x] `SkillTree.is_skill_unlocked("TR1")` / `("TR2")` 존재 확인
+- [x] `PriceEngine.get_daily_limits(stock_id)` 존재 확인
+- [x] `OrderEngine.submit_market_order("SELL", stock_id, qty)` 존재 확인
+- [x] `PortfolioManager.get_holding(stock_id)` 존재 확인
+- [x] `order_engine.gd._on_tick()` 내부 3-d 단계 삽입
+- [x] `order-engine.md` 틱 처리 순서 섹션 개정 (3-d 단계 명시)
+- [x] `stop_take_config.json` `assets/data/`에 생성
+- [x] `SaveSystem` 직렬화 대상에 StopTakeSystem 추가
 
 ### AC → 테스트 매핑
 
@@ -345,4 +345,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 빌드 검증
 
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 — 내부 감사 2026-04-15 (Sprint 7 완료, 274/274 테스트 통과)

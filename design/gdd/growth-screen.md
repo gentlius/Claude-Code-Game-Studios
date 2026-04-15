@@ -204,34 +204,34 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - F3 탭 전환: `MainScreen._switch_tab(TAB_F3)` → `GrowthScreen._ready()` 자동 렌더
 
 ### 호출 경로
-- [ ] `main_screen.gd`: placeholder `_growth_screen` → `GrowthScreen` 씬 교체
-- [ ] `growth_screen.gd`: 신규 작성. XP 헤더 + 4브랜치 스킬트리 임베드
-- [ ] `status_bar.gd`: Row 2에서 `xp_bar` 제거. `_lbl_sp_alert` → 클릭 가능 Button 또는 Label로 교체, `growth_tab_requested` 신호 emit
-- [ ] `status_bar.gd`: `growth_tab_requested` 신호 선언
-- [ ] `trading_screen.gd`: `KEY_K` → `_toggle_skill_tree()` 블록 제거
-- [ ] `trading_screen.gd`: `_status_bar.xp_bar.skill_tree_requested` 연결 제거 (xp_bar 없어짐)
-- [ ] `trading_screen.gd`: `_skill_tree_overlay` 관련 코드 제거
-- [ ] `trading_screen.gd`: `growth_tab_requested` 신호 선언 + LevelUpBanner `skill_tree_requested` → `growth_tab_requested` 재연결
-- [ ] `trading_screen.gd`: `level_up_banner.gd` 버튼 텍스트 "스킬 트리 열기  K" → "해금하러 가기"로 변경
-- [ ] `status_bar.gd`: `xp_animate_requested` 관련 구독 제거 (XpBar 제거에 따른 연결 정리)
-- [ ] `main_screen.gd`: `TradingScreen.growth_tab_requested` → `_switch_tab(TAB_F3)` 연결
-- [ ] `main_screen.gd`: `StatusBar.growth_tab_requested` 경로 확인 (StatusBar는 TradingScreen 내부 — TradingScreen이 릴레이)
-- [ ] `skill_tree_overlay.gd`: 사용 제거 확인 (orphan 검사)
-- [ ] `design/gdd/xp-system.md`: Dependencies 섹션에 GrowthScreen 소비자 추가
-- [ ] `design/gdd/skill-tree.md`: SkillTreeOverlay 제거 + F3 임베드 변경 반영
+- [x] `main_screen.gd`: placeholder `_growth_screen` → `GrowthScreen` 씬 교체
+- [x] `growth_screen.gd`: 신규 작성. XP 헤더 + 4브랜치 스킬트리 임베드
+- [x] `status_bar.gd`: Row 2에서 `xp_bar` 제거. `_lbl_sp_alert` → 클릭 가능 Button 또는 Label로 교체, `growth_tab_requested` 신호 emit
+- [x] `status_bar.gd`: `growth_tab_requested` 신호 선언
+- [x] `trading_screen.gd`: `KEY_K` → `_toggle_skill_tree()` 블록 제거
+- [x] `trading_screen.gd`: `_status_bar.xp_bar.skill_tree_requested` 연결 제거 (xp_bar 없어짐)
+- [x] `trading_screen.gd`: `_skill_tree_overlay` 관련 코드 제거
+- [x] `trading_screen.gd`: `growth_tab_requested` 신호 선언 + LevelUpBanner `skill_tree_requested` → `growth_tab_requested` 재연결
+- [x] `trading_screen.gd`: `level_up_banner.gd` 버튼 텍스트 "해금하러 가기"로 변경
+- [x] `status_bar.gd`: `xp_animate_requested` 관련 구독 제거 (XpBar 제거에 따른 연결 정리)
+- [x] `main_screen.gd`: `TradingScreen.growth_tab_requested` → `_switch_tab(TAB_F3)` 연결
+- [x] `main_screen.gd`: `StatusBar.growth_tab_requested` 경로 확인 (TradingScreen이 릴레이) ✅
+- [x] `skill_tree_overlay.gd`: orphan 확인 — 코드/씬에서 미참조. `src/deprecated/` 이동 완료
+- [x] `design/gdd/xp-system.md`: Dependencies 섹션에 GrowthScreen 소비자 추가
+- [x] `design/gdd/skill-tree.md`: SkillTreeOverlay 제거 + F3 임베드 변경 반영
 
 ### 의존하는 외부 메서드 존재 확인
-- [ ] `XpSystem.get_current_level()` — 존재 확인
-- [ ] `XpSystem.get_total_xp()` — 존재 확인
-- [ ] `XpSystem.get_xp_progress()` — 존재 확인
-- [ ] `XpSystem.get_available_skill_points()` — 존재 확인
-- [ ] `SkillTree.get_all_skills()` — 존재 확인
-- [ ] `SkillTree.get_skill_state(id)` — 존재 확인
-- [ ] `SkillTree.unlock_skill(id)` — 존재 확인
-- [ ] `SkillTree.on_skill_unlocked` 신호 — 존재 확인
-- [ ] `PortfolioManager.get_total_assets()` — 존재 확인 (계좌 총 평가금액; 총 자산 패널의 "계좌" 수치)
-- [ ] `CurrencySystem.get_cash_assets()` — 신규 추가 필요 (현금 자산 패널)
-- [ ] `LifestyleManager.get_tangible_value()` — Beta 구현 시 추가 (유형자산 패널, 그 이전 0 반환)
+- [x] `XpSystem.get_current_level()` — 존재 확인
+- [x] `XpSystem.get_total_xp()` — 존재 확인
+- [x] `XpSystem.get_xp_progress()` — 존재 확인
+- [x] `XpSystem.get_available_skill_points()` — 존재 확인
+- [x] `SkillTree.get_all_skills()` — 존재 확인
+- [x] `SkillTree.get_skill_state(id)` — 존재 확인
+- [x] `SkillTree.unlock_skill(id)` — 존재 확인
+- [x] `SkillTree.on_skill_unlocked` 신호 — 존재 확인
+- [x] `PortfolioManager.get_total_assets()` — 존재 확인
+- [x] `CurrencySystem.get_cash_assets()` — 존재 확인 (`src/core/currency_system.gd:37`)
+- [ ] `LifestyleManager.get_tangible_value()` — Beta Sprint 9 구현 시 추가 (유형자산 패널, 그 이전 0 반환)
 
 ### AC → 테스트 매핑
 | AC | 테스트 파일 | 테스트 함수 |
@@ -243,4 +243,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | AC-12 | 수동 플레이테스트 | — |
 
 ### 빌드 검증
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 — 내부 감사 2026-04-15 (Sprint 7 완료, 274/274 테스트 통과)

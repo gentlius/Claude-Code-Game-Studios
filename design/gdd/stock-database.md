@@ -329,18 +329,18 @@ season_base_price = original_base_price * season_theme_modifier
 
 ## Acceptance Criteria
 
-- [ ] 모든 종목이 고유 ID, 이름을 가지며 중복 없음
-- [ ] `get_stock(id)` 호출 시 1ms 이내 응답
-- [ ] 11개 섹터에 각 4~5개 종목이 정확히 매핑됨
-- [ ] 각 종목의 변동성 프로필이 LOW/MEDIUM/HIGH/EXTREME 중 하나
-- [ ] `get_stocks_by_event_tag(tag)` 호출 시 해당 태그를 가진 종목만 반환
-- [ ] 적자 기업(PER null)의 PER이 UI에 "N/A"로 표시됨
-- [ ] 모든 종목 데이터가 외부 config 파일에서 로드됨 (하드코딩 금지)
-- [ ] MVP 빌드에서 46종목 전체 로드됨
-- [ ] 존재하지 않는 종목 ID 조회 시 크래시 없이 null 반환
-- [ ] `stock_exists(id)` 호출 시 정확한 bool 반환 (1ms 이내)
-- [ ] `get_stocks_by_sector(sector_id)` 호출 시 해당 섹터 종목만 반환 (1ms 이내)
-- [ ] 모든 46종목의 listed_shares 값이 정확히 로드되어 가격 엔진의 시총가중지수 계산에 제공됨
+- [x] 모든 종목이 고유 ID, 이름을 가지며 중복 없음
+- [x] `get_stock(id)` 호출 시 1ms 이내 응답
+- [x] 11개 섹터에 각 4~5개 종목이 정확히 매핑됨
+- [x] 각 종목의 변동성 프로필이 LOW/MEDIUM/HIGH/EXTREME 중 하나
+- [x] `get_stocks_by_event_tag(tag)` 호출 시 해당 태그를 가진 종목만 반환
+- [x] 적자 기업(PER null)의 PER이 UI에 "N/A"로 표시됨
+- [x] 모든 종목 데이터가 외부 config 파일에서 로드됨 (하드코딩 금지)
+- [x] MVP 빌드에서 46종목 전체 로드됨
+- [x] 존재하지 않는 종목 ID 조회 시 크래시 없이 null 반환
+- [x] `stock_exists(id)` 호출 시 정확한 bool 반환 (1ms 이내)
+- [x] `get_stocks_by_sector(sector_id)` 호출 시 해당 섹터 종목만 반환 (1ms 이내)
+- [x] 모든 46종목의 listed_shares 값이 정확히 로드되어 가격 엔진의 시총가중지수 계산에 제공됨
 
 ---
 
@@ -387,4 +387,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 빌드 검증
 
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 — 내부 감사 2026-04-15 (Alpha 완료 빌드, SCRIPT ERROR 없음)

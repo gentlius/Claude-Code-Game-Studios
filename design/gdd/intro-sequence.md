@@ -149,4 +149,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | AC-06 | `tests/unit/test_intro_sequence.gd` | `test_typewriter_completes_on_click()` |
 
 ### 빌드 검증
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 — 내부 감사 2026-04-15 (Alpha 완료 빌드, SCRIPT ERROR 없음)

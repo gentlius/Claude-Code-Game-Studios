@@ -418,6 +418,31 @@ func get_ohlcv_history(stock_id: String) -> Array[Dictionary]:
 	return state.get("ohlcv_daily", [] as Array[Dictionary])
 
 
+## Returns today's intraday OHLCV from the tick buffer.
+## GDD order-book.md §3-5 블록1 — 호가창 상단 시/고/저/거래량 표시용.
+## open  = tick_prices[0] (장 첫 틱), fallback: prev_day_close
+## high  = max(tick_prices), low = min(tick_prices), volume = sum(tick_volumes)
+func get_today_ohlcv(stock_id: String) -> Dictionary:
+	var state: Dictionary = _stock_states.get(stock_id, {})
+	var tick_prices: Array = state.get("tick_prices", [])
+	var tick_volumes: Array = state.get("tick_volumes", [])
+	var cur: int = state.get("current_price", 0)
+	var prev_close: int = state.get("prev_day_close", cur)
+	if tick_prices.is_empty():
+		return {"open": prev_close, "high": cur, "low": cur, "volume": 0}
+	var open_price: int = tick_prices[0] as int
+	var high_price: int = open_price
+	var low_price: int = open_price
+	for p: Variant in tick_prices:
+		var pi: int = p as int
+		if pi > high_price: high_price = pi
+		if pi < low_price:  low_price  = pi
+	var vol: int = 0
+	for v: Variant in tick_volumes:
+		vol += int(v as float)
+	return {"open": open_price, "high": high_price, "low": low_price, "volume": vol}
+
+
 ## Returns the daily price limits {upper: int, lower: int, prev_close: int}.
 func get_daily_limits(stock_id: String) -> Dictionary:
 	var state: Dictionary = _stock_states.get(stock_id, {})

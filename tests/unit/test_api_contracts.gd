@@ -132,6 +132,8 @@ func test_price_engine_api():
 	assert_true(PriceEngine.has_method("get_pbr_display"),      "get_pbr_display 존재")
 	assert_true(PriceEngine.has_method("get_roe_display"),      "get_roe_display 존재")
 	assert_true(PriceEngine.has_method("get_dividend_display"), "get_dividend_display 존재")
+	# 호가창 OHLCV API (GDD order-book.md §3-5 블록1)
+	assert_true(PriceEngine.has_method("get_today_ohlcv"),      "get_today_ohlcv 존재")
 
 
 # ── SkillTree ────────────────────────────────────────────────────────

@@ -25,8 +25,24 @@ var _lbl_order_error: Label
 var _pending_orders_container: VBoxContainer
 
 ## Order book UI — 10 level rows (ask5..ask1, separator, bid1..bid5).
-## GDD order-book.md §3-5.
+## GDD order-book.md §3-5 (블록 1~5).
 var _order_book_rows: Array[HBoxContainer] = []  ## 10 entries: index 0=ask5 ... 4=ask1, 5=bid1 ... 9=bid5
+## 블록 1: OHLCV 행
+var _lbl_ob_open: Label
+var _lbl_ob_high: Label
+var _lbl_ob_low: Label
+var _lbl_ob_volume: Label
+## 블록 2: 매도 총잔량 / 블록 4: 매수 총잔량
+var _lbl_ask_total: Label
+var _lbl_bid_total: Label
+## 블록 3: 현재가 구분행
+var _lbl_ob_cur_price: Label
+var _lbl_ob_cur_change: Label
+## 블록 5: 체결강도
+var _fill_strength_container: Control
+var _fill_strength_fill: Panel
+var _lbl_fill_pct: Label
+var _lbl_fill_side: Label
 
 ## A3 재무제표 섹션. GDD financial-statements.md §3.
 ## A3 미해금 시 숨김. on_skill_unlocked("A3") → 즉시 표시.
@@ -81,9 +97,8 @@ func _build_header(vbox: VBoxContainer) -> void:
 	vbox.add_child(sep)
 
 
-## Builds the 10-level order book display (ask5..ask1 | current price | bid1..bid5).
-## GDD order-book.md §3-5. Each row: [price label] [qty label] [bar panel].
-## Clicking an ask row → limit buy price; clicking a bid row → limit sell price.
+## Builds the full order book panel: OHLCV + 10-level book + totals + fill strength.
+## GDD order-book.md §3-5 (블록 1~5).
 func _build_order_book_section(vbox: VBoxContainer) -> void:
 	var ob_title: Label = Label.new()
 	ob_title.text = tr("호가창")
@@ -91,68 +106,233 @@ func _build_order_book_section(vbox: VBoxContainer) -> void:
 	ThemeSetup.style_label_secondary(ob_title)
 	vbox.add_child(ob_title)
 
-	_order_book_rows.clear()
+	# ── 블록 1: OHLCV 행 ──────────────────────────────────────────────
+	var ohlcv_vbox: VBoxContainer = VBoxContainer.new()
+	ohlcv_vbox.add_theme_constant_override("separation", 1)
+	vbox.add_child(ohlcv_vbox)
 
-	# ask5..ask1 (indices 0..4 in display order, highest ask first)
+	var ohlcv_row: HBoxContainer = HBoxContainer.new()
+	ohlcv_row.add_theme_constant_override("separation", 4)
+	ohlcv_vbox.add_child(ohlcv_row)
+	_lbl_ob_open  = _make_ohlcv_label(ohlcv_row, tr("시"))
+	_lbl_ob_high  = _make_ohlcv_label(ohlcv_row, tr("고"))
+	_lbl_ob_low   = _make_ohlcv_label(ohlcv_row, tr("저"))
+
+	var vol_row: HBoxContainer = HBoxContainer.new()
+	ohlcv_vbox.add_child(vol_row)
+	var vol_key: Label = Label.new()
+	vol_key.text = tr("거래량")
+	vol_key.add_theme_font_size_override("font_size", 10)
+	ThemeSetup.style_label_secondary(vol_key)
+	vol_row.add_child(vol_key)
+	_lbl_ob_volume = Label.new()
+	_lbl_ob_volume.text = "0"
+	_lbl_ob_volume.add_theme_font_size_override("font_size", 10)
+	_lbl_ob_volume.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_lbl_ob_volume.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	ThemeSetup.style_label_primary(_lbl_ob_volume)
+	vol_row.add_child(_lbl_ob_volume)
+
+	var sep0: HSeparator = HSeparator.new()
+	sep0.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
+	vbox.add_child(sep0)
+
+	# ── 블록 2: 매도 총잔량 합계 ──────────────────────────────────────
+	_lbl_ask_total = _make_total_label(vbox, true)
+
+	# ── 블록 3: ask5 → ask1 ───────────────────────────────────────────
+	_order_book_rows.clear()
 	for display_rank: int in range(5):
 		var row: HBoxContainer = _make_order_book_row(true, display_rank)
 		vbox.add_child(row)
 		_order_book_rows.append(row)
 
-	# Current price separator
-	var price_sep: Label = Label.new()
-	price_sep.text = tr("── 현재가 ──")
-	price_sep.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	price_sep.add_theme_font_size_override("font_size", 11)
-	ThemeSetup.style_label_secondary(price_sep)
-	vbox.add_child(price_sep)
+	# 현재가 구분 행
+	var cur_row: HBoxContainer = HBoxContainer.new()
+	cur_row.add_theme_constant_override("separation", 4)
+	cur_row.custom_minimum_size.y = 20
+	var cur_style: StyleBoxFlat = StyleBoxFlat.new()
+	cur_style.bg_color = Color(0.18, 0.22, 0.28)
+	cur_row.add_theme_stylebox_override("panel", cur_style)
+	vbox.add_child(cur_row)
+	_lbl_ob_cur_price = Label.new()
+	_lbl_ob_cur_price.text = "₩0"
+	_lbl_ob_cur_price.add_theme_font_size_override("font_size", 12)
+	_lbl_ob_cur_price.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_lbl_ob_cur_price.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ThemeSetup.style_label_primary(_lbl_ob_cur_price)
+	cur_row.add_child(_lbl_ob_cur_price)
+	_lbl_ob_cur_change = Label.new()
+	_lbl_ob_cur_change.text = ""
+	_lbl_ob_cur_change.add_theme_font_size_override("font_size", 10)
+	_lbl_ob_cur_change.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	ThemeSetup.style_label_secondary(_lbl_ob_cur_change)
+	cur_row.add_child(_lbl_ob_cur_change)
 
-	# bid1..bid5 (indices 5..9, best bid first)
+	# bid1 → bid5
 	for display_rank: int in range(5):
 		var row: HBoxContainer = _make_order_book_row(false, display_rank)
 		vbox.add_child(row)
 		_order_book_rows.append(row)
 
-	var sep: HSeparator = HSeparator.new()
-	sep.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
-	vbox.add_child(sep)
+	# ── 블록 4: 매수 총잔량 합계 ──────────────────────────────────────
+	_lbl_bid_total = _make_total_label(vbox, false)
+
+	# ── 블록 5: 체결강도 ──────────────────────────────────────────────
+	var fs_row: HBoxContainer = HBoxContainer.new()
+	fs_row.add_theme_constant_override("separation", 3)
+	vbox.add_child(fs_row)
+
+	var fs_key: Label = Label.new()
+	fs_key.text = tr("체결강도")
+	fs_key.add_theme_font_size_override("font_size", 10)
+	ThemeSetup.style_label_secondary(fs_key)
+	fs_row.add_child(fs_key)
+
+	_fill_strength_container = Control.new()
+	_fill_strength_container.custom_minimum_size = Vector2(0, 12)
+	_fill_strength_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fs_row.add_child(_fill_strength_container)
+
+	var fs_bg: Panel = Panel.new()
+	fs_bg.anchor_right = 1.0
+	fs_bg.anchor_bottom = 1.0
+	var fs_bg_style: StyleBoxFlat = StyleBoxFlat.new()
+	fs_bg_style.bg_color = Color(0.15, 0.15, 0.15)
+	fs_bg.add_theme_stylebox_override("panel", fs_bg_style)
+	_fill_strength_container.add_child(fs_bg)
+
+	_fill_strength_fill = Panel.new()
+	_fill_strength_fill.anchor_top = 0.0
+	_fill_strength_fill.anchor_bottom = 1.0
+	_fill_strength_fill.anchor_left = 0.0
+	_fill_strength_fill.anchor_right = 0.5  # 100% = 50% bar width
+	_fill_strength_fill.offset_left = 0
+	_fill_strength_fill.offset_right = 0
+	var fs_fill_style: StyleBoxFlat = StyleBoxFlat.new()
+	fs_fill_style.bg_color = ThemeSetup.LOSS_BLUE.darkened(0.3)
+	_fill_strength_fill.add_theme_stylebox_override("panel", fs_fill_style)
+	_fill_strength_container.add_child(_fill_strength_fill)
+
+	_lbl_fill_pct = Label.new()
+	_lbl_fill_pct.text = "-"
+	_lbl_fill_pct.add_theme_font_size_override("font_size", 10)
+	_lbl_fill_pct.custom_minimum_size.x = 38
+	_lbl_fill_pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	ThemeSetup.style_label_primary(_lbl_fill_pct)
+	fs_row.add_child(_lbl_fill_pct)
+
+	_lbl_fill_side = Label.new()
+	_lbl_fill_side.text = ""
+	_lbl_fill_side.add_theme_font_size_override("font_size", 10)
+	_lbl_fill_side.custom_minimum_size.x = 36
+	ThemeSetup.style_label_secondary(_lbl_fill_side)
+	fs_row.add_child(_lbl_fill_side)
+
+	# 블록 6: 52주 — Sprint 9 (숨김)
+	# 생략: StockData.week52_high/low 미구현
+
+	var sep_end: HSeparator = HSeparator.new()
+	sep_end.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
+	vbox.add_child(sep_end)
 
 
-## Creates a single order book row. ask_side=true for sell levels, false for buy levels.
-## display_rank 0 = closest to current price (ask1 or bid1).
+func _make_ohlcv_label(parent: HBoxContainer, key: String) -> Label:
+	var key_lbl: Label = Label.new()
+	key_lbl.text = key
+	key_lbl.add_theme_font_size_override("font_size", 10)
+	ThemeSetup.style_label_secondary(key_lbl)
+	parent.add_child(key_lbl)
+	var val_lbl: Label = Label.new()
+	val_lbl.text = "-"
+	val_lbl.add_theme_font_size_override("font_size", 10)
+	val_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	ThemeSetup.style_label_primary(val_lbl)
+	parent.add_child(val_lbl)
+	return val_lbl
+
+
+func _make_total_label(parent: VBoxContainer, ask_side: bool) -> Label:
+	var row: HBoxContainer = HBoxContainer.new()
+	parent.add_child(row)
+	var key: Label = Label.new()
+	key.text = tr("매도잔량") if ask_side else tr("매수잔량")
+	key.add_theme_font_size_override("font_size", 10)
+	ThemeSetup.style_label_secondary(key)
+	row.add_child(key)
+	var val: Label = Label.new()
+	val.text = "-"
+	val.add_theme_font_size_override("font_size", 10)
+	val.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	val.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	if ask_side:
+		val.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
+	else:
+		val.add_theme_color_override("font_color", ThemeSetup.LOSS_BLUE)
+	row.add_child(val)
+	return val
+
+
+## Creates a single order book row with GDD §3-5 column layout.
+## ask (매도): [bar_container EXPAND] [qty 38px] [price 50px RED]
+## bid (매수): [price 50px BLUE] [qty 38px] [bar_container EXPAND]
+## Bar fill uses anchor-based sizing inside bar_container (plain Control).
 func _make_order_book_row(ask_side: bool, display_rank: int) -> HBoxContainer:
 	var row: HBoxContainer = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 2)
-	row.custom_minimum_size.y = 18
+	row.custom_minimum_size.y = 17
 
+	# Bar fill color
+	var fill_color: Color = Color(0.85, 0.32, 0.32, 0.55) if ask_side \
+		else Color(0.32, 0.52, 0.85, 0.55)
+
+	# Shared label factories
 	var lbl_price: Label = Label.new()
 	lbl_price.text = "-"
 	lbl_price.add_theme_font_size_override("font_size", 11)
-	lbl_price.custom_minimum_size.x = 52
+	lbl_price.custom_minimum_size.x = 50
 	lbl_price.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	if ask_side:
-		lbl_price.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
-	else:
-		lbl_price.add_theme_color_override("font_color", ThemeSetup.LOSS_BLUE)
-	row.add_child(lbl_price)
+	lbl_price.add_theme_color_override("font_color",
+		ThemeSetup.PROFIT_RED if ask_side else ThemeSetup.LOSS_BLUE)
 
 	var lbl_qty: Label = Label.new()
 	lbl_qty.text = "-"
 	lbl_qty.add_theme_font_size_override("font_size", 11)
-	lbl_qty.custom_minimum_size.x = 40
+	lbl_qty.custom_minimum_size.x = 38
 	lbl_qty.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	ThemeSetup.style_label_primary(lbl_qty)
-	row.add_child(lbl_qty)
 
-	var bar: Panel = Panel.new()
-	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bar.custom_minimum_size = Vector2(0, 14)
+	# Bar container: plain Control (not a Container) so children use anchors
+	var bar_container: Control = Control.new()
+	bar_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar_container.custom_minimum_size.y = 14
+
+	var bar_fill: Panel = Panel.new()
+	bar_fill.anchor_top    = 0.1
+	bar_fill.anchor_bottom = 0.9
+	# ask: fills right→left (anchor_right=1.0, anchor_left shrinks from 1.0 to 0.0)
+	# bid: fills left→right (anchor_left=0.0, anchor_right grows from 0.0 to 1.0)
+	bar_fill.anchor_left  = 1.0 if ask_side else 0.0
+	bar_fill.anchor_right = 1.0 if ask_side else 0.0
+	bar_fill.offset_left  = 0
+	bar_fill.offset_right = 0
 	var bar_style: StyleBoxFlat = StyleBoxFlat.new()
-	bar_style.bg_color = ThemeSetup.PROFIT_RED.darkened(0.6) if ask_side else ThemeSetup.LOSS_BLUE.darkened(0.6)
-	bar.add_theme_stylebox_override("panel", bar_style)
-	row.add_child(bar)
+	bar_style.bg_color = fill_color
+	bar_fill.add_theme_stylebox_override("panel", bar_style)
+	bar_container.add_child(bar_fill)
 
-	# Click handler: fill limit price field (GDD order-book.md §3-5 클릭 인터랙션)
+	# Column order differs by side (GDD §3-5)
+	if ask_side:
+		row.add_child(bar_container)
+		row.add_child(lbl_qty)
+		row.add_child(lbl_price)
+	else:
+		row.add_child(lbl_price)
+		row.add_child(lbl_qty)
+		row.add_child(bar_container)
+
+	# Click handler
 	row.mouse_filter = Control.MOUSE_FILTER_STOP
 	var captured_ask: bool = ask_side
 	row.gui_input.connect(func(event: InputEvent) -> void:
@@ -160,48 +340,39 @@ func _make_order_book_row(ask_side: bool, display_rank: int) -> HBoxContainer:
 			return
 		var mb: InputEventMouseButton = event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
-			_on_order_book_row_clicked(captured_ask)
+			_on_order_book_row_clicked_price(lbl_price.text, captured_ask)
 	)
 
-	# Store references as metadata for update pass
-	row.set_meta("lbl_price", lbl_price)
-	row.set_meta("lbl_qty", lbl_qty)
-	row.set_meta("bar", bar)
-	row.set_meta("ask_side", ask_side)
+	row.set_meta("lbl_price",    lbl_price)
+	row.set_meta("lbl_qty",      lbl_qty)
+	row.set_meta("bar_fill",     bar_fill)
+	row.set_meta("ask_side",     ask_side)
 	row.set_meta("display_rank", display_rank)
-
 	return row
 
 
-## Handles a click on an order book row (GDD order-book.md §3-5).
-## ask row click → set limit buy price; bid row click → set limit sell price.
-func _on_order_book_row_clicked(ask_side: bool) -> void:
+## Handles a click on an order book row — uses the row's last-displayed price.
+## GDD order-book.md §3-5 클릭 인터랙션.
+func _on_order_book_row_clicked_price(price_text: String, ask_side: bool) -> void:
 	if _order_type == "MARKET":
-		return  # GDD: 시장가 선택 중 클릭 → 무시
+		return
 	if not SkillTree.is_skill_unlocked("TR1"):
-		return  # Limit order requires TR1
-
-	var book: Dictionary = PriceEngine.get_order_book(_selected_stock_id)
-	var price: int = 0
-
+		return
+	# FormatUtils.number() uses comma separators — strip them to parse
+	var clean: String = price_text.replace(",", "").strip_edges()
+	if not clean.is_valid_int():
+		return
+	var price: int = clean.to_int()
+	if price <= 0:
+		return
+	# ask click → fill limit buy; bid click → fill limit sell
 	if ask_side:
-		# ask row clicked → fill limit buy price with clicked ask level price
-		# The row index maps ask5 (row 0) → ask[4], ask1 (row 4) → ask[0]
-		# We use the last-refreshed label text as the canonical price.
-		# For simplicity we read the book directly and let _on_tick keep it fresh.
-		var ask_levels: Array = book.get("ask", [])
-		if not ask_levels.is_empty():
-			# ask display is reversed (ask5 at top); find closest ask = ask[0]
-			price = ask_levels[0]["price"] if ask_levels.size() > 0 else 0
+		_set_order_side("BUY")
 	else:
-		var bid_levels: Array = book.get("bid", [])
-		if not bid_levels.is_empty():
-			price = bid_levels[0]["price"]
-
-	if price > 0:
-		_set_order_type("LIMIT")
-		_spin_limit_price.value = float(price)
-		_update_estimated_amount()
+		_set_order_side("SELL")
+	_set_order_type("LIMIT")
+	_spin_limit_price.value = float(price)
+	_update_estimated_amount()
 
 
 ## Builds A3 재무제표 섹션. GDD financial-statements.md §3.
@@ -260,15 +431,16 @@ func _refresh_a3_section() -> void:
 	_lbl_dividend.text = PriceEngine.get_dividend_display(_selected_stock_id)
 
 
-## Called every tick via PriceEngine.on_price_updated. Refreshes order book display.
+## Called every tick via PriceEngine.on_price_updated.
 ## GDD order-book.md §3-5, §9 UI 갱신.
 func _on_tick(_tick: int) -> void:
 	_update_order_panel_price()
 	_refresh_order_book()
+	_refresh_ohlcv()
 	_refresh_a3_section()
 
 
-## Redraws all 10 order book rows from the current PriceEngine book state.
+## Redraws all 10 order book rows + totals + fill strength. GDD §3-5 블록 2~5.
 func _refresh_order_book() -> void:
 	if _selected_stock_id == "" or _order_book_rows.size() < 10:
 		return
@@ -276,48 +448,136 @@ func _refresh_order_book() -> void:
 	var ask_levels: Array = book.get("ask", [])
 	var bid_levels: Array = book.get("bid", [])
 
-	# Compute max qty for relative bar width
+	# Max qty across all 10 levels for bar normalization
 	var max_qty: int = 1
 	for lvl: Dictionary in ask_levels:
 		max_qty = maxi(max_qty, lvl.get("qty", 0))
 	for lvl: Dictionary in bid_levels:
 		max_qty = maxi(max_qty, lvl.get("qty", 0))
 
-	# ask rows: display_rank 0=ask5 (farthest), 4=ask1 (closest)
-	# ask_levels array: [0]=ask1 (best), [4]=ask5 (farthest)
-	# We display ask5 at top → ask_levels reversed
+	# ask rows: display order ask5(top)→ask1(bottom) = array index 4→0
 	for display_rank: int in range(5):
-		var row: HBoxContainer = _order_book_rows[display_rank]
-		var ask_array_idx: int = 4 - display_rank  # ask5 → index 4, ask1 → index 0
-		_update_row(row, ask_levels, ask_array_idx, max_qty)
+		_update_row(_order_book_rows[display_rank], ask_levels, 4 - display_rank, max_qty)
 
-	# bid rows: display_rank 0=bid1 (closest), 4=bid5 (farthest)
-	# bid_levels array: [0]=bid1, [4]=bid5
+	# bid rows: display order bid1(top)→bid5(bottom) = array index 0→4
 	for display_rank: int in range(5):
-		var row: HBoxContainer = _order_book_rows[5 + display_rank]
-		_update_row(row, bid_levels, display_rank, max_qty)
+		_update_row(_order_book_rows[5 + display_rank], bid_levels, display_rank, max_qty)
+
+	# 현재가 구분행 갱신
+	if _lbl_ob_cur_price != null and _selected_stock_id != "":
+		var cur: int = PriceEngine.get_current_price(_selected_stock_id)
+		var limits: Dictionary = PriceEngine.get_daily_limits(_selected_stock_id)
+		var prev: int = limits.get("prev_close", cur)
+		_lbl_ob_cur_price.text = FormatUtils.price(cur)
+		var diff: int = cur - prev
+		var pct: float = float(diff) / float(prev) * 100.0 if prev > 0 else 0.0
+		var sign: String = "+" if diff >= 0 else ""
+		_lbl_ob_cur_change.text = "%s%s(%.1f%%)" % [sign, FormatUtils.number(diff), pct]
+		var chg_color: Color = ThemeSetup.PROFIT_RED if diff >= 0 else ThemeSetup.LOSS_BLUE
+		_lbl_ob_cur_change.add_theme_color_override("font_color", chg_color)
+
+	# 블록 2/4: 총잔량 합계
+	var ask_total: int = 0
+	var bid_total: int = 0
+	for lvl: Dictionary in ask_levels:
+		ask_total += lvl.get("qty", 0)
+	for lvl: Dictionary in bid_levels:
+		bid_total += lvl.get("qty", 0)
+	if _lbl_ask_total != null:
+		_lbl_ask_total.text = FormatUtils.number(ask_total)
+	if _lbl_bid_total != null:
+		_lbl_bid_total.text = FormatUtils.number(bid_total)
+
+	# 블록 5: 체결강도
+	_refresh_fill_strength(ask_total, bid_total)
 
 
-## Updates a single row's labels and bar from the levels array at idx.
+## Updates a single order book row. ask bar fills right→left; bid bar fills left→right.
+## GDD §3-5: anchor_left/right on bar_fill drives visual width proportionally.
 func _update_row(row: HBoxContainer, levels: Array, idx: int, max_qty: int) -> void:
 	var lbl_price: Label = row.get_meta("lbl_price") as Label
-	var lbl_qty: Label = row.get_meta("lbl_qty") as Label
-	var bar: Panel = row.get_meta("bar") as Panel
+	var lbl_qty:   Label = row.get_meta("lbl_qty")   as Label
+	var bar_fill:  Panel = row.get_meta("bar_fill")  as Panel
+	var ask_side:  bool  = row.get_meta("ask_side")
 
 	if idx < 0 or idx >= levels.size():
-		lbl_price.text = "-"
-		lbl_qty.text = "-"
-		bar.custom_minimum_size.x = 0
+		lbl_price.text    = "-"
+		lbl_qty.text      = "-"
+		# collapse bar
+		if ask_side:
+			bar_fill.anchor_left = 1.0; bar_fill.anchor_right = 1.0
+		else:
+			bar_fill.anchor_left = 0.0; bar_fill.anchor_right = 0.0
 		return
 
-	var lvl: Dictionary = levels[idx]
-	var price: int = lvl.get("price", 0)
-	var qty: int = lvl.get("qty", 0)
+	var lvl:   Dictionary = levels[idx]
+	var price: int        = lvl.get("price", 0)
+	var qty:   int        = lvl.get("qty",   0)
 	lbl_price.text = FormatUtils.number(price)
-	lbl_qty.text = FormatUtils.number(qty)
-	# Relative bar width (0–40 px range)
+	lbl_qty.text   = FormatUtils.number(qty)
+
 	var ratio: float = float(qty) / float(max_qty) if max_qty > 0 else 0.0
-	bar.custom_minimum_size.x = ratio * 40.0
+	if ask_side:
+		# 오른쪽 정렬: anchor_right=1.0 고정, anchor_left = 1.0 - ratio
+		bar_fill.anchor_left  = 1.0 - ratio
+		bar_fill.anchor_right = 1.0
+	else:
+		# 왼쪽 정렬: anchor_left=0.0 고정, anchor_right = ratio
+		bar_fill.anchor_left  = 0.0
+		bar_fill.anchor_right = ratio
+	bar_fill.offset_left  = 0
+	bar_fill.offset_right = 0
+
+
+## 블록 1: 시/고/저/거래량 레이블 갱신. GDD §3-5 블록1.
+func _refresh_ohlcv() -> void:
+	if _selected_stock_id == "" or _lbl_ob_open == null:
+		return
+	var ohlcv: Dictionary = PriceEngine.get_today_ohlcv(_selected_stock_id)
+	_lbl_ob_open.text   = FormatUtils.number(ohlcv.get("open",   0))
+	_lbl_ob_high.text   = FormatUtils.number(ohlcv.get("high",   0))
+	_lbl_ob_low.text    = FormatUtils.number(ohlcv.get("low",    0))
+	_lbl_ob_volume.text = FormatUtils.number(ohlcv.get("volume", 0))
+	var cur: int = PriceEngine.get_current_price(_selected_stock_id)
+	_lbl_ob_high.add_theme_color_override("font_color",
+		ThemeSetup.PROFIT_RED if ohlcv.get("high", 0) >= cur else ThemeSetup.COLOR_PRIMARY)
+	_lbl_ob_low.add_theme_color_override("font_color",
+		ThemeSetup.LOSS_BLUE if ohlcv.get("low", 0) <= cur else ThemeSetup.COLOR_PRIMARY)
+
+
+## 블록 5: 체결강도 바 + 퍼센트 갱신. GDD §3-5 블록5.
+## 체결강도 = (매수총잔량 / 매도총잔량) × 100. >100%=매수우위, <100%=매도우위.
+func _refresh_fill_strength(ask_total: int, bid_total: int) -> void:
+	if _fill_strength_fill == null:
+		return
+	if ask_total <= 0:
+		_lbl_fill_pct.text  = "-"
+		_lbl_fill_side.text = ""
+		_fill_strength_fill.anchor_right = 0.0
+		return
+	var strength: float = float(bid_total) / float(ask_total) * 100.0
+	_lbl_fill_pct.text = "%.1f%%" % strength
+
+	# 바: 100% = anchor_right 0.5 (중앙). 200%+ = 1.0. 0% = 0.0
+	var bar_ratio: float = clampf(strength / 200.0, 0.0, 1.0)
+	_fill_strength_fill.anchor_left  = 0.0
+	_fill_strength_fill.anchor_right = bar_ratio
+	_fill_strength_fill.offset_left  = 0
+	_fill_strength_fill.offset_right = 0
+
+	var fs_style: StyleBoxFlat = _fill_strength_fill.get_theme_stylebox("panel") as StyleBoxFlat
+	if strength > 100.0:
+		_lbl_fill_side.text = tr("매수우위")
+		_lbl_fill_side.add_theme_color_override("font_color", ThemeSetup.LOSS_BLUE)
+		fs_style.bg_color = ThemeSetup.LOSS_BLUE.darkened(0.3)
+	elif strength < 100.0:
+		_lbl_fill_side.text = tr("매도우위")
+		_lbl_fill_side.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
+		fs_style.bg_color = ThemeSetup.PROFIT_RED.darkened(0.3)
+	else:
+		_lbl_fill_side.text = ""
+		fs_style.bg_color = Color(0.5, 0.5, 0.5, 0.5)
+	_fill_strength_fill.add_theme_stylebox_override("panel", fs_style)
 
 
 func _build_side_tabs(vbox: VBoxContainer) -> void:
@@ -456,6 +716,8 @@ func set_stock(stock_id: String) -> void:
 	refresh_limit_price_bounds()
 	_spin_limit_price.value = PriceEngine.get_current_price(stock_id)
 	_update_order_panel_price()
+	_refresh_order_book()
+	_refresh_ohlcv()
 	_refresh_a3_section()
 	_lbl_order_error.text = ""
 	_spin_quantity.value = 0

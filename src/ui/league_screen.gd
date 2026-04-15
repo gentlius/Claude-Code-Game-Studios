@@ -15,6 +15,11 @@ const COLOR_NEGATIVE: Color  = Color(0.95, 0.3, 0.3, 1.0)
 const COLOR_NEUTRAL: Color   = Color(0.7, 0.7, 0.7, 1.0)
 const COLOR_PLAYER_ROW: Color = Color(0.18, 0.28, 0.45, 1.0)
 const COLOR_SEPARATOR: Color  = Color(0.25, 0.25, 0.28, 1.0)
+## 티어별 참가자 비율 (GDD §3-3 TOTAL_PARTICIPANTS × 비율). 합 ≈ 1.0.
+const TIER_RATIOS: Array[float] = [
+	0.38, 0.20, 0.13, 0.09, 0.06,
+	0.045, 0.035, 0.025, 0.015, 0.01, 0.005,
+]
 const COLOR_BG_PANEL: Color   = Color(0.10, 0.10, 0.11, 1.0)
 const COLOR_BG_CONTENT: Color = Color(0.08, 0.08, 0.09, 1.0)
 
@@ -156,11 +161,7 @@ func _update_left_panel() -> void:
 
 
 func _estimate_tier_participants(tier: int) -> int:
-	# 플레이어 포함 추정값 — SeasonManager.TOTAL_PARTICIPANTS * 비율 (§3-3)
-	var TIER_RATIOS: Array[float] = [
-		0.38, 0.20, 0.13, 0.09, 0.06,
-		0.045, 0.035, 0.025, 0.015, 0.01, 0.005,
-	]
+	# 플레이어 포함 추정값 — SeasonManager.TOTAL_PARTICIPANTS × TIER_RATIOS[tier] (§3-3)
 	if tier < 0 or tier >= TIER_RATIOS.size():
 		return SeasonManager.TOTAL_PARTICIPANTS
 	return maxi(1, int(float(SeasonManager.TOTAL_PARTICIPANTS) * TIER_RATIOS[tier]))

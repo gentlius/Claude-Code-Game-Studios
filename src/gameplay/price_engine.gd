@@ -117,6 +117,8 @@ const BIAS_NEUTRAL_CUTOFF: float = 0.7  ## cumulative: BULL + NEUTRAL
 
 const HARD_CLAMP_MIN_RATIO: float = 0.15  ## Lifetime min = base_price × 0.15
 const HARD_CLAMP_MAX_RATIO: float = 3.0   ## Lifetime max = base_price × 3.0
+const HARD_CLAMP_ABS_MIN_PRICE: float = 1000.0  ## Absolute floor (₩1,000); overrides ratio for cheap stocks
+const TOD_WINDOW_TICKS: int = 40  ## Opening/closing window ticks = TICKS_PER_MINUTE(4) × 10 min
 
 # ── Tuning Knobs (GDD updated values after prototype) ──
 
@@ -588,7 +590,7 @@ func _process_stock_tick(stock_id: String, tick_in_day: int) -> void:
 
 	# Hard clamp: lifetime bounds (base_price * 0.15 ~ 3.0)
 	var base: int = s["base_price"]
-	var min_price: float = maxf(float(base) * HARD_CLAMP_MIN_RATIO, 1000.0)
+	var min_price: float = maxf(float(base) * HARD_CLAMP_MIN_RATIO, HARD_CLAMP_ABS_MIN_PRICE)
 	var max_price: float = float(base) * HARD_CLAMP_MAX_RATIO
 	var clamped: float = clampf(raw_price, min_price, max_price)
 	if clamped != raw_price:
@@ -651,7 +653,7 @@ func _compute_pattern_delta(state: MarkovState, vol_profile: int) -> float:
 	var mag_max: float = params[2]
 	var noise_std: float = params[3]
 
-	var magnitude: float = randf_range(mag_min, mag_max)
+	var magnitude: float = _rng.randf_range(mag_min, mag_max)
 	var noise: float = _randn() * noise_std
 	var raw: float = bias + magnitude + noise
 
@@ -767,7 +769,7 @@ func _compute_volume(
 ) -> float:
 	var vol: int = s["volatility_profile"]
 	var vol_range: Array = BASE_VOLUME_RANGE[vol]
-	var base_vol: float = randf_range(float(vol_range[0]), float(vol_range[1]))
+	var base_vol: float = _rng.randf_range(float(vol_range[0]), float(vol_range[1]))
 
 	# 4-2: Tick energy — correlation between price movement forces and volume
 	var tick_energy: float = absf(pattern_delta) + absf(event_delta)
@@ -790,12 +792,12 @@ func _compute_volume(
 			limit_dampen = lerpf(1.0, LIMIT_DAMPEN_MIN, clampf(t, 0.0, 1.0))
 
 	# 4-5: Time-of-day multiplier (GDD Rule 4-5)
-	# 1 day = 1560 ticks (4 ticks/min × 390 min)
-	# Opening 10 min = ticks 0-39, Closing 10 min = ticks 1520-1559
+	# TOD_WINDOW_TICKS = TICKS_PER_MINUTE(4) × 10 min = 40 ticks
+	# Closing window start = TICKS_PER_DAY(1560) − TOD_WINDOW_TICKS = 1520
 	var tod_mult: float = 1.0
-	if tick_in_day < 40:
+	if tick_in_day < TOD_WINDOW_TICKS:
 		tod_mult = TOD_OPEN_VOLUME_MULT
-	elif tick_in_day >= 1520:
+	elif tick_in_day >= GameClock.TICKS_PER_DAY - TOD_WINDOW_TICKS:
 		tod_mult = TOD_CLOSE_VOLUME_MULT
 
 	# 4-6: Final volume

@@ -15,6 +15,7 @@ const SFX_ORDER_FREQ: float   = 220.0   ## 체결음 기본 주파수 (Hz)
 const SFX_LEVEL_FREQS: Array[float] = [261.6, 329.6, 392.0]  ## 레벨업 아르페지오 C4→E4→G4
 const SFX_VI_FREQS: Array[float]    = [330.0, 440.0]          ## VI 경보 E4→A4
 const SFX_NEWS_FREQS: Array[float]  = [440.0, 330.0]          ## 뉴스 알림 A4→E4 하강
+const PCM_AMPLITUDE: int = 28000   ## 16-bit PCM 진폭 스케일 (programmatic SFX 전용 튜닝 노브)
 
 # ── State ──
 
@@ -100,11 +101,10 @@ func _make_triangle_two_pulse(freq: float, pulse_dur: float, gap_dur: float) -> 
 			sample_val = (2.0 * absf(phase - 0.5) - 0.5) * 2.0
 			# Fade out last 20% of each pulse
 			var fade_start: int = int(pulse_samples * 0.8)
-			var local_pulse: int = i if i < pulse_samples else i - pulse_samples - gap_samples
-			if local_pulse > fade_start:
-				sample_val *= 1.0 - float(local_pulse - fade_start) / float(pulse_samples - fade_start)
+			if local_i > fade_start:
+				sample_val *= 1.0 - float(local_i - fade_start) / float(pulse_samples - fade_start)
 
-		var int_val: int = clampi(int(sample_val * 28000.0), -32768, 32767)
+		var int_val: int = clampi(int(sample_val * PCM_AMPLITUDE), -32768, 32767)
 		data[i * 2]     = int_val & 0xFF
 		data[i * 2 + 1] = (int_val >> 8) & 0xFF
 
@@ -127,7 +127,7 @@ func _make_arpeggio(freqs: Array[float], note_dur: float) -> AudioStreamWAV:
 			var val: float = sin(TAU * freq * t)
 			if i > fade_start:
 				val *= 1.0 - float(i - fade_start) / float(note_samples - fade_start)
-			var int_val: int = clampi(int(val * 28000.0), -32768, 32767)
+			var int_val: int = clampi(int(val * PCM_AMPLITUDE), -32768, 32767)
 			data[(base + i) * 2]     = int_val & 0xFF
 			data[(base + i) * 2 + 1] = (int_val >> 8) & 0xFF
 

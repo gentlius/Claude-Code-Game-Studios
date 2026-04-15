@@ -58,62 +58,56 @@ func reset() -> void:
 ## Submit a market order. Returns the order dict (check status for result).
 func submit_market_order(side: String, stock_id: String, quantity: int) -> Dictionary:
 	var order: Dictionary = _create_order("MARKET", side, stock_id, quantity, 0)
-
 	var reject: String = _validate_order(order)
 	if reject != "":
-		order["status"] = "REJECTED"
-		order["reject_reason"] = reject
-		_history_append(order)
-		on_order_rejected.emit(order)
-		return order
+		return _reject_order(order, reject)
+	match GameClock.get_market_state():
+		GameClock.MarketState.PRE_MARKET:
+			return _handle_pre_market_market_order(order)
+		GameClock.MarketState.MARKET_OPEN, GameClock.MarketState.PAUSED:
+			return _handle_open_market_order(order)
+		_:
+			return _reject_order(order, "장이 열려 있지 않습니다")
 
-	var market_state: GameClock.MarketState = GameClock.get_market_state()
 
-	if market_state == GameClock.MarketState.PRE_MARKET:
-		# PRE_MARKET reservation
-		if side == "BUY":
-			var current_price: int = PriceEngine.get_current_price(stock_id)
-			var reserved: int = int(ceil(float(current_price) * (1.0 + PRE_MARKET_BUFFER_PCT))) * quantity
-			if not CurrencySystem.sim_deduct(reserved):
-				order["status"] = "REJECTED"
-				order["reject_reason"] = "잔액 부족"
-				_history_append(order)
-				on_order_rejected.emit(order)
-				return order
-			order["reserved_cash"] = reserved
-		elif side == "SELL":
-			_lock_sell_quantity(stock_id, quantity)
-			order["locked_quantity"] = quantity
+func _handle_pre_market_market_order(order: Dictionary) -> Dictionary:
+	if order["side"] == "BUY":
+		var current_price: int = PriceEngine.get_current_price(order["stock_id"])
+		var reserved: int = int(ceil(float(current_price) * (1.0 + PRE_MARKET_BUFFER_PCT))) * order["quantity"]
+		if not CurrencySystem.sim_deduct(reserved):
+			return _reject_order(order, "잔액 부족")
+		order["reserved_cash"] = reserved
+	elif order["side"] == "SELL":
+		_lock_sell_quantity(order["stock_id"], order["quantity"])
+		order["locked_quantity"] = order["quantity"]
+	order["status"] = "PENDING"
+	_pre_market_queue.append(order)
+	return order
+
+
+func _handle_open_market_order(order: Dictionary) -> Dictionary:
+	if order["side"] == "BUY":
+		var current_price: int = PriceEngine.get_current_price(order["stock_id"])
+		var cost: int = current_price * order["quantity"]
+		if not CurrencySystem.sim_deduct(cost):
+			return _reject_order(order, "잔액 부족")
+		order["reserved_cash"] = cost
+	elif order["side"] == "SELL":
+		_lock_sell_quantity(order["stock_id"], order["quantity"])
+		order["locked_quantity"] = order["quantity"]
+	if GameClock.get_market_state() == GameClock.MarketState.PAUSED:
 		order["status"] = "PENDING"
-		_pre_market_queue.append(order)
-
-	elif market_state == GameClock.MarketState.MARKET_OPEN or market_state == GameClock.MarketState.PAUSED:
-		if side == "BUY":
-			var current_price: int = PriceEngine.get_current_price(stock_id)
-			var cost: int = current_price * quantity
-			if not CurrencySystem.sim_deduct(cost):
-				order["status"] = "REJECTED"
-				order["reject_reason"] = "잔액 부족"
-				_history_append(order)
-				on_order_rejected.emit(order)
-				return order
-			order["reserved_cash"] = cost
-		elif side == "SELL":
-			_lock_sell_quantity(stock_id, quantity)
-			order["locked_quantity"] = quantity
-
-		if market_state == GameClock.MarketState.PAUSED:
-			order["status"] = "PENDING"
-			_market_order_queue.append(order)
-		else:
-			# Immediate fill at current price
-			_fill_market_order(order)
+		_market_order_queue.append(order)
 	else:
-		order["status"] = "REJECTED"
-		order["reject_reason"] = "장이 열려 있지 않습니다"
-		_history_append(order)
-		on_order_rejected.emit(order)
+		_fill_market_order(order)
+	return order
 
+
+func _reject_order(order: Dictionary, reason: String) -> Dictionary:
+	order["status"] = "REJECTED"
+	order["reject_reason"] = reason
+	_history_append(order)
+	on_order_rejected.emit(order)
 	return order
 
 
@@ -432,92 +426,111 @@ func _expire_pending_orders() -> void:
 # ── Validation (GDD Rule 3, 8 steps) ──
 
 func _validate_order(order: Dictionary) -> String:
-	# 1. Market state
-	var ms: GameClock.MarketState = GameClock.get_market_state()
-	if order["order_type"] == "MARKET":
-		if ms != GameClock.MarketState.MARKET_OPEN and ms != GameClock.MarketState.PAUSED and ms != GameClock.MarketState.PRE_MARKET:
-			return "장이 열려 있지 않습니다"
-	else:  # LIMIT
-		if ms != GameClock.MarketState.MARKET_OPEN and ms != GameClock.MarketState.PAUSED and ms != GameClock.MarketState.PRE_MARKET:
-			return "장이 열려 있지 않습니다"
+	var err: String = _validate_order_state_and_stock(order)
+	if err: return err
+	err = _validate_order_quantity_and_skills(order)
+	if err: return err
+	err = _validate_order_buy_constraints(order)
+	if err: return err
+	err = _validate_order_sell_constraints(order)
+	if err: return err
+	return _validate_order_limit_price(order)
 
-	# 2. Stock exists
+
+func _validate_order_state_and_stock(order: Dictionary) -> String:
+	# 1. Market state (MARKET and LIMIT share the same valid states)
+	var ms: GameClock.MarketState = GameClock.get_market_state()
+	var valid_states: bool = (
+		ms == GameClock.MarketState.MARKET_OPEN or
+		ms == GameClock.MarketState.PAUSED or
+		ms == GameClock.MarketState.PRE_MARKET
+	)
+	if not valid_states:
+		return "장이 열려 있지 않습니다"
+	# 2. Stock exists + VI/CB halt check (GDD Rules 2-4, 2-5)
 	if StockDatabase.get_stock(order["stock_id"]) == null:
 		return "존재하지 않는 종목입니다"
-
-	# 2.5. VI/CB halt check (GDD Rules 2-4, 2-5)
 	# Stage 1 is a temporary halt; _cb_stage stays at 1 after it lifts.
 	# Only reject new orders during Stage 2 (permanent early close). (R-01 fix)
 	if PriceEngine.get_cb_stage() >= 2:
 		return "CB 2단계 발동 중 — 조기 장 마감"
 	if PriceEngine.is_vi_halted(order["stock_id"]):
 		return "변동성완화장치(VI) 발동 중입니다"
+	return ""
 
+
+func _validate_order_quantity_and_skills(order: Dictionary) -> String:
 	# 3. Quantity
 	if order["quantity"] <= 0:
 		return "수량은 1 이상이어야 합니다"
-
 	# 4. Skill unlock — TR1 required for limit orders
 	if order["order_type"] == "LIMIT" and not SkillTree.is_skill_unlocked("TR1"):
 		return "지정가 주문 스킬을 해금하세요 (TR1: 지정가 주문)"
-
 	# 4.5. Pending limit order count
-	if order["order_type"] == "LIMIT":
-		if _pending_limit_orders.size() >= MAX_PENDING_LIMIT_ORDERS:
-			return "미체결 주문 한도 초과"
+	if order["order_type"] == "LIMIT" and _pending_limit_orders.size() >= MAX_PENDING_LIMIT_ORDERS:
+		return "미체결 주문 한도 초과"
+	return ""
 
-	# 5. Portfolio slot (BUY only)
-	if order["side"] == "BUY":
-		var holding: Variant = PortfolioManager.get_holding(order["stock_id"])
-		if holding == null:
-			# New stock — check slot
-			var effective_count: int = _get_effective_holding_count(order["stock_id"])
-			if effective_count >= SkillTree.get_max_holdings():
-				return "보유 종목 한도 초과"
 
-	# 6. Balance (BUY) — actual deduction happens in submit.
+func _validate_order_buy_constraints(order: Dictionary) -> String:
+	if order["side"] != "BUY":
+		return ""
+	# 5. Portfolio slot — new stock requires an open slot
+	var holding: Variant = PortfolioManager.get_holding(order["stock_id"])
+	if holding == null:
+		var effective_count: int = _get_effective_holding_count(order["stock_id"])
+		if effective_count >= SkillTree.get_max_holdings():
+			return "보유 종목 한도 초과"
+	# 6. Balance check — actual deduction happens in submit.
 	# Note: balance check and deduction are not atomic. Safe because GDScript is
 	# single-threaded and no signal is emitted between _validate_order and the
 	# CurrencySystem.sim_deduct call in submit_market_order / submit_limit_order.
 	# (R-03: TOCTOU is benign under GDScript's cooperative execution model)
-	if order["side"] == "BUY":
-		var required: int
-		if order["order_type"] == "LIMIT":
-			required = order["limit_price"] * order["quantity"]
-		elif ms == GameClock.MarketState.PRE_MARKET:
-			var price: int = PriceEngine.get_current_price(order["stock_id"])
-			required = int(ceil(float(price) * (1.0 + PRE_MARKET_BUFFER_PCT))) * order["quantity"]
-		else:
-			var price: int = PriceEngine.get_current_price(order["stock_id"])
-			required = price * order["quantity"]
-		if CurrencySystem.get_sim_cash() < required:
-			return "잔액 부족"
-
-	# 7. Holdings (SELL)
-	if order["side"] == "SELL":
-		var holding: Variant = PortfolioManager.get_holding(order["stock_id"])
-		if holding == null:
-			return "보유 수량 부족"
-		var available: int = holding["quantity"] - get_locked_quantity(order["stock_id"])
-		if order["quantity"] > available:
-			return "보유 수량 부족"
-
-	# 8. Limit price validity
+	var ms: GameClock.MarketState = GameClock.get_market_state()
+	var required: int
 	if order["order_type"] == "LIMIT":
-		if order["limit_price"] <= 0:
-			return "지정가는 0보다 커야 합니다"
-		# 8-1. Daily limit (상/하한가) validation
-		var limits: Dictionary = PriceEngine.get_daily_limits(order["stock_id"])
-		if limits.size() > 0:
-			if order["limit_price"] > limits["upper"]:
-				return "상한가(%d원) 초과" % limits["upper"]
-			if order["limit_price"] < limits["lower"]:
-				return "하한가(%d원) 미만" % limits["lower"]
-		# 9. Tick size validation (GDD Rule 5-3)
-		var tick_size: int = PriceEngine.get_tick_size(order["limit_price"])
-		if order["limit_price"] % tick_size != 0:
-			return "지정가가 호가 단위(%d원)에 맞지 않습니다" % tick_size
+		required = order["limit_price"] * order["quantity"]
+	elif ms == GameClock.MarketState.PRE_MARKET:
+		var price: int = PriceEngine.get_current_price(order["stock_id"])
+		required = int(ceil(float(price) * (1.0 + PRE_MARKET_BUFFER_PCT))) * order["quantity"]
+	else:
+		var price: int = PriceEngine.get_current_price(order["stock_id"])
+		required = price * order["quantity"]
+	if CurrencySystem.get_sim_cash() < required:
+		return "잔액 부족"
+	return ""
 
+
+func _validate_order_sell_constraints(order: Dictionary) -> String:
+	if order["side"] != "SELL":
+		return ""
+	# 7. Holdings check
+	var holding: Variant = PortfolioManager.get_holding(order["stock_id"])
+	if holding == null:
+		return "보유 수량 부족"
+	var available: int = holding["quantity"] - get_locked_quantity(order["stock_id"])
+	if order["quantity"] > available:
+		return "보유 수량 부족"
+	return ""
+
+
+func _validate_order_limit_price(order: Dictionary) -> String:
+	if order["order_type"] != "LIMIT":
+		return ""
+	# 8. Limit price positivity
+	if order["limit_price"] <= 0:
+		return "지정가는 0보다 커야 합니다"
+	# 8-1. Daily limit (상/하한가) validation
+	var limits: Dictionary = PriceEngine.get_daily_limits(order["stock_id"])
+	if limits.size() > 0:
+		if order["limit_price"] > limits["upper"]:
+			return "상한가(%d원) 초과" % limits["upper"]
+		if order["limit_price"] < limits["lower"]:
+			return "하한가(%d원) 미만" % limits["lower"]
+	# 9. Tick size validation (GDD Rule 5-3)
+	var tick_size: int = PriceEngine.get_tick_size(order["limit_price"])
+	if order["limit_price"] % tick_size != 0:
+		return "지정가가 호가 단위(%d원)에 맞지 않습니다" % tick_size
 	return ""
 
 # ── Helpers ──

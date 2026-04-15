@@ -12,6 +12,13 @@ signal needs_level_up(data: Dictionary)
 ## Emitted after a daily popup with XP is dismissed — caller should animate the XP bar.
 signal xp_animate_requested
 
+## BBCode 색상 상수 — ThemeSetup Color의 to_html(false) 값과 동기화 유지.
+## 단일 소유 원칙: 이 파일 내 모든 BBCode color= 태그는 이 상수를 참조한다.
+const _C_PROFIT: String  = "EB3833"  ## ThemeSetup.PROFIT_RED.to_html(false)
+const _C_LOSS: String    = "2E6BE6"  ## ThemeSetup.LOSS_BLUE.to_html(false)
+const _C_GOLD: String    = "D9B320"  ## Award / XP color
+const _C_DIM: String     = "5A5A66"  ## ThemeSetup.TEXT_SECONDARY.to_html(false)
+
 var _settlement_queue: Array[String] = []
 var _last_xp_gained: int = 0
 var _last_xp_source: String = ""
@@ -135,7 +142,7 @@ func _show_daily() -> void:
 
 func _portfolio_summary_section(summary: Dictionary) -> String:
 	var rate: float = summary["return_rate"]
-	var c: String = "EB3833" if rate >= 0.0 else "2E6BE6"
+	var c: String = _C_PROFIT if rate >= 0.0 else _C_LOSS
 	var sign: String = "+" if rate >= 0.0 else ""
 	var bbcode: String = ""
 	bbcode += "[b]총 자산[/b]  [color=#%s]₩%s[/color]\n" % [c, FormatUtils.number(summary["total_assets"])]
@@ -154,7 +161,7 @@ func _holdings_section(summary: Dictionary) -> String:
 		var stock: StockData = StockDatabase.get_stock(h["stock_id"])
 		var name_str: String = stock.get_display_name() if stock else h["stock_id"]
 		var pnl_pct: float = h.get("unrealized_pnl_pct", 0.0)
-		var c: String = "EB3833" if pnl_pct >= 0.0 else "2E6BE6"
+		var c: String = _C_PROFIT if pnl_pct >= 0.0 else _C_LOSS
 		var sign: String = "+" if pnl_pct >= 0.0 else ""
 		bbcode += "  %s  [color=#%s]%s%.1f%%[/color]\n" % [name_str, c, sign, pnl_pct]
 	return bbcode
@@ -177,14 +184,14 @@ func _daily_trades_section() -> String:
 		return ""
 	var bbcode: String = "\n[b]오늘의 거래[/b]  매수 %d건 · 매도 %d건" % [buys, sells]
 	if realized != 0:
-		var c: String = "EB3833" if realized > 0 else "2E6BE6"
+		var c: String = _C_PROFIT if realized > 0 else _C_LOSS
 		bbcode += "\n[b]실현 손익[/b]  [color=#%s]%+d[/color]" % [c, realized]
 	return bbcode
 
 
 func _xp_section(expected_source: String) -> String:
-	var gold: String = "D9B320"
-	var dim: String = "5A5A66"
+	var gold: String = _C_GOLD
+	var dim: String = _C_DIM
 	var bbcode: String = "\n\n[color=#%s]━━━ 경험치 ━━━[/color]\n" % gold
 	if _last_xp_gained > 0 and _last_xp_source == expected_source:
 		if expected_source == "daily_bonus":
@@ -253,7 +260,7 @@ func _weekly_trades_section() -> String:
 	var bbcode: String = "\n[b]━━━ 주간 거래 요약 ━━━[/b]\n"
 	bbcode += "[b]매수[/b] %d건  [b]매도[/b] %d건  [b]합계[/b] %d건\n" % [buys, sells, buys + sells]
 	if realized != 0:
-		var c: String = "EB3833" if realized > 0 else "2E6BE6"
+		var c: String = _C_PROFIT if realized > 0 else _C_LOSS
 		bbcode += "[b]주간 실현 손익[/b]  [color=#%s]₩%s[/color]\n" % [c, FormatUtils.number(realized)]
 	else:
 		bbcode += "[b]주간 실현 손익[/b]  ₩0\n"
@@ -267,11 +274,11 @@ func _weekly_theme_hint() -> String:
 	var hint: String = theme.get("hint_text", "")
 	if hint.is_empty():
 		return ""
-	return "\n[b]━━━ 다음 주 시장 전망 ━━━[/b]\n[color=#D9B320]💡 %s[/color]\n" % hint
+	return "\n[b]━━━ 다음 주 시장 전망 ━━━[/b]\n[color=#%s]💡 %s[/color]\n" % [_C_GOLD, hint]
 
 
 func _weekly_xp_section() -> String:
-	var gold: String = "D9B320"
+	var gold: String = _C_GOLD
 	var bbcode: String = "\n[color=#%s]━━━ 경험치 ━━━[/color]\n" % gold
 	if _weekly_xp_gained > 0:
 		bbcode += "[color=#%s][b]+%d XP[/b] 주간 획득[/color]\n" % [gold, _weekly_xp_gained]
@@ -303,7 +310,7 @@ func _show_season() -> void:
 
 
 func _season_xp_base_line() -> String:
-	var gold: String = "D9B320"
+	var gold: String = _C_GOLD
 	var bd: Dictionary = XpSystem.get_season_xp_breakdown()
 	if bd.is_empty():
 		return ""
@@ -318,7 +325,7 @@ func _on_season_reveal_tick() -> void:
 		return
 	if not is_inside_tree() or not is_instance_valid(_panel) or not _panel.visible:
 		return
-	var gold: String = "D9B320"
+	var gold: String = _C_GOLD
 	var bd: Dictionary = XpSystem.get_season_xp_breakdown()
 	_season_reveal_step += 1
 	match _season_reveal_step:
@@ -382,6 +389,8 @@ func _on_xp_gained(amount: int, _new_total: int, source: String) -> void:
 	_last_xp_gained = amount
 	_last_xp_source = source
 	if source == "daily_bonus":
+		# TD-CR-02: 세이브/로드 시 _weekly_xp_gained가 0으로 초기화됨.
+		# 세션 간 주간 XP 합산을 유지하려면 SaveSystem에 직렬화 추가 필요.
 		_weekly_xp_gained += amount
 
 

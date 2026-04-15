@@ -185,7 +185,7 @@ func _build_pending_section(vbox: VBoxContainer) -> void:
 	_pending_orders_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_pending_orders_container)
 	var btn_cancel_all: Button = Button.new()
-	btn_cancel_all.text = "전체 취소 Esc"
+	btn_cancel_all.text = tr("전체 취소 Esc")
 	ThemeSetup.apply_sell_button(btn_cancel_all)
 	btn_cancel_all.pressed.connect(_cancel_all_pending)
 	vbox.add_child(btn_cancel_all)
@@ -310,20 +310,20 @@ func _submit_order() -> void:
 		return
 	var qty: int = int(_spin_quantity.value)
 	if qty <= 0:
-		_show_order_error("수량을 입력하세요")
+		_show_order_error(tr("수량을 입력하세요"))
 		return
 	_lbl_order_error.text = ""
 	var result: Dictionary
 	if _order_type == "LIMIT":
 		var limit_price: int = int(_spin_limit_price.value)
 		if limit_price <= 0:
-			_show_order_error("지정가를 입력하세요")
+			_show_order_error(tr("지정가를 입력하세요"))
 			return
 		result = OrderEngine.submit_limit_order(_order_side, _selected_stock_id, qty, limit_price)
 	else:
 		result = OrderEngine.submit_market_order(_order_side, _selected_stock_id, qty)
 	if result["status"] == "REJECTED":
-		_show_order_error(result.get("reject_reason", "주문 거부됨"))
+		_show_order_error(result.get("reject_reason", tr("주문 거부됨")))
 	else:
 		_spin_quantity.value = 0
 	_update_pending_orders()
@@ -367,9 +367,9 @@ func _make_pending_row(order: Dictionary) -> HBoxContainer:
 	var info: Label = Label.new()
 	var pending_sid: String = order["stock_id"]
 	var pending_stock: StockData = StockDatabase.get_stock(pending_sid)
-	var pending_name: String = pending_stock.name_ko if pending_stock != null else pending_sid
-	info.text = "%s %s(%s) %s×%d주" % [
-		side_str, pending_name, pending_sid,
+	var pending_name: String = pending_stock.get_display_name() if pending_stock != null else pending_sid
+	info.text = "%s %s %s×%d주" % [
+		side_str, pending_name,
 		FormatUtils.number(order.get("limit_price", PriceEngine.get_current_price(pending_sid))),
 		order["quantity"]]
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL

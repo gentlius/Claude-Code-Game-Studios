@@ -241,28 +241,4 @@ func _make_tab_button(label: String, tab_idx: int) -> Button:
 	return btn
 
 
-func _build_placeholder(title: String, subtitle: String) -> Control:
-	var panel: PanelContainer = PanelContainer.new()
-	var style: StyleBoxFlat = StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.08, 0.09, 1.0)
-	panel.add_theme_stylebox_override("panel", style)
 
-	var vbox: VBoxContainer = VBoxContainer.new()
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	panel.add_child(vbox)
-
-	var lbl_title: Label = Label.new()
-	lbl_title.text = title
-	lbl_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl_title.add_theme_font_size_override("font_size", 24)
-	lbl_title.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5, 1.0))
-	vbox.add_child(lbl_title)
-
-	var lbl_sub: Label = Label.new()
-	lbl_sub.text = subtitle
-	lbl_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl_sub.add_theme_font_size_override("font_size", 14)
-	lbl_sub.add_theme_color_override("font_color", Color(0.35, 0.35, 0.35, 1.0))
-	vbox.add_child(lbl_sub)
-
-	return panel

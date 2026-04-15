@@ -72,7 +72,7 @@ func _build_row1() -> void:
 	row1_panel.add_child(row1)
 
 	_lbl_season_info = Label.new()
-	_lbl_season_info.text = "1주차 월요일"
+	_lbl_season_info.text = tr("1주차 월요일")
 	_lbl_season_info.add_theme_font_size_override("font_size", 12)
 	ThemeSetup.style_label_primary(_lbl_season_info)
 	row1.add_child(_lbl_season_info)
@@ -162,7 +162,7 @@ func _build_row2() -> void:
 	row2.add_theme_constant_override("separation", 14)
 	row2_panel.add_child(row2)
 	_lbl_market_index = Label.new()
-	_lbl_market_index.text = "지수 1,000.0 (0.00%)"
+	_lbl_market_index.text = tr("지수 1,000.0 (0.00%)")
 	_lbl_market_index.add_theme_font_size_override("font_size", 14)
 	ThemeSetup.style_label_primary(_lbl_market_index)
 	row2.add_child(_lbl_market_index)
@@ -170,12 +170,12 @@ func _build_row2() -> void:
 	sep_r2.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
 	row2.add_child(sep_r2)
 	_lbl_total_assets = Label.new()
-	_lbl_total_assets.text = "총 평가금액: ₩0"
+	_lbl_total_assets.text = tr("총 평가금액: ₩0")
 	_lbl_total_assets.add_theme_font_size_override("font_size", 17)
 	ThemeSetup.style_label_primary(_lbl_total_assets)
 	row2.add_child(_lbl_total_assets)
 	_lbl_cash = Label.new()
-	_lbl_cash.text = "예수금: ₩0"
+	_lbl_cash.text = tr("예수금: ₩0")
 	_lbl_cash.add_theme_font_size_override("font_size", 15)
 	ThemeSetup.style_label_secondary(_lbl_cash)
 	row2.add_child(_lbl_cash)
@@ -295,7 +295,7 @@ func _update_index_label() -> void:
 		return
 	var index_change: float = PriceEngine.get_index_change_pct()
 	var sign_str: String = "+" if index_change >= 0.0 else ""
-	_lbl_market_index.text = "지수 %s (%s%.2f%%)" % [
+	_lbl_market_index.text = tr("지수 %s (%s%.2f%%)") % [
 		FormatUtils.number(roundi(index_val)), sign_str, index_change]
 
 

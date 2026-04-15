@@ -80,6 +80,10 @@ const DEFAULT_DECAY_MINUTES: int = 15  ## ~15 game-minutes
 
 # ── State ──
 
+## ADR-018: 세션별 엔트로피 격리. PriceEngine._rng와 독립된 인스턴스.
+## _on_season_start()에서 재시드되어 시즌마다 독립적인 뉴스 시퀀스를 생성.
+var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
+
 var _state: SystemState = SystemState.UNINITIALIZED
 var _event_pool: Array[Dictionary] = []       ## Loaded event templates
 var _season_theme: Dictionary = {}            ## Active season theme
@@ -208,6 +212,7 @@ func reset() -> void:
 
 
 func _on_season_start() -> void:
+	_rng.seed = Time.get_ticks_usec()  ## ADR-018: 시즌 시작마다 새 엔트로피로 재시드
 	_load_event_pool()
 	_load_themes()
 	_select_season_theme()
@@ -336,16 +341,16 @@ func _select_season_theme() -> void:
 	if _all_themes.is_empty():
 		_season_theme = {}
 		return
-	_season_theme = _all_themes[randi() % _all_themes.size()]
+	_season_theme = _all_themes[_rng.randi() % _all_themes.size()]
 
 # ── Daily Schedule Generation (GDD Rule 2-1, States section) ──
 
 func _generate_daily_schedule() -> void:
 	_daily_schedule.clear()
 	for slot: Dictionary in _slot_config:
-		if randf() > slot["probability"]:
+		if _rng.randf() > slot["probability"]:
 			continue
-		var tick: int = randi_range(slot["tick_min"], slot["tick_max"])
+		var tick: int = _rng.randi_range(slot["tick_min"], slot["tick_max"])
 		var scope: String = _pick_scope()
 		var impact: String = _pick_impact()
 		_daily_schedule.append({
@@ -387,7 +392,7 @@ func _fire_event_from_slot(scope: String, impact: String, tick: int) -> void:
 		_daily_mega_fired = true
 
 	# Clustering prevention: same scope as last → 50% weight penalty, re-pick once
-	if scope == _last_slot_scope and randf() < CLUSTER_PENALTY_PROB:
+	if scope == _last_slot_scope and _rng.randf() < CLUSTER_PENALTY_PROB:
 		scope = _pick_scope()
 
 	var template: Dictionary = _select_template(scope, impact)
@@ -435,7 +440,7 @@ func _fire_event_from_slot(scope: String, impact: String, tick: int) -> void:
 	# Compute actual impact
 	var impact_min: float = template.get("impact_min", 0.01)
 	var impact_max: float = template.get("impact_max", 0.03)
-	var base_impact: float = randf_range(impact_min, impact_max)
+	var base_impact: float = _rng.randf_range(impact_min, impact_max)
 
 	# Build MarketEvent and push to PriceEngine
 	var event_type_str: String = template.get("event_type", "INSTANT_SHOCK")
@@ -580,7 +585,7 @@ func _pick_scope() -> String:
 	for v: float in adjusted.values():
 		total += v
 
-	var r: float = randf() * total
+	var r: float = _rng.randf() * total
 	var cumulative: float = 0.0
 	for scope: String in adjusted:
 		cumulative += adjusted[scope]
@@ -590,7 +595,7 @@ func _pick_scope() -> String:
 
 
 func _pick_impact() -> String:
-	var r: float = randf()
+	var r: float = _rng.randf()
 	var cumulative: float = 0.0
 	for impact: String in IMPACT_TIER_WEIGHTS:
 		cumulative += float(IMPACT_TIER_WEIGHTS[impact])
@@ -673,7 +678,7 @@ func _resolve_text(
 	for var_name: String in variables:
 		var candidates: Array = variables[var_name]
 		if not candidates.is_empty():
-			var picked: String = candidates[randi() % candidates.size()]
+			var picked: String = candidates[_rng.randi() % candidates.size()]
 			text = text.replace("{" + var_name + "}", picked)
 
 	return text
@@ -716,7 +721,7 @@ func _generate_overnight_events() -> void:
 	_overnight_buffer.clear()
 
 	# Determine overnight event count (0, 1, or 2)
-	var r: float = randf()
+	var r: float = _rng.randf()
 	var count: int = 0
 	if r < OVERNIGHT_PROBS[0]:
 		count = 0
@@ -730,8 +735,8 @@ func _generate_overnight_events() -> void:
 
 	for _i: int in range(count):
 		# Overnight: MACRO or SECTOR only, SMALL/MEDIUM only, GRADUAL_SHIFT only
-		var scope: String = "MACRO" if randf() < OVERNIGHT_MACRO_PROB else "SECTOR"
-		var impact: String = "SMALL" if randf() < OVERNIGHT_SMALL_PROB else "MEDIUM"
+		var scope: String = "MACRO" if _rng.randf() < OVERNIGHT_MACRO_PROB else "SECTOR"
+		var impact: String = "SMALL" if _rng.randf() < OVERNIGHT_SMALL_PROB else "MEDIUM"
 
 		var template: Dictionary = _select_overnight_template(scope, impact, overnight_mutex)
 		if template.is_empty():
@@ -755,7 +760,7 @@ func _generate_overnight_events() -> void:
 		if target_ids.is_empty():
 			continue
 
-		var base_impact: float = randf_range(
+		var base_impact: float = _rng.randf_range(
 			float(template.get("impact_min", 0.01)),
 			float(template.get("impact_max", 0.03))
 		)
@@ -793,20 +798,23 @@ func _generate_overnight_events() -> void:
 func _generate_overnight_disclosures() -> void:
 	## GDD Rule 7-2: Per-stock 5% chance of INDIVIDUAL overnight disclosure
 	for stock_id: String in StockDatabase.get_all_stock_ids():
-		if randf() >= OVERNIGHT_INDIVIDUAL_PROB:
+		if _rng.randf() >= OVERNIGHT_INDIVIDUAL_PROB:
 			continue
 
 		var stock: StockData = StockDatabase.get_stock(stock_id)
 		if stock == null:
 			continue
 
-		var direction: int = 1 if randf() < 0.5 else -1
-		var base_impact: float = randf_range(0.01, 0.05)
+		var direction: int = 1 if _rng.randf() < 0.5 else -1
+		const OVERNIGHT_DISCLOSURE_IMPACT_MIN: float = 0.01
+		const OVERNIGHT_DISCLOSURE_IMPACT_MAX: float = 0.05
+		const OVERNIGHT_DISCLOSURE_DECAY_TICKS: int = 60  ## 15분 = 60틱 (TICKS_PER_MINUTE × 15)
+		var base_impact: float = _rng.randf_range(OVERNIGHT_DISCLOSURE_IMPACT_MIN, OVERNIGHT_DISCLOSURE_IMPACT_MAX)
 
 		var market_event: MarketEvent = MarketEvent.gradual_shift(
 			base_impact, direction,
 			MarketEvent.EventScope.INDIVIDUAL, [stock_id],
-			60, MarketEvent.DecayCurve.LINEAR
+			OVERNIGHT_DISCLOSURE_DECAY_TICKS, MarketEvent.DecayCurve.LINEAR
 		)
 
 		var display_name: String = stock.get_display_name()
@@ -915,7 +923,7 @@ func _register_mutex(template: Dictionary, stock: StockData) -> void:
 func _resolve_direction(template: Dictionary) -> int:
 	var dir_val = template.get("direction", 1)
 	if dir_val is String and dir_val == "VARIABLE":
-		return 1 if randf() < 0.5 else -1
+		return 1 if _rng.randf() < 0.5 else -1
 	return int(dir_val)
 
 
@@ -935,9 +943,9 @@ func _weighted_random_pick(items: Array, weights: Array[float]) -> Variant:
 	for w: float in weights:
 		total += w
 	if total <= 0.0:
-		return items[randi() % items.size()]
+		return items[_rng.randi() % items.size()]
 
-	var r: float = randf() * total
+	var r: float = _rng.randf() * total
 	var cumulative: float = 0.0
 	for i: int in range(items.size()):
 		cumulative += weights[i]

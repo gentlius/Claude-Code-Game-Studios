@@ -90,6 +90,8 @@ var PRIZE_RATE: Dictionary = {
 @export var MIN_WEEKLY_TRADES: int = 2
 ## Most-trades prize rate (× tier entry threshold).
 @export var MOST_TRADES_PRIZE_RATE: float = 0.01
+## XP awarded to player for winning the weekly top-return prize (GDD §3-4).
+@export var WEEKLY_PRIZE_XP: int = 50
 
 # ── Config — Season Structure (GDD §7-1) ──
 ## Minimum season-level fills to qualify for prize payouts.
@@ -166,7 +168,7 @@ func start_season() -> bool:
 		on_tier_assigned.emit(_current_tier, get_tier_name(_current_tier))
 
 		# Initialise AI competitors (GDD §3-3 AI contract)
-		var seed_val: int = randi()
+		var seed_val: int = Time.get_ticks_usec()  ## ADR-018: 전역 randi() 대신 고해상도 타임스탬프로 세션별 엔트로피 격리
 		var participant_counts: Dictionary = _build_participant_counts()
 		AiCompetitor.init_season(_current_tier, participant_counts, seed_val)
 
@@ -389,7 +391,7 @@ func _on_week_end() -> void:
 		if player_is_weekly_top:
 			var prize: int = int(float(TIER_THRESHOLD[_current_tier]) * WEEKLY_PRIZE_RATE)
 			CurrencySystem.sim_add(prize)
-			XpSystem.grant_weekly_prize_xp(50)
+			XpSystem.grant_weekly_prize_xp(WEEKLY_PRIZE_XP)
 
 	# Snapshot for next week's return calculation, then reset weekly counter (Q4 decision).
 	_last_week_trade_count = _weekly_trade_count

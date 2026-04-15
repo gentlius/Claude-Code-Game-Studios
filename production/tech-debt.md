@@ -152,3 +152,84 @@ Sprint 8에서 QA Lead가 AC 체크리스트 기반 검증 실행 후 갱신.
 **출처**: 2026-04-15 전체 GDD 디자인 리뷰  
 **우선순위**: Low → 처리 완료 2026-04-15  
 **결과**: `src/deprecated/skill_tree_overlay.gd`로 이동. 코드/씬에서 미참조 확인됨.
+
+---
+
+## 코드 리뷰 2026-04-15 식별 항목 (전체 37개 파일)
+
+### TD-CR-03. SaveSystem.active_slot_id public 직접 쓰기 가능
+
+**출처**: 2026-04-15 전체 코드 리뷰  
+**우선순위**: Medium  
+**목표 스프린트**: Sprint 9  
+`active_slot_id`가 public var로 외부에서 직접 쓰기 가능. `get_active_slot_id()` 게터 추가 후 private으로 전환. 테스트 파일(6개) `before_each` 패턴도 함께 수정.
+
+### TD-CR-04. SettlementReporter._weekly_xp_gained 세이브/로드 간 소실
+
+**출처**: 2026-04-15 전체 코드 리뷰  
+**우선순위**: Low  
+**목표 스프린트**: Sprint 9  
+세이브/로드 시 주간 XP 누산값(`_weekly_xp_gained`)이 0으로 초기화됨. 주간 XP 표시가 세션 내 XP만 합산. SaveSystem 직렬화에 `settlement_reporter.weekly_xp_gained` 추가 필요.
+
+### TD-CR-05. 단위 테스트 미작성 시스템 (P1)
+
+**출처**: 2026-04-15 전체 코드 리뷰  
+**우선순위**: High  
+**목표 스프린트**: Sprint 8  
+다음 시스템에 전용 단위 테스트 파일 없음:
+- `StockDatabase`: `get_stock()`, `get_stocks_by_sector()`, `stock_exists()` 등 미검증
+- `FormatUtils`: 경계값(0, <1000, 음수, 매우 큰 수) 및 `pct()` 부호 로직 미검증
+- `CurrencySystem`: `sim_deduct()` 언더플로우, `award_prize()` 음수 가드 미검증
+- `PortfolioManager`: FIFO 평균 단가, 실현 손익, `update_valuation()` 공식 미검증
+- `NewsEventSystem`: 일별 스케줄 생성, 야간 이벤트, 지연 큐, 가중치 랜덤 픽 미검증
+
+### TD-CR-06. portfolio_view.gd _on_stop_take_btn_pressed() 138줄
+
+**출처**: 2026-04-15 전체 코드 리뷰  
+**우선순위**: Medium  
+**목표 스프린트**: Sprint 9  
+`_on_stop_take_btn_pressed()`가 138줄(40줄 한도 초과). `_build_stop_take_dialog()` 분리 및 Stop/Take 다이얼로그 내 플레이어 노출 문자열에 `tr()` 추가.
+
+### TD-CR-07. level_up_banner.gd _ready() 146줄
+
+**출처**: 2026-04-15 전체 코드 리뷰  
+**우선순위**: Low  
+**목표 스프린트**: Sprint 9  
+`_ready()` 146줄. `_build_flash_overlay()`, `_build_banner_panel()`, `_build_buttons()` 등으로 분리 필요.
+
+### TD-CR-08. tr() 미포장 문자열 잔여 (portfolio_view 다이얼로그, splash/start 브랜드명)
+
+**출처**: 2026-04-15 전체 코드 리뷰  
+**우선순위**: Low (로컬라이제이션 단계 전 충분)  
+**목표 스프린트**: Sprint 9 (Polish)  
+- `portfolio_view.gd` Stop/Take 다이얼로그 내 16개 문자열
+- `splash_screen.gd:83,90` `"SEED"`, `"M O N E Y"` (브랜드명 — 번역 제외 가능하나 주석 명시 필요)
+- `start_screen.gd:56` `"SEED MONEY"` (동일)
+
+### TD-CR-09. ThemeSetup 색상 상수 미사용 (inline Color 리터럴)
+
+**출처**: 2026-04-15 전체 코드 리뷰  
+**우선순위**: Low  
+**목표 스프린트**: Sprint 9  
+`start_screen.gd` 7개, `main_screen.gd` 일부 Color 리터럴이 ThemeSetup 상수 대신 직접 값으로 정의됨. 테마 일괄 변경 시 누락 위험.
+
+### TD-CR-10. game_clock.gd AUTO_SLOW_ON_EVENT 미사용 상수
+
+**출처**: 2026-04-15 전체 코드 리뷰  
+**우선순위**: Low  
+**목표 스프린트**: Beta 설정 UI 구현 시  
+`AUTO_SLOW_ON_EVENT` 상수가 선언되어 있으나 어디서도 읽히지 않음. 설정 UI 미구현 상태. 구현 또는 제거 결정 필요.
+
+### TD-CR-11. UIState enum 중복 (StatusBar vs TradingScreen)
+
+**출처**: 2026-04-15 전체 코드 리뷰  
+**우선순위**: Medium  
+**목표 스프린트**: Sprint 9  
+`StatusBar.UIState`와 `TradingScreen.UIState`가 동일 값을 별도 정의. 동기화 위험 내재. 공유 `ui_state_types.gd` 파일로 enum 분리하거나 StatusBar가 int 파라미터로 수신하는 방식으로 통일.
+
+### TD-CR-12. private 메서드 doc comment 전체 미작성
+
+**출처**: 2026-04-15 전체 코드 리뷰  
+**우선순위**: Low (public API 규칙은 준수 중)  
+**목표 스프린트**: Sprint 9 (일괄 처리)  
+`src/ui/*.gd` 전 파일의 복잡한 private 빌드 메서드(`_build_ui`, `_refresh_*`, `_show_*` 등)에 ## 주석 없음. 팀 가독성 개선을 위해 일괄 추가 권고.

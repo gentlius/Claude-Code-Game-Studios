@@ -26,6 +26,11 @@ var RANK_XP_TABLE: Array[int] = [500, 350, 250, 150, 150, 50]
 
 ## Alpha multiplier thresholds (GDD F1) — alpha = player daily return − market avg return.
 ## Array of [alpha_threshold_pct, multiplier] — checked in descending order.
+## Completion bonus: XP awarded for positive return with enough trades (GDD §3-4, §4-7)
+@export var COMPLETION_BONUS_XP: int = 20
+## Completion bonus: minimum filled orders required (mirrors SeasonManager.MIN_TRADES_FOR_RANK concept)
+@export var COMPLETION_MIN_TRADES: int = 5
+
 var DAILY_RETURN_MULTIPLIERS: Array[Array] = [
 	[3.0, 3.0],   # alpha ≥ +3%
 	[1.0, 2.0],   # alpha +1~3%
@@ -257,8 +262,8 @@ func grant_season_bonus(
 	# who finishes with return_pct >= 0% AND at least 5 filled orders.
 	# No XP penalty applies to the completion bonus (GDD §3-4, §4-7).
 	# See: design/gdd/season-manager.md AC-12, AC-19
-	if season_return_pct >= 0.0 and season_trade_count >= 5:
-		_grant_xp(20, "completion_bonus")
+	if season_return_pct >= 0.0 and season_trade_count >= COMPLETION_MIN_TRADES:
+		_grant_xp(COMPLETION_BONUS_XP, "completion_bonus")
 
 
 # ── Serialization ──

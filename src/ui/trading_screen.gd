@@ -110,8 +110,11 @@ func _sync_ui_state_from_clock() -> void:
 			_set_ui_state(UIState.MARKET_OPEN)
 		GameClock.MarketState.PAUSED:
 			_set_ui_state(UIState.PAUSED)
-		GameClock.MarketState.MARKET_CLOSED, GameClock.MarketState.DAY_TRANSITION:
+		GameClock.MarketState.MARKET_CLOSED:
 			_settlement_reporter.enqueue("daily")
+			_set_ui_state(UIState.SETTLEMENT)
+		GameClock.MarketState.DAY_TRANSITION:
+			# 로드 시 DAY_TRANSITION 복원 경로: settlement는 이미 완료됐으므로 enqueue 없이 UI 상태만 맞춤.
 			_set_ui_state(UIState.SETTLEMENT)
 		GameClock.MarketState.WEEK_END:
 			_settlement_reporter.enqueue("weekly")

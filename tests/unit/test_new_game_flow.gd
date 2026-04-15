@@ -107,7 +107,7 @@ func test_sim_cash_preserved_after_season_start() -> void:
 
 # ── 2시즌 이후 initial_seed 기준선 ──────────────────────────────────
 
-func test_initial_seed_uses_season_start_capital_not_hardcoded() -> void:
+func test_initial_seed_uses_season_start_deposit_not_hardcoded() -> void:
 	# 2시즌: 이전 시즌 수익 200만으로 시작
 	CurrencySystem.init_first_season()
 	CurrencySystem.sim_add(1_000_000)  # 수익 100만 추가 → 총 200만
@@ -116,10 +116,10 @@ func test_initial_seed_uses_season_start_capital_not_hardcoded() -> void:
 	SeasonManager.start_season()
 
 	# 수익률 0% 기준선 = 시즌 시작 자산 (2,000,000)
-	var start_cap: int = SeasonManager.get_season_start_capital()
+	var start_cap: int = SeasonManager.get_season_start_deposit()
 	assert_eq(start_cap, 2_000_000, "시즌 시작 자본 = 2,000,000")
 
 	# total_assets == start_cap일 때 return_rate == 0%
 	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)
 	assert_almost_eq(PortfolioManager.get_return_rate(), 0.0, 0.01,
-		"시즌 시작 직후 수익률 = 0% (initial_seed = season_start_capital)")
+		"시즌 시작 직후 수익률 = 0% (initial_seed = season_start_deposit)")

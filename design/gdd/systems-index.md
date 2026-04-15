@@ -43,10 +43,12 @@
 | 17 | 프로그레션 UI (Progression UI) | UI | V-Slice | In Review | ✅ Done | [progression-ui.md](progression-ui.md) | 경험치 시스템, 스킬 트리, 게임 시계, 트레이딩 스크린 |
 | 18 | 세이브/로드 (Save/Load) | Persistence | Alpha | Approved | ✅ Done | [save-load.md](save-load.md) | 포트폴리오, 스킬 트리, 시즌, 경험치 |
 | 19 | 오디오 시스템 (Audio) | Audio | Alpha | Approved | ✅ Done | [audio.md](audio.md) | 주문 엔진, 뉴스 시스템 |
-| 20 | 라이프스타일 소비 (Lifestyle Spending) | Economy | Beta | Draft | — | [lifestyle-spending.md](lifestyle-spending.md) | 재화 시스템, 시즌 관리, 세이브/로드 |
+| 20 | 라이프스타일 소비 (Lifestyle Spending) | Economy | Beta | Draft | — ¹ | [lifestyle-spending.md](lifestyle-spending.md) | 재화 시스템, 시즌 관리, 세이브/로드 |
 | 21 | 수익 실현 팡파레 (Profit Celebration) | UI | Beta | Draft | — | [profit-celebration.md](profit-celebration.md) | 주문 엔진, 오디오, 트레이딩 스크린 |
 | 22 | 튜토리얼 (Tutorial) | Meta | Full | Not Started | — | — | 전체 게임플레이 시스템 |
 | 23 | 설정 (Settings) | Meta | Full | Not Started | — | — | — |
+
+> **¹ 라이프스타일 소비 Alpha 폴백**: Alpha 빌드에서 `LifestyleManager`는 존재하지 않으며 `tangible_assets = 0`으로 고정. `SeasonManager`는 시즌 종료 후 라이프스타일 처리 단계를 건너뛴다. Beta Sprint 9(B-02)에서 첫 기능 활성화 예정. 상세 내용: `lifestyle-spending.md §1 Overview Alpha 폴백 박스` 참조.
 
 ---
 

@@ -1,8 +1,8 @@
 # Start Screen — GDD
 
-**Status**: In Review
-**Sprint**: S5
-**Owner**: ui-programmer / gameplay-programmer
+> **Status**: In Review
+> **Sprint**: S5
+> **Owner**: ui-programmer / gameplay-programmer
 
 ---
 
@@ -81,7 +81,7 @@ Start Screen에서 기존 슬롯을 클릭해 이어하거나, 새 슬롯을 생
 | 평가금액 | 저장 시점 계산·캐시 | `₩{N:,}` |
 | 저장 시각 | `save_index.json saved_at` | `YYYY-MM-DD` |
 
-**평가금액** = `sim_cash + Σ(holding.quantity × current_price)`  
+**평가금액** = `CurrencySystem.get_account_total_value()` (= `sim_cash + reserved_cash + Σ(holding.quantity × current_price)`)  
 저장 시점에 계산하여 `save_index.json`에 캐시. 로드 없이 표시.
 
 **슬롯 이름 인라인 편집**: 이름 텍스트 클릭 → LineEdit 진입 → Enter 또는 포커스 해제로 확정
@@ -120,7 +120,8 @@ Start Screen에서 기존 슬롯을 클릭해 이어하거나, 새 슬롯을 생
 ## 4. Formulas
 
 ```
-평가금액 = sim_cash + Σ(holding.quantity × current_price)
+평가금액 = account_total_value = sim_cash + reserved_cash + Σ(holding.quantity × current_price)
+         # CurrencySystem.get_account_total_value() 또는 PortfolioManager.get_total_assets()
 
 슬롯 ID 할당:
   next_id = max(existing_ids) + 1  # 기존 슬롯 없으면 0

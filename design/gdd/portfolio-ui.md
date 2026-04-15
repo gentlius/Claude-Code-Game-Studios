@@ -47,7 +47,7 @@
 ```
 
 > **참고**: 와이어프레임은 단일 종목(STC 10주) 보유 예시. 총 평가금액 ₩1,015,000 =
-> 예수금 ₩300,000 + STC 평가 ₩715,000. 시드는 `SeasonManager.get_season_start_capital()`에서 가져온다. 복수 종목 예시는 상세 뷰 참조.
+> 예수금 ₩300,000 + STC 평가 ₩715,000. 시드는 `SeasonManager.get_season_start_deposit()`에서 가져온다. 복수 종목 예시는 상세 뷰 참조.
 
 - 보유 종목 리스트: 종목코드, 수량, 현재가, 수익률(%), 평가금액
 - 수익률 색상: 빨강(+), 파랑(-), 회색(0)
@@ -97,12 +97,12 @@
 
 | 표시 항목 | 설명 | 갱신 주기 |
 |----------|------|---------|
-| 총 평가금액 | sim_total_assets | 매 틱 |
+| 총 평가금액 | account_total_value (= PortfolioManager.get_total_assets()) | 매 틱 |
 | 수익률 (%) | return_rate | 매 틱 |
 | 예수금 + 비중 | sim_cash + cash_weight | 매매 시 |
 | 미체결예약 + 비중 | reserved_cash (OrderEngine → PortfolioManager 캐시) | 주문 제출·체결·만료 시 |
 | 주식 평가액 + 비중 | stock_value + stock_weight | 매 틱 |
-| 시드 자본 | SeasonManager.get_season_start_capital() | 시즌 시작 시 1회 |
+| 시드 자본 | SeasonManager.get_season_start_deposit() | 시즌 시작 시 1회 |
 | 시즌 순위 | 시즌 관리 시스템에서 제공 | 틱 단위 또는 일 단위 |
 
 ##### 2-2. 보유 종목 카드
@@ -213,12 +213,12 @@ display_return_pct = round(unrealized_pnl / total_invested × 100, 1)
 ### F2. 포트폴리오 비중
 
 ```
-weight_pct = round(holding_value / sim_total_assets × 100, 1)
-cash_weight_pct = round(sim_cash / sim_total_assets × 100, 1)
-reserved_weight_pct = round(reserved_cash / sim_total_assets × 100, 1)
+weight_pct = round(holding_value / account_total_value × 100, 1)
+cash_weight_pct = round(sim_cash / account_total_value × 100, 1)
+reserved_weight_pct = round(reserved_cash / account_total_value × 100, 1)
 ```
 
-`sim_total_assets = sim_cash + reserved_cash + Σ(holding_value)`.
+`account_total_value = sim_cash + reserved_cash + Σ(holding_value)`.
 전 비중의 합 (주식 + 현금 + 예약) = 100% (반올림 오차 ±0.1% 허용).
 
 ### F3. 금액 포맷팅

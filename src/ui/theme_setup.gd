@@ -46,6 +46,17 @@ const BTN_ACCENT_HOVER: Color = Color(0.30, 0.30, 0.33) # #4D4D54
 
 const SEPARATOR: Color = Color(0.92, 0.92, 0.93)        # #EBEBEE
 
+# Dark layout — main frame background and tab bar (HTS-style dark chrome).
+# Content panels use the white-base palette above; only the outer frame is dark.
+const LAYOUT_BG: Color = Color(0.08, 0.08, 0.09)            # #141416 page frame
+const LAYOUT_PANEL: Color = Color(0.12, 0.12, 0.13)          # #1F1F21 tab bar / inactive
+const LAYOUT_TAB_ACTIVE_BG: Color = Color(0.18, 0.18, 0.20)  # #2E2E33 active tab bg
+const LAYOUT_TAB_BORDER: Color = Color(0.3, 0.6, 1.0)        # #4D99FF active tab underline
+const LAYOUT_EXIT_HOVER_BG: Color = Color(0.22, 0.12, 0.12)  # #381F1F exit button danger hover
+const LAYOUT_TAB_TEXT: Color = Color(0.7, 0.7, 0.7)          # #B3B3B3 inactive tab label
+const LAYOUT_EXIT_TEXT: Color = Color(0.55, 0.55, 0.55)       # #8C8C8C exit button normal text
+const LAYOUT_EXIT_TEXT_HOVER: Color = Color(0.85, 0.5, 0.5)   # #D98080 exit button hover text
+
 # Tab button states — active tab uses dark accent, inactive uses default
 const TAB_ACTIVE_BG: Color = Color(0.20, 0.20, 0.22)    # #333338 same as BTN_ACCENT
 const TAB_ACTIVE_HOVER: Color = Color(0.30, 0.30, 0.33)  # #4D4D54

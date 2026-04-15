@@ -57,7 +57,7 @@ func capture() -> Dictionary:
 		"season_is_free_market":    SeasonManager.get_is_free_market(),
 		"season_return_pct":        SeasonManager.get_season_return_pct(),
 		"season_weekly_return_pct": SeasonManager.get_weekly_return_pct(),
-		"season_start_capital":     SeasonManager._season_start_capital,
+		"season_start_deposit":     SeasonManager._season_start_deposit,
 		"season_weekly_start_cap":  SeasonManager._weekly_start_capital,
 		"season_weekly_trades":     SeasonManager.get_weekly_trade_count(),
 		"season_seasons_played":    SeasonManager._seasons_played,

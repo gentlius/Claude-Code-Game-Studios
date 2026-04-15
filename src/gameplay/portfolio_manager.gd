@@ -35,7 +35,7 @@ func _on_season_start() -> void:
 	_holdings.clear()
 	_transactions.clear()
 	_next_tx_id = 1
-	_initial_seed = SeasonManager.get_season_start_capital()
+	_initial_seed = SeasonManager.get_season_start_deposit()
 
 # ── Public API: Queries ──
 
@@ -60,6 +60,12 @@ func get_holding_count() -> int:
 ## Returns cached total assets (updated by update_valuation).
 func get_total_assets() -> int:
 	return _cached_total_assets
+
+
+## Returns the stock-holdings value only (excludes sim_cash and reserved_cash).
+## Used by GrowthScreen asset panel as "계좌 총 평가금액".
+func get_account_total_value() -> int:
+	return maxi(0, _cached_total_assets - _cached_sim_cash - _cached_reserved_cash)
 
 
 ## Returns cached return rate % (updated by update_valuation).

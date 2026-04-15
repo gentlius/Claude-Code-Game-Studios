@@ -135,7 +135,7 @@ func _update_left_panel() -> void:
 	_lbl_season_return.add_theme_color_override("font_color",
 		COLOR_POSITIVE if season_pct >= 0.0 else COLOR_NEGATIVE)
 
-	var start_cap: int = SeasonManager.get_season_start_capital()
+	var start_cap: int = SeasonManager.get_season_start_deposit()
 	var current_assets: int = PortfolioManager.get_total_assets()
 	_lbl_season_value.text = "₩%s → ₩%s" % [_fmt_comma(start_cap), _fmt_comma(current_assets)]
 

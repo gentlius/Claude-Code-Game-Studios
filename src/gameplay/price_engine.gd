@@ -167,6 +167,11 @@ static func round_to_tick(raw_price: float) -> int:
 
 # ── Per-Stock Runtime State ──
 
+## Dedicated RNG instance for all price randomness (ADR-018).
+## Re-seeded on every session start (game launch, load, new game) with wall-clock time.
+## State is NOT persisted — prevents price-scouting via save/reload.
+var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
+
 var _stock_states: Dictionary = {}  ## stock_id -> _StockState
 var _engine_state: EngineState = EngineState.UNINITIALIZED
 var _transition_matrices: Dictionary = {}  ## stock_id -> Array[Array[float]]
@@ -192,6 +197,15 @@ func _ready() -> void:
 	# _process_tick() to enforce the GDD-mandated News → Price → Order order.
 	GameClock.on_season_start.connect(_on_season_start)
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
+	_reseed_session()
+
+
+## Re-seed the price RNG from wall-clock time (ADR-018).
+## Called on every session boundary (game launch, load, new game) so that
+## the same save file always produces different intraday prices on each load.
+## Tests override _rng.seed directly after calling this.
+func _reseed_session() -> void:
+	_rng.seed = Time.get_ticks_usec()
 
 
 func _on_season_start() -> void:
@@ -205,6 +219,7 @@ func _on_season_start() -> void:
 ## Backward-compat: old saves with "closing_prices" flat dict are still accepted.
 ## Engine enters READY state; transitions to RUNNING when player opens market.
 func initialize_for_load(save_data: Dictionary) -> void:
+	_reseed_session()  # ADR-018: new session → fresh intraday RNG
 	_stock_states.clear()
 	_transition_matrices.clear()
 
@@ -233,7 +248,7 @@ func initialize_for_load(save_data: Dictionary) -> void:
 		if bias_val >= SeasonBias.BULL and bias_val <= SeasonBias.BEAR:
 			bias = bias_val as SeasonBias
 		else:
-			var r: float = randf()
+			var r: float = _rng.randf()
 			if   r < BIAS_BULL_PROB:        bias = SeasonBias.BULL
 			elif r < BIAS_NEUTRAL_CUTOFF:   bias = SeasonBias.NEUTRAL
 			else:                            bias = SeasonBias.BEAR
@@ -402,7 +417,7 @@ func push_event(event: MarketEvent) -> void:
 
 ## Returns a randomly selected SeasonBias (BULL 40%, NEUTRAL 30%, BEAR 30%).
 func _random_bias() -> SeasonBias:
-	var r: float = randf()
+	var r: float = _rng.randf()
 	if r < BIAS_BULL_PROB:
 		return SeasonBias.BULL
 	elif r < BIAS_NEUTRAL_CUTOFF:
@@ -416,6 +431,7 @@ func _random_bias() -> SeasonBias:
 ## before any UI is created. Does NOT emit on_price_updated — StockListPanel._ready()
 ## performs the initial render by reading PriceEngine directly.
 func init_first_season() -> void:
+	_reseed_session()  # ADR-018: new game = new session → fresh intraday RNG
 	_stock_states.clear()
 	_transition_matrices.clear()
 
@@ -599,7 +615,7 @@ func _process_stock_tick(stock_id: String, tick_in_day: int) -> void:
 		if s["state_duration"] >= min_dur:
 			var matrix: Array = _transition_matrices[stock_id]
 			var row: Array = matrix[s["markov_state"]]
-			var roll: float = randf()
+			var roll: float = _rng.randf()
 			var cumulative: float = 0.0
 			for j: int in range(7):
 				cumulative += row[j]
@@ -1052,8 +1068,8 @@ func _build_transition_matrix(
 
 ## Box-Muller transform for normal distribution sampling.
 func _randn() -> float:
-	var u1: float = randf()
-	var u2: float = randf()
+	var u1: float = _rng.randf()
+	var u2: float = _rng.randf()
 	if u1 < 1e-10:
 		u1 = 1e-10
 	return sqrt(-2.0 * log(u1)) * cos(TAU * u2)

@@ -75,6 +75,23 @@
 
 ---
 
+## 베타 코드 리뷰 잔여 항목 (2026-04-14)
+
+### ✅ TD-CR-01. ai_competitor.gd EOD 재계산 O(day) — **해결됨 (2026-04-14)**
+
+- `_compute_eod_for`에 `eod_rng_states: Array[int]` 캐시 도입. 전일 EOD RNG 상태를 저장해
+  다음 호출 시 O(1) 한 스텝만 진행. Day 0 또는 캐시 미존재 시만 O(day) 재계산.
+
+### TD-CR-02. 게임패드 홀딩 목록 탐색 불가
+
+- **현황**: `portfolio_view.gd` 홀딩 목록 행(`HBoxContainer`)이 `MOUSE_FILTER_STOP`만 설정.
+  `focus_mode` 미설정으로 키보드/게임패드 탐색 불가. ADR ui-code.md 규칙("키보드/마우스 AND 게임패드") 위반.
+- **영향**: 포트폴리오 뷰에서 종목 클릭 → 차트 전환 기능을 게임패드로 사용 불가.
+- **우선순위**: Low (현재 마우스 중심 UI이지만 접근성 규칙 위반)
+- **목표 스프린트**: Sprint 9 (Polish 단계)
+- **제안 수정**: 각 홀딩 행에 `focus_mode = Control.FOCUS_ALL` + `focus_neighbor_*` 설정.
+  방향키로 행 이동, Enter로 `stock_clicked` 발행.
+
 ## 잔여 오픈 항목
 
 ### TD-AUDIT-01. settlement_reporter.gd 레이스 컨디션

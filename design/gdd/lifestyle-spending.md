@@ -10,7 +10,11 @@
 
 ## 1. Overview
 
-<!-- TODO: 작성 예정 -->
+> **Alpha 폴백**: 이 시스템은 Beta 스코프다. Alpha 빌드에서는 `LifestyleManager`가 존재하지 않으며,
+> `SeasonManager._on_season_end()`는 `LifestyleManager.process_offseason()` 호출을 건너뛴다.
+> Alpha 시즌 전환 흐름: 시즌 종료 → 강제 청산 → 상금 `settle_to_cash()` → PRE_SEASON 직접 진입.
+> 라이프스타일 화면 없음, 거주지 배경 변경 없음, `tangible_assets = 0`으로 고정.
+> Beta Sprint 9(B-02)에서 주거 아트 추가 시 이 시스템의 첫 기능이 활성화된다.
 
 라이프스타일 소비 시스템은 투자 대회 경쟁과 병렬로 운영되는 자산 성장 루프다.
 플레이어는 투자 수익을 현금 자산으로 전환하여 부동산·사치품·사회공헌·대안 투자 등에 지출하고,
@@ -68,7 +72,7 @@
 season-manager.md의 11단계 티어 거주지 진행표를 기반으로 한다.
 티어 자산 임계값이 "해금" 조건이고, 명성 포인트 소비가 "실제 입주" 조건이다.
 
-| 거주지 | 구매 비용 (sim_cash 차감) | 해금 조건 |
+| 거주지 | 구매 비용 (cash_assets 차감) | 해금 조건 |
 |-------|------------------------|---------|
 | 고시원 | 기본 제공 | — |
 | 원룸 월세 보증금 | TODO | TODO |
@@ -116,10 +120,10 @@ season-manager.md의 11단계 티어 거주지 진행표를 기반으로 한다.
 
 **부동산 (임대 수익형)**
 
-- 매입 시 sim_cash 차감 → 매 시즌 비시즌 정산 시 임대 수익 sim_cash 입금
+- 매입 시 cash_assets 차감 → 매 시즌 비시즌 정산 시 임대 수익 cash_assets 입금
 - 수익률: 시즌당 TODO % (연 3~6% 기준 환산)
 - 시즌 사이 매각 가능: 원가 ± 가격 변동 모디파이어
-- **랭킹 산정에서 제외**: `sim_total_assets = sim_cash + reserved_cash + portfolio_value` (부동산 미포함)
+- **랭킹 산정에서 제외**: `account_total_value = sim_cash + reserved_cash + portfolio_value` (부동산 미포함)
 
 | 부동산 종류 | 매입가 | 시즌 수익 | 비고 |
 |-----------|--------|---------|------|
@@ -224,7 +228,7 @@ rental_income_per_season = property_value × RENTAL_YIELD_RATE
 ```
 total_assets = cash_assets + account_total_value + Σ(tangible_asset_values)
 
-account_total_value = deposit + trading_pnl          # 시즌 중
+account_total_value = sim_cash + trading_pnl          # 시즌 중 (sim_cash = 예수금 잔액)
                     = 0                               # 시즌 시작 전 (예수금 입금 전)
 
 tangible_asset_value = purchase_price
@@ -250,12 +254,12 @@ account_total_value = 0
 ### 시즌 시작 전 예수금 자동 입금
 
 ```
-auto_deposit = tier_threshold(max_tier_accessible(cash_assets))
-# 단, cash_assets ≤ 100만원이면 auto_deposit = cash_assets (전액)
-# 단, deposit < 100만원이면 출금 불가 (최소 보장)
-deposit = auto_deposit
-cash_assets -= auto_deposit
-tier = tier_by_deposit(deposit)
+season_start_deposit = tier_threshold(max_tier_accessible(cash_assets))
+# 단, cash_assets ≤ 100만원이면 season_start_deposit = cash_assets (전액)
+# 단, season_start_deposit < 100만원이면 출금 불가 (최소 보장)
+sim_cash = season_start_deposit          # 예수금 자동 입금 (CurrencySystem.auto_deposit_to_sim())
+cash_assets -= season_start_deposit
+tier = tier_by_deposit(season_start_deposit)
 ```
 
 ---
@@ -281,7 +285,7 @@ tier = tier_by_deposit(deposit)
 | 시스템 | 방향 | 내용 |
 |--------|------|------|
 | `SeasonManager` | ← LifestyleSpending | 비시즌 윈도우 진입/종료 신호. 시즌 결산 자산 제공 |
-| `CurrencySystem` | ← LifestyleSpending | `sim_cash` 직접 차감/입금 |
+| `CurrencySystem` | ← LifestyleSpending | `cash_deduct()` / `cash_add()` — 현금 자산 직접 차감/입금 |
 | `SaveSystem` | ← LifestyleSpending | 보유 부동산, 스타트업 투자, 구매 품목, 칭호 직렬화 |
 | `GrowthScreen (F3)` | ← LifestyleSpending | 현재 거주지 배경 이미지, 칭호 목록 표시 |
 | `LeagueUI (F2)` | ← LifestyleSpending | 플레이어 칭호, 재단명 표시 |
@@ -312,14 +316,14 @@ tier = tier_by_deposit(deposit)
 
 | ID | 조건 | 검증 방법 |
 |----|------|----------|
-| AC-01 | 비시즌 정산(임대 수익, 스타트업 엑싯, Recurring 비용)이 시즌 종료 후 자동 처리된다 | 부동산 보유 상태로 시즌 종료 후 sim_cash 갱신 확인 |
-| AC-02 | 라이프스타일 소비 화면에서 구매 시 sim_cash가 즉시 차감된다 | 구매 전후 잔액 비교 |
+| AC-01 | 비시즌 정산(임대 수익, 스타트업 엑싯, Recurring 비용)이 시즌 종료 후 자동 처리된다 | 부동산 보유 상태로 시즌 종료 후 cash_assets 갱신 확인 |
+| AC-02 | 라이프스타일 소비 화면에서 구매 시 cash_assets가 즉시 차감된다 | 구매 전후 잔액 비교 |
 | AC-03 | "소비 후 잔여" 수치가 구매 선택에 따라 실시간 갱신된다 | 여러 항목 선택 중 수치 변화 확인 |
 | AC-04 | 소비 후 잔여 자산이 다음 시즌 시드 및 티어 배정 기준이 된다 | 의도적으로 티어 임계값 이하로 소비 후 티어 하락 확인 |
 | AC-05 | 거주지 업그레이드 시 "이사 날" 연출이 재생된다 | 거주지 구매 후 풀스크린 페이드 연출 확인 |
 | AC-06 | F3 화면 배경이 현재 거주지 이미지로 표시된다 | 거주지 변경 후 F3 진입 확인 |
 | AC-07 | 획득 칭호가 F2 리그 프로필에 표시된다 | 칭호 조건 충족 후 F2 확인 |
-| AC-08 | 부동산 자산이 리그 랭킹 산정 sim_total_assets에 포함되지 않는다 | 부동산 보유 상태에서 랭킹 계산 로직 검증 |
+| AC-08 | 부동산 자산이 리그 랭킹 산정 account_total_value에 포함되지 않는다 | 부동산 보유 상태에서 랭킹 계산 로직 검증 (유형자산은 tangible_assets 별도 집계) |
 | AC-09 | 비시즌 윈도우 스킵 시 비시즌 정산은 자동 처리된다 | 소비 없이 "다음 시즌 시작" 클릭 후 임대 수익 반영 확인 |
 | AC-10 | 소비 후 잔여 < 100만원이면 프리마켓 진입 경고가 표시된다 | 경고 없이 프리마켓 진입 불가 확인 |
 
@@ -354,8 +358,8 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [ ] `save_system.gd`: 라이프스타일 상태 직렬화 추가 (보유 부동산, 스타트업 투자, 구매 품목, 칭호)
 
 ### 의존하는 외부 메서드 존재 확인
-- [ ] `CurrencySystem.sim_deduct(amount)` — 존재 확인
-- [ ] `CurrencySystem.sim_add(amount)` — 존재 확인
+- [ ] `CurrencySystem.cash_deduct(amount)` — 신규 추가 필요
+- [ ] `CurrencySystem.cash_add(amount)` — 신규 추가 필요
 - [ ] `SeasonManager.get_settled_assets()` — 신규 추가 필요 여부 확인
 - [ ] `NewsEventSystem.inject_event(text)` 또는 동등 메서드 — 존재 확인
 

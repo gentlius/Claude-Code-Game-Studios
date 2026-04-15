@@ -54,6 +54,7 @@ func test_new_game_10day_save_load_consistency() -> void:
 	# Phase 1: 새 게임 초기화
 	# ══════════════════════════════════════════
 	_sim.reset_all_for_restart()
+	PriceEngine.init_first_season()  ## Populate _stock_states so prices are non-zero during sim
 	CurrencySystem.init_first_season()
 	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)
 	_slot_id = SaveSystem.create_slot(_TEST_SLOT_NAME)

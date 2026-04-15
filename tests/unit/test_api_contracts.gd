@@ -12,7 +12,7 @@ func test_currency_system_api():
 	assert_true(CurrencySystem.has_method("get_deposit"),       "get_deposit 존재")
 	assert_true(CurrencySystem.has_method("sim_deduct"),        "sim_deduct 존재")
 	assert_true(CurrencySystem.has_method("sim_add"),           "sim_add 존재")
-	assert_true(CurrencySystem.has_method("settle_season"),     "settle_season 존재")
+	assert_true(CurrencySystem.has_method("settle_to_cash"),    "settle_to_cash 존재")
 	assert_true(CurrencySystem.has_method("reset"), "reset 존재")
 
 
@@ -92,7 +92,7 @@ func test_season_manager_api():
 	assert_true(SeasonManager.has_method("get_is_free_market"),     "get_is_free_market 존재")
 	assert_true(SeasonManager.has_method("get_season_return_pct"),  "get_season_return_pct 존재")
 	assert_true(SeasonManager.has_method("get_weekly_return_pct"),  "get_weekly_return_pct 존재")
-	assert_true(SeasonManager.has_method("get_season_start_capital"), "get_season_start_capital 존재")
+	assert_true(SeasonManager.has_method("get_season_start_deposit"), "get_season_start_deposit 존재")
 	assert_true(SeasonManager.has_method("is_season_active"),          "is_season_active 존재")
 	assert_true(SeasonManager.has_method("get_leaderboard"),           "get_leaderboard 존재")
 	assert_true(SeasonManager.has_method("get_tier_rank"),             "get_tier_rank 존재")

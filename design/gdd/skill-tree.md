@@ -213,6 +213,7 @@ margin_call_threshold = -(initial_investment / LEVERAGE_RATIO)
 | 차트 렌더러 | Soft | `is_skill_unlocked("A1"/"A2"/"A3"/"A4")` → 표시할 지표 결정 |
 | 뉴스/이벤트 | Soft | `get_news_delay_ticks()` → 뉴스 딜레이 |
 | 주문 엔진 | Soft | `is_skill_unlocked("TR1"/"TR2"/"TR3"/"TR4")` → 허용 주문 유형 |
+| StopTakeSystem | Soft | `is_skill_unlocked("TR1")`, `is_skill_unlocked("TR2")` → 손절/익절 감시 활성화 여부 판단. TR2 해금 시 `check_and_trigger()` 실행 경로 활성화 |
 | 포트폴리오 관리 | Soft | `get_max_holdings()` → 최대 보유 종목 수 |
 | 스킬 트리 UI | Hard | `get_all_skills()`, `unlock_skill(id)`, `get_skill_state(id)` |
 | 세이브/로드 | Hard | 해금 상태 직렬화/역직렬화 |
@@ -249,7 +250,7 @@ margin_call_threshold = -(initial_investment / LEVERAGE_RATIO)
 
 ## Open Questions
 
-- 공매도(TR3)/레버리지(TR4)는 MVP 범위 밖. V-Slice에서 스킬 트리에 표시하되 해금 불가로 처리할지, 아예 숨길지 결정 필요
+- ~~공매도(TR3)/레버리지(TR4)는 MVP 범위 밖. V-Slice에서 스킬 트리에 표시하되 해금 불가로 처리할지, 아예 숨길지 결정 필요~~ **결정(2026-04-14)**: V-Slice에서 TR3/TR4 노드는 스킬 트리에 **표시하되 잠금 상태(LOCKED)** 유지. 해금은 Beta Sprint 9(B-07b/B-07c)에서 구현. 이유: 노드 표시로 진행감 제공(로드맵 가시화), 숨기면 "성장 서사" 필라에 반함.
 - 리스펙(스킬 초기화) 기능 추가 여부 — 현재는 비가역. 향후 프리미엄 리셋 아이템 가능성
 - 루머 채널(S3)의 구체적 UX: 별도 패널? 뉴스 피드에 "[루머]" 태그?
 

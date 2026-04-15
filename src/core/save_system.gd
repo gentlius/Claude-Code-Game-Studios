@@ -13,7 +13,7 @@ signal save_completed
 
 # ── Constants ──
 
-const SAVE_VERSION: int = 2
+const SAVE_VERSION: int = 3
 const INDEX_VERSION: int = 1
 const SAVE_INDEX_PATH: String = "user://save_index.json"
 const LEGACY_SAVE_PATH: String = "user://save_data.json"  ## v1 단일 슬롯 경로 (마이그레이션용)
@@ -50,6 +50,12 @@ func _on_market_state_changed_for_save(
 
 
 # ── Public API ──
+
+## Returns true if a file write is currently in progress.
+## Callers use this instead of reading the private _save_pending field directly.
+func is_save_pending() -> bool:
+	return _save_pending
+
 
 ## Returns Array[Dictionary] of slot metadata sorted by saved_at DESC.
 ## Each entry: {id, name, level, season_number, fiction_week, fiction_day, portfolio_value, saved_at}
@@ -148,6 +154,8 @@ func load_slot(id: int) -> bool:
 		AiCompetitor.load_save_data(data.get("ai", {}))
 		NewsEventSystem.load_save_data(data.get("news", {}))
 
+	# StopTakeSystem은 holding 복원 이후에 로드해야 holding 유효성 검사가 가능 (EC-16)
+	StopTakeSystem.load_save_data(data.get("stop_take", []))
 	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)
 	active_slot_id = id
 	return true
@@ -173,6 +181,7 @@ func save_slot(id: int) -> bool:
 		"clock": GameClock.get_save_data(),
 		"ai": AiCompetitor.get_save_data(),
 		"news": NewsEventSystem.get_save_data(),
+		"stop_take": StopTakeSystem.get_save_data(),
 	}
 
 	var path: String = "user://save_slot_%d.json" % id

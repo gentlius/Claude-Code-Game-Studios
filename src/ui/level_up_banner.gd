@@ -121,7 +121,7 @@ func _ready() -> void:
 	bottom_row.add_child(spacer)
 
 	_btn_skill_tree = Button.new()
-	_btn_skill_tree.text = tr("스킬 트리 열기  K")
+	_btn_skill_tree.text = tr("해금하러 가기")
 	_btn_skill_tree.add_theme_font_size_override("font_size", 12)
 	_btn_skill_tree.pressed.connect(func() -> void:
 		hide_banner()

@@ -2,6 +2,7 @@
 ## 5 subcomponents: StockListPanel, StatusBar, OrderPanel, SettlementReporter, ToastManager.
 ## TradingScreen 자체는 UIState 전환, 키보드 입력, 시그널 중계만 담당한다.
 ## See: design/gdd/trading-screen.md §10
+class_name TradingScreen
 extends Control
 
 # ── Enums ──
@@ -22,6 +23,8 @@ signal stock_selected(stock_id: String)
 
 ## Emitted when the player clicks the league HUD → MainScreen switches tab (ADR-006).
 signal league_tab_requested()
+## Emitted when SP alert or LevelUpBanner → MainScreen switches to F3 growth tab.
+signal growth_tab_requested()
 ## TD-03: relayed up to MainScreen → GameClock.toggle_pause().
 signal pause_toggle_requested()
 ## TD-03: relayed up to MainScreen → GameClock.set_speed().
@@ -58,7 +61,6 @@ var _toast_manager: ToastManager
 var _chart_renderer: Control
 var _pause_overlay: Panel
 var _level_up_banner: LevelUpBanner
-var _skill_tree_overlay: SkillTreeOverlay
 
 # ── Lifecycle ──
 
@@ -78,14 +80,12 @@ func _connect_signals() -> void:
 	_status_bar.pause_toggled.connect(_handle_pause_toggle)
 	_status_bar.speed_changed.connect(_set_speed)
 	_status_bar.market_open_pressed.connect(_on_btn_market_open_pressed)
-	_status_bar.xp_bar.skill_tree_requested.connect(_toggle_skill_tree)
+	_status_bar.growth_tab_requested.connect(func() -> void: growth_tab_requested.emit())
 	_settlement_reporter.settlement_confirmed.connect(func() -> void: GameClock.confirm_transition())
 	_settlement_reporter.needs_level_up.connect(_on_settlement_needs_level_up)
-	_settlement_reporter.xp_animate_requested.connect(func() -> void: _status_bar.xp_bar.animate_xp_gain())
 	_toast_manager.news_received.connect(_on_news_received)
-	_level_up_banner.skill_tree_requested.connect(_toggle_skill_tree)
+	_level_up_banner.skill_tree_requested.connect(func() -> void: growth_tab_requested.emit())
 	_level_up_banner.banner_closed.connect(func() -> void: GameClock.confirm_transition())
-	_skill_tree_overlay.pause_toggle_requested.connect(func() -> void: pause_toggle_requested.emit())
 	if _chart_renderer.has_signal("price_clicked"):
 		_chart_renderer.price_clicked.connect(
 			func(price: int) -> void: _order_panel.set_limit_price_from_chart(price)
@@ -98,10 +98,6 @@ func _connect_signals() -> void:
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
 	GameClock.on_market_close.connect(func() -> void: _stock_list.snapshot_prev_close())
 	OrderEngine.on_order_filled.connect(_on_order_filled)
-	XpSystem.on_xp_gained.connect(func(_a: int, _t: int, _s: String) -> void:
-		if _status_bar.xp_bar.has_method("update_display"):
-			_status_bar.xp_bar.update_display()
-	)
 	NewsEventSystem.on_news_display.connect(_on_system_event_alert)
 	SkillTree.on_skill_unlocked.connect(_on_skill_unlocked)
 
@@ -149,10 +145,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_TAB:
 				_toggle_bottom_tab()
 				get_viewport().set_input_as_handled()
-			KEY_K:
-				if not key.shift_pressed:
-					_toggle_skill_tree()
-					get_viewport().set_input_as_handled()
 			KEY_ESCAPE:
 				_handle_escape()
 				get_viewport().set_input_as_handled()
@@ -181,9 +173,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.is_action("game_tab_switch"):
 			_toggle_bottom_tab()
 			get_viewport().set_input_as_handled()
-		elif event.is_action("game_skill_tree"):
-			_toggle_skill_tree()
-			get_viewport().set_input_as_handled()
 		elif event.is_action("game_cancel"):
 			_handle_escape()
 			get_viewport().set_input_as_handled()
@@ -193,7 +182,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _set_ui_state(new_state: UIState) -> void:
 	_ui_state = new_state
 	_pause_overlay.visible = (new_state == UIState.PAUSED)
-	_status_bar.set_ui_state(int(new_state))
+	_status_bar.set_ui_state(new_state)
 	var submit_enabled: bool = new_state not in [UIState.SETTLEMENT, UIState.SEASON_RESULT, UIState.LOADING]
 	var submit_text: String = tr("주문 예약 Enter") if new_state == UIState.PRE_MARKET else tr("주문 실행 Enter")
 	_order_panel.set_ui_state_submit_enabled(submit_enabled, submit_text)
@@ -314,19 +303,11 @@ func _handle_enter_key() -> void:
 func _handle_escape() -> void:
 	if _level_up_banner and _level_up_banner.is_showing():
 		_level_up_banner.hide_banner()
-	elif _skill_tree_overlay and _skill_tree_overlay.is_open():
-		_skill_tree_overlay.close()
 	elif _settlement_reporter.is_showing():
 		_settlement_reporter.confirm_current()
 	else:
 		_order_panel.clear_quantity()
 
-
-func _toggle_skill_tree() -> void:
-	if _skill_tree_overlay.is_open():
-		_skill_tree_overlay.close()
-	elif not _settlement_reporter.is_showing():
-		_skill_tree_overlay.open()
 
 # ── Bottom Tab ──
 
@@ -568,9 +549,6 @@ func _build_overlays() -> void:
 
 	_level_up_banner = LevelUpBanner.new()
 	add_child(_level_up_banner)
-
-	_skill_tree_overlay = SkillTreeOverlay.new()
-	add_child(_skill_tree_overlay)
 
 	_toast_manager = ToastManager.new()
 	_toast_manager.anchor_left = 0.25

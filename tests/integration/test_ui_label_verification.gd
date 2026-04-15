@@ -53,7 +53,7 @@ func test_portfolio_view_total_assets_label_matches_data() -> void:
 
 	# Act — PortfolioView._ready()가 _refresh()를 즉시 호출하므로 추가 트리거 불필요
 	var summary: Dictionary = PortfolioManager.get_portfolio_summary()
-	var expected: String = tr("총 자산: ₩%s") % FormatUtils.number(summary["total_assets"])
+	var expected: String = tr("총 평가금액: ₩%s") % FormatUtils.number(summary["total_assets"])
 
 	# Assert
 	assert_eq(view._lbl_total_assets.text, expected, "_lbl_total_assets 포맷")
@@ -75,7 +75,7 @@ func test_portfolio_view_return_rate_label_zero() -> void:
 
 
 func test_portfolio_view_cash_info_no_reserved() -> void:
-	## 예약금 없을 때 현금 레이블 포맷: "현금: ₩X | N/M종목"
+	## 예약금 없을 때 현금 레이블 포맷: "예수금: ₩X"
 	# Arrange
 	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)
 	var view: Node = load("res://src/ui/portfolio_view.gd").new()
@@ -83,11 +83,7 @@ func test_portfolio_view_cash_info_no_reserved() -> void:
 
 	# Act
 	var summary: Dictionary = PortfolioManager.get_portfolio_summary()
-	var expected: String = tr("현금: ₩%s | %d/%d종목") % [
-		FormatUtils.number(summary["sim_cash"]),
-		summary["holding_count"],
-		summary["max_holdings"],
-	]
+	var expected: String = tr("예수금: ₩%s") % FormatUtils.number(summary["sim_cash"])
 
 	# Assert
 	assert_eq(view._lbl_cash_info.text, expected, "_lbl_cash_info 포맷 (예약금 없음)")
@@ -136,7 +132,7 @@ func test_portfolio_view_updates_on_valuation_signal() -> void:
 
 	# Assert
 	var summary: Dictionary = PortfolioManager.get_portfolio_summary()
-	var expected: String = tr("총 자산: ₩%s") % FormatUtils.number(summary["total_assets"])
+	var expected: String = tr("총 평가금액: ₩%s") % FormatUtils.number(summary["total_assets"])
 	assert_eq(view._lbl_total_assets.text, expected, "갱신 후 _lbl_total_assets")
 	view.queue_free()
 
@@ -157,13 +153,13 @@ func test_status_bar_total_assets_label_matches_data() -> void:
 
 	# Assert
 	var summary: Dictionary = PortfolioManager.get_portfolio_summary()
-	var expected: String = tr("총 자산: ₩%s") % FormatUtils.number(summary["total_assets"])
+	var expected: String = tr("총 평가금액: ₩%s") % FormatUtils.number(summary["total_assets"])
 	assert_eq(bar._lbl_total_assets.text, expected, "_lbl_total_assets 포맷")
 	bar.queue_free()
 
 
 func test_status_bar_cash_label_no_reserved() -> void:
-	## 예약금 없을 때 현금 레이블: "시드: ₩X | 보유 N/M"
+	## 예약금 없을 때 현금 레이블: "예수금: ₩X | 보유 N/M"
 	# Arrange
 	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)
 	var bar: Node = load("res://src/ui/status_bar.gd").new()
@@ -176,7 +172,7 @@ func test_status_bar_cash_label_no_reserved() -> void:
 	var cash: int = CurrencySystem.get_sim_cash()
 	var holdings_count: int = PortfolioManager.get_all_holdings().size()
 	var max_h: int = SkillTree.get_max_holdings()
-	var expected: String = tr("시드: ₩%s | 보유 %d/%d") % [
+	var expected: String = tr("예수금: ₩%s | 보유 %d/%d") % [
 		FormatUtils.number(cash), holdings_count, max_h
 	]
 	assert_eq(bar._lbl_cash.text, expected, "_lbl_cash 포맷 (예약금 없음)")

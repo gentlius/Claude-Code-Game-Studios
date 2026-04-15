@@ -83,7 +83,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _request_exit_to_start() -> void:
 	## 저장 중(SavingOverlay visible)이면 무반응. GDD start-screen.md §3-7.
 	## SavingOverlay는 CanvasLayer(layer=10)이므로 SaveSystem 시그널로 상태 확인.
-	if SaveSystem._save_pending:
+	if SaveSystem.is_save_pending():
 		return
 	exit_to_start_requested.emit()
 
@@ -122,7 +122,7 @@ func _switch_tab(tab: int, handle_pause: bool = true) -> void:
 
 func _build_ui() -> void:
 	var bg_style: StyleBoxFlat = StyleBoxFlat.new()
-	bg_style.bg_color = Color(0.08, 0.08, 0.09, 1.0)
+	bg_style.bg_color = ThemeSetup.LAYOUT_BG
 	add_theme_stylebox_override("panel", bg_style)
 
 	var vbox: VBoxContainer = VBoxContainer.new()
@@ -133,7 +133,7 @@ func _build_ui() -> void:
 	# ── Tab Bar ──
 	var tab_bar_panel: PanelContainer = PanelContainer.new()
 	var tab_bar_style: StyleBoxFlat = StyleBoxFlat.new()
-	tab_bar_style.bg_color = Color(0.12, 0.12, 0.13, 1.0)
+	tab_bar_style.bg_color = ThemeSetup.LAYOUT_PANEL
 	tab_bar_panel.add_theme_stylebox_override("panel", tab_bar_style)
 	tab_bar_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_child(tab_bar_panel)
@@ -160,16 +160,16 @@ func _build_ui() -> void:
 	_btn_f4_exit.add_theme_font_size_override("font_size", 13)
 	_btn_f4_exit.custom_minimum_size = Vector2(120, 32)
 	var exit_normal: StyleBoxFlat = StyleBoxFlat.new()
-	exit_normal.bg_color = Color(0.12, 0.12, 0.13, 1.0)
+	exit_normal.bg_color = ThemeSetup.LAYOUT_PANEL
 	exit_normal.set_border_width_all(0)
 	var exit_hover: StyleBoxFlat = StyleBoxFlat.new()
-	exit_hover.bg_color = Color(0.22, 0.12, 0.12, 1.0)
+	exit_hover.bg_color = ThemeSetup.LAYOUT_EXIT_HOVER_BG
 	exit_hover.set_border_width_all(0)
 	_btn_f4_exit.add_theme_stylebox_override("normal", exit_normal)
 	_btn_f4_exit.add_theme_stylebox_override("hover", exit_hover)
 	_btn_f4_exit.add_theme_stylebox_override("pressed", exit_hover)
-	_btn_f4_exit.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55, 1.0))
-	_btn_f4_exit.add_theme_color_override("font_hover_color", Color(0.85, 0.5, 0.5, 1.0))
+	_btn_f4_exit.add_theme_color_override("font_color", ThemeSetup.LAYOUT_EXIT_TEXT)
+	_btn_f4_exit.add_theme_color_override("font_hover_color", ThemeSetup.LAYOUT_EXIT_TEXT_HOVER)
 	_btn_f4_exit.pressed.connect(_request_exit_to_start)
 	_tab_bar.add_child(_btn_f4_exit)
 
@@ -186,6 +186,8 @@ func _build_ui() -> void:
 	content.add_child(_trading_screen)
 	# AC-01 (league-ui.md): 리그 HUD 클릭 → F2 이동. MainScreen이 탭 전환 소유 (ADR-006).
 	_trading_screen.league_tab_requested.connect(func() -> void: _switch_tab(TAB_F2))
+	# SP 알림 / LevelUpBanner → F3 성장 화면 전환 (GDD: growth-screen.md §3-6)
+	_trading_screen.growth_tab_requested.connect(func() -> void: _switch_tab(TAB_F3))
 	# TD-03: TradingScreen/SkillTreeOverlay → MainScreen → GameClock (단일 라우팅 경로)
 	_trading_screen.pause_toggle_requested.connect(func() -> void: GameClock.toggle_pause())
 	_trading_screen.speed_change_requested.connect(func(m: float) -> void: GameClock.set_speed(m))
@@ -196,8 +198,8 @@ func _build_ui() -> void:
 	_league_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	content.add_child(_league_screen)
 
-	# F3 — GrowthScreen (placeholder)
-	_growth_screen = _build_placeholder(tr("F3  성장 화면"), tr("준비 중"))
+	# F3 — GrowthScreen (B-03: growth-screen.md)
+	_growth_screen = GrowthScreen.new()
 	_growth_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	content.add_child(_growth_screen)
 
@@ -209,7 +211,7 @@ func _build_ui() -> void:
 	add_child(_tab_pause_banner)
 
 	var banner_style: StyleBoxFlat = StyleBoxFlat.new()
-	banner_style.bg_color = Color(0.0, 0.0, 0.0, 0.0)  # 투명 — 탭 자체가 시각 피드백
+	banner_style.bg_color = Color.TRANSPARENT  # 탭 자체가 시각 피드백
 	_tab_pause_banner.add_theme_stylebox_override("panel", banner_style)
 
 
@@ -222,18 +224,18 @@ func _make_tab_button(label: String, tab_idx: int) -> Button:
 	btn.custom_minimum_size = Vector2(120, 32)
 
 	var normal_style: StyleBoxFlat = StyleBoxFlat.new()
-	normal_style.bg_color = Color(0.12, 0.12, 0.13, 1.0)
+	normal_style.bg_color = ThemeSetup.LAYOUT_PANEL
 	normal_style.set_border_width_all(0)
 	var active_style: StyleBoxFlat = StyleBoxFlat.new()
-	active_style.bg_color = Color(0.18, 0.18, 0.20, 1.0)
-	active_style.border_color = Color(0.3, 0.6, 1.0, 1.0)
+	active_style.bg_color = ThemeSetup.LAYOUT_TAB_ACTIVE_BG
+	active_style.border_color = ThemeSetup.LAYOUT_TAB_BORDER
 	active_style.set_border_width(SIDE_BOTTOM, 2)
 
 	btn.add_theme_stylebox_override("normal", normal_style)
 	btn.add_theme_stylebox_override("pressed", active_style)
 	btn.add_theme_stylebox_override("hover", active_style)
-	btn.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7, 1.0))
-	btn.add_theme_color_override("font_pressed_color", Color(1.0, 1.0, 1.0, 1.0))
+	btn.add_theme_color_override("font_color", ThemeSetup.LAYOUT_TAB_TEXT)
+	btn.add_theme_color_override("font_pressed_color", Color.WHITE)
 
 	btn.pressed.connect(func() -> void: _switch_tab(tab_idx))
 	return btn

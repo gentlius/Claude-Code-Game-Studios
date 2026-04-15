@@ -1,0 +1,7 @@
+{
+	"stopTakeMaxSettings": 10,
+	"stopLossMinGapPct": 0.0,
+	"takeProfitMinGapPct": 0.0,
+	"autoSellAppliesTickLock": false,
+	"notifyOnTrigger": true
+}

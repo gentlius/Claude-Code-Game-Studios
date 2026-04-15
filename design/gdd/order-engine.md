@@ -15,10 +15,15 @@
 **주문 처리 엔진**). 가격 엔진이 갱신한 현재가 기준으로 주문을 체결하므로, 뉴스
 발생 후 변동된 가격에 주문이 처리된다.
 
-MVP에서는 두 가지 주문 유형을 지원한다: 시장가 주문(TR0 기본) — 현재가로 즉시
-체결, 지정가 주문(TR1 해금) — 조건 충족 시 자동 체결. 손절/익절(TR2), 공매도(TR3),
-레버리지(TR4)는 MVP 범위 밖이다. 플레이어의 매매는 가격에 영향을 주지 않는다
-(가격 관찰자 모델).
+Beta에서는 세 가지 주문 유형을 지원한다: 시장가 주문(TR0 기본) — 현재가로 즉시
+체결, 지정가 주문(TR1 해금) — 조건 충족 시 자동 체결, 손절/익절 자동 주문(TR2
+해금) — 보유 종목별 감시 조건 충족 시 시장가 매도 자동 발동 (상세: `stop-loss-take-profit.md`).
+공매도(TR3), 레버리지(TR4)는 Sprint 9 이후 구현 예정이다.
+
+**가격 모델**: 오더북(`order-book.md`) 구현 전까지는 **가격 관찰자 모델** — 플레이어
+매매가 PriceEngine 가격에 영향을 주지 않으며 현재가로 즉시 체결된다. 오더북 구현 후
+호가 잔량 소진 → 슬리피지 → 가격 영향 모델로 전환된다 (현재 오더북 GDD: In Review,
+코드 미구현).
 
 ## Player Fantasy
 
@@ -257,7 +262,23 @@ on_tick:
             emit on_order_filled(order)
 ```
 
-##### 4-3. PRE_MARKET 주문 처리
+##### 4-3. 손절/익절 자동 주문 처리 (TR2)
+
+```
+on_tick (지정가 체결 4-2 직후):
+    StopTakeSystem.check_and_trigger(market_state)
+    # 내부 처리:
+    #   for each (stock_id, setting) in _stop_take_settings:
+    #       if not setting.enabled or market_state != MARKET_OPEN: skip
+    #       current_price = PriceEngine.get_current_price(stock_id)
+    #       if current_price <= setting.stop_loss_price → submit_market_order("SELL", ...)
+    #       elif current_price >= setting.take_profit_price → submit_market_order("SELL", ...)
+```
+
+이 단계는 지정가 체결(4-2) 이후에 실행되어 지정가가 항상 우선 처리됨을 구조적으로 보장한다.
+상세 설계: `design/gdd/stop-loss-take-profit.md`.
+
+##### 4-4. PRE_MARKET 주문 처리
 
 ##### 4-3a. PRE_MARKET 큐
 
@@ -380,6 +401,7 @@ on_market_close:
 | **종목 DB** | 주문 엔진이 의존 | `stock_exists(stock_id)` — 종목 존재 검증 |
 | **포트폴리오 관리** | 양방향 | `get_holding_count()` — 슬롯 검증. `get_holding(stock_id).quantity` — 보유 수량 조회 (매도 가용 수량은 Order Engine이 `quantity - locked_quantity`로 자체 계산). `add_holding()` / `remove_holding()` — 체결 후 **직접 메서드 호출** |
 | **스킬 트리** | 주문 엔진이 참조 | `is_skill_unlocked("TR1")` — 지정가 해금. `is_skill_unlocked("TR2")` — 손절/익절 해금. `get_max_holdings()` — 최대 보유 종목 수. (향후: `is_skill_unlocked("TR3/TR4")` — 공매도/레버리지) |
+| **StopTakeSystem** | 주문 엔진이 호출 | `check_and_trigger(market_state)` — 틱 4-3 단계. `on_holding_cleared(stock_id)` — 보유 종목 소멸 시 설정 정리 |
 | **게임 시계** | 주문 엔진이 의존 | `on_tick` — 지정가 체결 체크. `on_market_open/close` — 상태 전환 |
 | **트레이딩 스크린** | UI가 주문 엔진에 의존 | `submit_order(order)` — 주문 제출. `cancel_order(order_id)` — 취소. `get_pending_orders()` — 미체결 목록. `get_total_reserved_cash()` — 전체 미체결 매수 예약금 합계 (`Σ pending_buy.reserved_cash` — 지정가 + PRE_MARKET 시장가 포함) |
 | **경험치 시스템** | 경험치가 참조 | `on_order_filled` — 거래 기반 경험치 산출 |
@@ -537,7 +559,7 @@ fee = floor(trade_value × fee_rate)
 |----------|-------|----------|------------|
 | 수수료 도입 시점 및 요율 | systems-designer | 확장 시점 | MVP=0%. 향후 결정 |
 | 지정가 유효기간 확장 (GTC 등) | game-designer | V-Slice | MVP=DAILY만 |
-| 손절/익절 자동 주문 구현 상세 | game-designer | TR2 구현 시 | 향후 |
+| 손절/익절 자동 주문 구현 상세 | game-designer | TR2 구현 시 | **Resolved (2026-04-15)** — `design/gdd/stop-loss-take-profit.md` 참조. 틱 처리 4-3 단계로 구현. |
 | 공매도 로직 (마이너스 보유, 숏 스퀴즈 등) | systems-designer | TR3 구현 시 | 향후 |
 | AI 경쟁자의 주문 처리 — 같은 엔진 사용 여부 | game-designer | AI 경쟁자 GDD 시 | 미정 |
 | 슬리피지 도입 — 대량 주문 시 평균 체결가 악화 모델. 스킬 해금(TR3+)과 연동 검토. 가격 관찰자 모델 전환 필요 | game-designer + systems-designer | Post-MVP | MVP=없음. 외부 감사 권고 (2026-04-03) |

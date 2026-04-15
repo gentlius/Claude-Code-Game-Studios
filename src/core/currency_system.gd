@@ -30,6 +30,13 @@ func get_sim_cash() -> int:
 func get_deposit() -> int:
 	return _deposit
 
+
+## Returns the current cash available for trading (현금 자산 = sim_cash).
+## Alias used by GrowthScreen asset panel. Will reflect dual-economy cash_assets
+## when LifestyleManager is implemented in Beta Sprint 9.
+func get_cash_assets() -> int:
+	return _sim_cash
+
 # ── Public API: Sim Cash Operations ──
 
 ## Deduct from sim cash. Returns true if successful, false if insufficient.
@@ -64,11 +71,11 @@ func init_first_season(amount: int = DEFAULT_SEASON_SEED) -> void:
 	sim_cash_changed.emit(_sim_cash, amount)
 
 
-## Settle the season. Marks the season inactive without touching the balance.
-## The settlement flow (cancel orders → liquidate → award prizes) uses
-## sim_add/sim_deduct directly, so the balance is already correct by the time
-## this is called. Wiping _sim_cash here would erase carry-over funds.
-func settle_season() -> void:
+## Emit season_settled signal after the settlement flow completes.
+## Called after SeasonManager finishes cancel-orders → liquidate → prize award.
+## Balance is already correct at call time; this only signals observers (UI, save, etc.).
+## Renamed from settle_season() per GDD currency-system.md §3-3.
+func settle_to_cash(_prize: int = 0) -> void:
 	season_settled.emit()
 
 

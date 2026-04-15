@@ -156,13 +156,18 @@ func init_season(player_tier: int, participant_counts: Dictionary, seed: int = 0
 		for j: int in range(count):
 			sorted[j] = j
 		# 초기 정렬: 전부 0.0이므로 순서는 participant_id 오름차순
+		# P3 최적화: eod_rng_states — 전일 EOD 직후 RNG 상태 캐시 (0 = 미설정).
+		var rng_states: Array[int] = []
+		rng_states.resize(count)
+		rng_states.fill(0)
 		_tier_data[tier] = {
-			"count":          count,
-			"target_r":       target_r,
-			"eod_snapshot":   eod,
-			"next_snapshot":  next,
-			"next_computed":  0,
-			"sorted_indices": sorted,
+			"count":           count,
+			"target_r":        target_r,
+			"eod_snapshot":    eod,
+			"next_snapshot":   next,
+			"next_computed":   0,
+			"sorted_indices":  sorted,
+			"eod_rng_states":  rng_states,
 		}
 
 	# 글로벌 ID → (tier, local_id) 역산 캐시 구성.
@@ -458,9 +463,9 @@ func _generate_target_returns(tier: int, count: int) -> Array[float]:
 
 
 ## GDD §3-3 단계 2: 특정 tier·local_id의 당일(day) EOD 수익률을 계산한다.
-## random walk with drift 모델. cumulative_r[day-1]을 재생성하는 방식.
-## [br]주의: 전일 누적값을 재생성하므로 O(day) — day가 커질수록 연산 증가.
-##         틱 분산 계산이므로 전체 예산은 O(1/tick) 수준.
+## random walk with drift 모델.
+## P3 최적화: eod_rng_states에 전일 RNG 상태를 캐시해 O(day) → O(1)로 단축.
+## 첫 호출 또는 시즌 시작(day=0)에는 O(day) 재계산. 이후 O(1) 한 스텝만 진행.
 func _compute_eod_for(tier: int, local_id: int, day: int) -> float:
 	var td: Dictionary = _tier_data[tier]
 	var params: Dictionary = TIER_PARAMS[tier]
@@ -473,18 +478,33 @@ func _compute_eod_for(tier: int, local_id: int, day: int) -> float:
 	p_seed = p_seed ^ (tier * 7919)
 	p_seed = p_seed ^ 0xDEAD_BEEF
 	var rng := RandomNumberGenerator.new()
-	rng.seed = p_seed
 
 	# 일간 가격제한: PriceEngine.DAILY_LIMIT_PCT = 0.30 → 30%/일
 	var daily_limit_pct: float = PriceEngine.DAILY_LIMIT_PCT * 100.0
 
-	# day까지의 누적 수익률 재생성 (GDD §4-2)
+	var start_day: int = 0
 	var running: float = 0.0
-	for d: int in range(day + 1):
+
+	# P3 캐시 복원: eod_rng_states[local_id] != 0 이고 day > 0이면
+	# 전일 EOD 직후 RNG 상태로 복원 후 한 스텝만 진행 (O(1)).
+	# day == 0 이면 항상 시드부터 재시작 (이전 시즌 캐시 오염 방지).
+	var rng_states: Array[int] = td["eod_rng_states"]
+	if day > 0 and rng_states[local_id] != 0:
+		running = (td["eod_snapshot"] as Array[float])[local_id]
+		rng.state = rng_states[local_id]
+		start_day = day
+	else:
+		rng.seed = p_seed
+
+	# day까지의 누적 수익률 계산 (GDD §4-2)
+	for d: int in range(start_day, day + 1):
 		var daily: float = drift_per_day + rng.randfn(0.0, sigma_daily)
 		running += daily
 		var day_max: float = daily_limit_pct * float(d + 1)
 		running = clampf(running, -day_max, day_max)
+
+	# 다음 호출을 위해 현재 RNG 상태 저장 (eod_snapshot 스왑 후에도 유효).
+	rng_states[local_id] = rng.state
 
 	return running
 

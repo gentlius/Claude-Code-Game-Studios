@@ -18,6 +18,12 @@ var _lbl_seed_capital: Label
 var _lbl_slot_counter: Label  ## "X/5" or "X/10" slot counter (P1/P2)
 var _holdings_container: VBoxContainer
 var _tx_container: VBoxContainer
+## Diff-based cache: stock_id → {lbl_qty, lbl_price, lbl_rate, lbl_value} node refs.
+## Avoids full teardown/rebuild on every valuation_updated tick (P3 optimisation).
+var _holding_rows: Dictionary = {}
+## S7-07: Trigger badge — shows "SL 발동" / "TP 발동" on auto-sell.
+var _trigger_badge: Label
+var _badge_tween: Tween
 
 # ── Lifecycle ──
 
@@ -27,6 +33,7 @@ func _ready() -> void:
 	PortfolioManager.holding_added.connect(_on_holding_added)
 	PortfolioManager.holding_removed.connect(_on_holding_removed)
 	SkillTree.on_skill_unlocked.connect(_on_skill_unlocked_refresh_slots)
+	StopTakeSystem.on_stop_take_triggered.connect(_on_stop_take_triggered)
 	tree_exiting.connect(_disconnect_signals)
 	# Initial render — valuation_updated may have fired during load_slot() before
 	# this node existed, so explicitly refresh on entry.
@@ -73,6 +80,13 @@ func _build_ui() -> void:
 	var sep: HSeparator = HSeparator.new()
 	add_child(sep)
 
+	# S7-07: Trigger badge — visible briefly after auto-sell fires.
+	_trigger_badge = Label.new()
+	_trigger_badge.visible = false
+	_trigger_badge.add_theme_font_size_override("font_size", 12)
+	_trigger_badge.add_theme_color_override("font_color", Color(0.95, 0.82, 0.30))
+	add_child(_trigger_badge)
+
 	# Holdings scroll area
 	var scroll: ScrollContainer = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -87,7 +101,7 @@ func _build_ui() -> void:
 	header.add_theme_constant_override("separation", 8)
 	scroll_vbox.add_child(header)
 
-	for col: String in [tr("종목"), tr("수량"), tr("현재가"), tr("수익률"), tr("평가금액")]:
+	for col: String in [tr("종목"), tr("수량"), tr("현재가"), tr("수익률"), tr("평가금액"), tr("S/T")]:
 		var lbl: Label = Label.new()
 		lbl.text = col
 		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -131,12 +145,14 @@ func _disconnect_signals() -> void:
 		PortfolioManager.holding_removed.disconnect(_on_holding_removed)
 	if SkillTree.on_skill_unlocked.is_connected(_on_skill_unlocked_refresh_slots):
 		SkillTree.on_skill_unlocked.disconnect(_on_skill_unlocked_refresh_slots)
+	if StopTakeSystem.on_stop_take_triggered.is_connected(_on_stop_take_triggered):
+		StopTakeSystem.on_stop_take_triggered.disconnect(_on_stop_take_triggered)
 
 
-## Refreshes slot counter when P1 or P2 is unlocked.
-## Implements: design/gdd/skill-tree.md §P1 §P2 — immediate UI update on unlock.
+## Refreshes slot counter when P1 or P2 is unlocked; enables S/T buttons when TR2 unlocked.
+## Implements: design/gdd/skill-tree.md §P1 §P2 §TR2 — immediate UI update on unlock.
 func _on_skill_unlocked_refresh_slots(skill_id: String) -> void:
-	if skill_id == "P1" or skill_id == "P2":
+	if skill_id == "P1" or skill_id == "P2" or skill_id == "TR2":
 		_refresh()
 
 
@@ -173,7 +189,7 @@ func _refresh() -> void:
 	# Slot counter — separate label for P1/P2 skill feedback
 	_lbl_slot_counter.text = tr("슬롯: %d/%d") % [holding_count, max_holdings]
 
-	var seed: int = SeasonManager.get_season_start_capital()
+	var seed: int = SeasonManager.get_season_start_deposit()
 	if seed > 0:
 		_lbl_seed_capital.text = tr("시드: ₩%s") % _format_number(seed)
 	else:
@@ -184,78 +200,126 @@ func _refresh() -> void:
 
 
 func _refresh_holdings() -> void:
-	for child: Node in _holdings_container.get_children():
-		child.queue_free()
-
 	var holdings: Array[Dictionary] = PortfolioManager.get_all_holdings()
 
-	if holdings.size() == 0:
-		var empty: Label = Label.new()
-		empty.text = tr("보유 종목 없음. 첫 매수를 시작하세요!")
-		ThemeSetup.style_label_dim(empty)
-		_holdings_container.add_child(empty)
-		return
-
+	# Build the canonical stock_id set for this frame.
+	var current_ids: Array[String] = [] as Array[String]
 	for h: Dictionary in holdings:
-		var row: HBoxContainer = HBoxContainer.new()
-		row.add_theme_constant_override("separation", 8)
-		row.mouse_filter = Control.MOUSE_FILTER_STOP
+		current_ids.append(h["stock_id"] as String)
 
-		# Stock ID
+	# Detect structural change (add/remove holdings or order change).
+	var cached_ids: Array = _holding_rows.keys()
+	var structure_changed: bool = current_ids.size() != cached_ids.size()
+	if not structure_changed:
+		for i: int in range(current_ids.size()):
+			if current_ids[i] != cached_ids[i]:
+				structure_changed = true
+				break
+
+	if structure_changed:
+		# Full rebuild — clear and recreate all rows.
+		for child: Node in _holdings_container.get_children():
+			child.queue_free()
+		_holding_rows.clear()
+
+		if holdings.size() == 0:
+			var empty: Label = Label.new()
+			empty.text = tr("보유 종목 없음. 첫 매수를 시작하세요!")
+			ThemeSetup.style_label_dim(empty)
+			_holdings_container.add_child(empty)
+			return
+
+		for h: Dictionary in holdings:
+			var sid: String = h["stock_id"]
+			var sid_data: StockData = StockDatabase.get_stock(sid)
+			var row: HBoxContainer = HBoxContainer.new()
+			row.add_theme_constant_override("separation", 8)
+			row.mouse_filter = Control.MOUSE_FILTER_STOP
+
+			var lbl_stock: Label = Label.new()
+			lbl_stock.text = sid_data.get_display_name() if sid_data != null else sid
+			lbl_stock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			ThemeSetup.style_label_primary(lbl_stock)
+			row.add_child(lbl_stock)
+
+			var lbl_qty: Label = Label.new()
+			lbl_qty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			ThemeSetup.style_label_secondary(lbl_qty)
+			row.add_child(lbl_qty)
+
+			var lbl_price: Label = Label.new()
+			lbl_price.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			ThemeSetup.style_label_primary(lbl_price)
+			row.add_child(lbl_price)
+
+			var lbl_rate: Label = Label.new()
+			lbl_rate.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(lbl_rate)
+
+			var lbl_value: Label = Label.new()
+			lbl_value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			ThemeSetup.style_label_primary(lbl_value)
+			row.add_child(lbl_value)
+
+			# S/T button —손절/익절 설정. TR2 미해금 시 disabled.
+			var btn_st: Button = Button.new()
+			btn_st.text = "S/T"
+			btn_st.custom_minimum_size.x = 36
+			btn_st.focus_mode = Control.FOCUS_NONE
+			btn_st.disabled = not SkillTree.is_skill_unlocked("TR2")
+			btn_st.tooltip_text = tr("손절/익절 설정 (TR2 해금 필요)") if not SkillTree.is_skill_unlocked("TR2") else tr("손절/익절 설정")
+			var captured_sid: String = sid
+			btn_st.pressed.connect(func() -> void: _on_stop_take_btn_pressed(captured_sid))
+			row.add_child(btn_st)
+
+			var stock_id: String = sid
+			row.gui_input.connect(func(event: InputEvent) -> void:
+				if event is InputEventMouseButton:
+					var mb: InputEventMouseButton = event as InputEventMouseButton
+					if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+						stock_clicked.emit(stock_id)
+			)
+			_holdings_container.add_child(row)
+			_holding_rows[sid] = {
+				"lbl_qty": lbl_qty, "lbl_price": lbl_price,
+				"lbl_rate": lbl_rate, "lbl_value": lbl_value,
+				"btn_st": btn_st,
+			}
+
+	# Update mutable label values (runs every tick — zero Node allocation).
+	for h: Dictionary in holdings:
 		var sid: String = h["stock_id"]
-		var sid_data: StockData = StockDatabase.get_stock(sid)
-		var lbl_stock: Label = Label.new()
-		lbl_stock.text = sid_data.get_display_name() if sid_data != null else sid
-		lbl_stock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		ThemeSetup.style_label_primary(lbl_stock)
-		row.add_child(lbl_stock)
-
-		# Quantity
-		var lbl_qty: Label = Label.new()
-		lbl_qty.text = tr("%d주") % h["quantity"]
-		lbl_qty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		ThemeSetup.style_label_secondary(lbl_qty)
-		row.add_child(lbl_qty)
-
-		# Current price (derived from cached valuation, no direct PriceEngine call)
+		if not _holding_rows.has(sid):
+			continue
+		var refs: Dictionary = _holding_rows[sid]
+		refs["lbl_qty"].text = tr("%d주") % h["quantity"]
 		var current_price: int = h.get("current_value", 0) / maxi(h.get("quantity", 1), 1)
-		var lbl_price: Label = Label.new()
-		lbl_price.text = "₩%s" % _format_number(current_price)
-		lbl_price.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		ThemeSetup.style_label_primary(lbl_price)
-		row.add_child(lbl_price)
-
-		# Return rate
+		refs["lbl_price"].text = "₩%s" % _format_number(current_price)
 		var pnl_pct: float = h.get("unrealized_pnl_pct", 0.0)
-		var lbl_rate: Label = Label.new()
-		lbl_rate.text = "%+.1f%%" % pnl_pct
-		lbl_rate.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		refs["lbl_rate"].text = "%+.1f%%" % pnl_pct
 		if pnl_pct > 0.0:
-			lbl_rate.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
+			refs["lbl_rate"].add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
 		elif pnl_pct < 0.0:
-			lbl_rate.add_theme_color_override("font_color", ThemeSetup.LOSS_BLUE)
+			refs["lbl_rate"].add_theme_color_override("font_color", ThemeSetup.LOSS_BLUE)
 		else:
-			lbl_rate.add_theme_color_override("font_color", ThemeSetup.NEUTRAL_GRAY)
-		row.add_child(lbl_rate)
-
-		# Value
-		var value: int = h.get("current_value", 0)
-		var lbl_value: Label = Label.new()
-		lbl_value.text = "₩%s" % _format_number(value)
-		lbl_value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		ThemeSetup.style_label_primary(lbl_value)
-		row.add_child(lbl_value)
-
-		# Click to select stock
-		var stock_id: String = sid
-		row.gui_input.connect(func(event: InputEvent) -> void:
-			if event is InputEventMouseButton:
-				var mb: InputEventMouseButton = event as InputEventMouseButton
-				if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
-					stock_clicked.emit(stock_id)
-		)
-
-		_holdings_container.add_child(row)
+			refs["lbl_rate"].add_theme_color_override("font_color", ThemeSetup.NEUTRAL_GRAY)
+		refs["lbl_value"].text = "₩%s" % _format_number(h.get("current_value", 0))
+		# S/T button color: 손절만=빨강, 익절만=초록, 양쪽=주황, 없음=기본
+		if refs.has("btn_st"):
+			var btn: Button = refs["btn_st"] as Button
+			btn.disabled = not SkillTree.is_skill_unlocked("TR2")
+			var st: Variant = StopTakeSystem.get_setting(sid)
+			if st == null:
+				btn.remove_theme_color_override("font_color")
+			else:
+				var has_sl: bool = (st as Dictionary).get("stop_loss_price") != null
+				var has_tp: bool = (st as Dictionary).get("take_profit_price") != null
+				if has_sl and has_tp:
+					btn.add_theme_color_override("font_color", Color(1.0, 0.55, 0.0))  # 주황
+				elif has_sl:
+					btn.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))   # 빨강
+				else:
+					btn.add_theme_color_override("font_color", Color(0.3, 0.85, 0.4))  # 초록
 
 
 func _refresh_transactions() -> void:
@@ -281,7 +345,7 @@ func _refresh_transactions() -> void:
 			pnl_str = " (손익: %+d)" % tx["realized_pnl"]
 		var tx_sid: String = tx["stock_id"]
 		var tx_stock: StockData = StockDatabase.get_stock(tx_sid)
-		var tx_name: String = tx_stock.name_ko if tx_stock != null else tx_sid
+		var tx_name: String = tx_stock.get_display_name() if tx_stock != null else tx_sid
 		lbl.text = tr("틱 %d | %s | %s(%s) %d주 @ ₩%s%s") % [
 			tx.get("tick", 0), type_str, tx_name, tx_sid,
 			tx["quantity"], _format_number(tx["price"]), pnl_str
@@ -296,6 +360,184 @@ func _refresh_transactions() -> void:
 
 
 # ── Utility ──
+
+## Called when the S/T button is pressed for a holding row.
+## Opens a simple stop-loss / take-profit setup dialog.
+func _on_stop_take_btn_pressed(stock_id: String) -> void:
+	if not SkillTree.is_skill_unlocked("TR2"):
+		return
+	var holding: Variant = PortfolioManager.get_holding(stock_id)
+	if holding == null:
+		return
+
+	var current: Variant = StopTakeSystem.get_setting(stock_id)
+	var current_price: int = PriceEngine.get_current_price(stock_id)
+	var qty: int = (holding as Dictionary).get("quantity", 1)
+	var sl: Variant = null
+	var tp: Variant = null
+	if current != null:
+		sl = (current as Dictionary).get("stop_loss_price")
+		tp = (current as Dictionary).get("take_profit_price")
+		qty = (current as Dictionary).get("quantity", qty)
+
+	# Build a simple popup Window for the stop-take form
+	var win := Window.new()
+	var stock_data: StockData = StockDatabase.get_stock(stock_id)
+	var stock_name: String = stock_data.get_display_name() if stock_data != null else stock_id
+	win.title = "손절/익절 설정 — %s" % stock_name
+	win.initial_position = Window.WINDOW_INITIAL_POSITION_CENTER_SCREEN_WITH_MOUSE_FOCUS
+	win.size = Vector2i(360, 260)
+	win.unresizable = true
+	win.exclusive = true
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	win.add_child(vbox)
+
+	var margin := MarginContainer.new()
+	for side: String in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 12)
+	win.add_child(margin)
+	vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 8)
+	margin.add_child(vbox)
+
+	var lbl_price := Label.new()
+	lbl_price.text = "현재가: ₩%s" % FormatUtils.number(current_price)
+	vbox.add_child(lbl_price)
+
+	var row_sl := HBoxContainer.new()
+	var lbl_sl := Label.new()
+	lbl_sl.text = "손절가 (원):"
+	lbl_sl.custom_minimum_size.x = 100
+	row_sl.add_child(lbl_sl)
+	var edit_sl := LineEdit.new()
+	edit_sl.text = str(sl) if sl != null else ""
+	edit_sl.placeholder_text = "미설정"
+	edit_sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row_sl.add_child(edit_sl)
+	vbox.add_child(row_sl)
+
+	var row_tp := HBoxContainer.new()
+	var lbl_tp := Label.new()
+	lbl_tp.text = "익절가 (원):"
+	lbl_tp.custom_minimum_size.x = 100
+	row_tp.add_child(lbl_tp)
+	var edit_tp := LineEdit.new()
+	edit_tp.text = str(tp) if tp != null else ""
+	edit_tp.placeholder_text = "미설정"
+	edit_tp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row_tp.add_child(edit_tp)
+	vbox.add_child(row_tp)
+
+	var row_qty := HBoxContainer.new()
+	var lbl_qty_lbl := Label.new()
+	lbl_qty_lbl.text = "수량:"
+	lbl_qty_lbl.custom_minimum_size.x = 100
+	row_qty.add_child(lbl_qty_lbl)
+	var spin_qty := SpinBox.new()
+	spin_qty.min_value = 1
+	spin_qty.max_value = (holding as Dictionary).get("quantity", 1)
+	spin_qty.step = 1
+	spin_qty.value = qty
+	spin_qty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row_qty.add_child(spin_qty)
+	vbox.add_child(row_qty)
+
+	var lbl_err := Label.new()
+	lbl_err.text = ""
+	lbl_err.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))
+	lbl_err.add_theme_font_size_override("font_size", 12)
+	vbox.add_child(lbl_err)
+
+	var btn_row := HBoxContainer.new()
+	btn_row.add_theme_constant_override("separation", 8)
+	vbox.add_child(btn_row)
+
+	var btn_clear := Button.new()
+	btn_clear.text = "설정 해제"
+	btn_row.add_child(btn_clear)
+
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_row.add_child(spacer)
+
+	var btn_cancel := Button.new()
+	btn_cancel.text = "취소"
+	btn_row.add_child(btn_cancel)
+
+	var btn_confirm := Button.new()
+	btn_confirm.text = "확인"
+	btn_row.add_child(btn_confirm)
+
+	get_tree().root.add_child(win)
+	win.popup()
+
+	btn_cancel.pressed.connect(func() -> void: win.queue_free())
+	win.close_requested.connect(func() -> void: win.queue_free())
+
+	btn_clear.pressed.connect(func() -> void:
+		StopTakeSystem.clear_condition(stock_id)
+		win.queue_free()
+		_refresh()
+	)
+
+	btn_confirm.pressed.connect(func() -> void:
+		var sl_text: String = edit_sl.text.strip_edges()
+		var tp_text: String = edit_tp.text.strip_edges()
+		var sl_val: Variant = null
+		var tp_val: Variant = null
+
+		if sl_text != "" and sl_text != "미설정":
+			if not sl_text.is_valid_int():
+				lbl_err.text = "손절가는 정수여야 합니다"
+				return
+			sl_val = sl_text.to_int()
+
+		if tp_text != "" and tp_text != "미설정":
+			if not tp_text.is_valid_int():
+				lbl_err.text = "익절가는 정수여야 합니다"
+				return
+			tp_val = tp_text.to_int()
+
+		if sl_val != null and tp_val != null and (sl_val as int) >= (tp_val as int):
+			lbl_err.text = "손절가는 익절가보다 낮아야 합니다"
+			return
+
+		if sl_val != null and (sl_val as int) >= current_price:
+			lbl_err.text = "손절가는 현재가보다 낮아야 합니다"
+			return
+
+		if tp_val != null and (tp_val as int) <= current_price:
+			lbl_err.text = "익절가는 현재가보다 높아야 합니다"
+			return
+
+		var set_qty: int = int(spin_qty.value)
+		if not StopTakeSystem.set_condition(stock_id, sl_val, tp_val, set_qty):
+			lbl_err.text = "설정 실패 (TR2 해금 여부 및 한도 확인)"
+			return
+
+		win.queue_free()
+		_refresh()
+	)
+
+
+## S7-07: Shows "SL 발동" / "TP 발동" badge briefly after auto-sell.
+## reason is "STOP_LOSS" or "TAKE_PROFIT" (from StopTakeSystem.on_stop_take_triggered).
+func _on_stop_take_triggered(stock_id: String, reason: String, filled_price: int) -> void:
+	var stock_data: StockData = StockDatabase.get_stock(stock_id)
+	var stock_name: String = stock_data.get_display_name() if stock_data != null else stock_id
+	var badge_label: String = tr("SL 발동") if reason == "STOP_LOSS" else tr("TP 발동")
+	var badge_color: Color = Color(0.9, 0.3, 0.3) if reason == "STOP_LOSS" else Color(0.3, 0.85, 0.4)
+	_trigger_badge.text = tr("● %s %s — ₩%s에 자동 매도") % [stock_name, badge_label, _format_number(filled_price)]
+	_trigger_badge.add_theme_color_override("font_color", badge_color)
+	_trigger_badge.visible = true
+	if _badge_tween and _badge_tween.is_valid():
+		_badge_tween.kill()
+	_badge_tween = create_tween()
+	_badge_tween.tween_interval(4.0)
+	_badge_tween.tween_callback(func() -> void: _trigger_badge.visible = false)
+
 
 ## Delegates to FormatUtils.number() — single source of truth (TD-04 note).
 func _format_number(value: int) -> String:

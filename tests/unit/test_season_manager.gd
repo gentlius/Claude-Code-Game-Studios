@@ -66,35 +66,35 @@ func test_assign_tier_master_of_investment() -> void:
 
 func test_get_season_return_pct_zero_when_flat() -> void:
 	# Arrange: season started at same value as current assets
-	SeasonManager._season_start_capital = 1_000_000
+	SeasonManager._season_start_deposit = 1_000_000
 
 	# We cannot mock PortfolioManager in an autoload test easily,
 	# so we call the formula directly using known inputs.
 	var total_assets: int = 1_000_000
-	var expected: float = float(total_assets - SeasonManager._season_start_capital) \
-		/ float(SeasonManager._season_start_capital) * 100.0
+	var expected: float = float(total_assets - SeasonManager._season_start_deposit) \
+		/ float(SeasonManager._season_start_deposit) * 100.0
 
 	# Assert formula result (no side-effects)
 	assert_almost_eq(expected, 0.0, 0.001, "수익률 0% when assets unchanged")
 
 
 func test_get_season_return_pct_positive() -> void:
-	SeasonManager._season_start_capital = 1_000_000
+	SeasonManager._season_start_deposit = 1_000_000
 
 	var total_assets: int = 1_100_000
-	var expected: float = float(total_assets - SeasonManager._season_start_capital) \
-		/ float(SeasonManager._season_start_capital) * 100.0
+	var expected: float = float(total_assets - SeasonManager._season_start_deposit) \
+		/ float(SeasonManager._season_start_deposit) * 100.0
 
 	assert_almost_eq(expected, 10.0, 0.001, "10% return")
 
 
 func test_get_season_return_pct_safe_when_capital_zero() -> void:
 	# EC-08: guard — should return 0.0, not divide-by-zero
-	SeasonManager._season_start_capital = 0
+	SeasonManager._season_start_deposit = 0
 
 	var result: float = SeasonManager.get_season_return_pct()
 
-	assert_eq(result, 0.0, "season_start_capital=0 → 0.0 반환 (EC-08)")
+	assert_eq(result, 0.0, "season_start_deposit=0 → 0.0 반환 (EC-08)")
 
 
 # ─────────────────────────────────────────────
@@ -253,7 +253,7 @@ func test_save_and_load_round_trip() -> void:
 	# Arrange
 	SeasonManager._current_tier = SeasonManager.TIER_GOLD
 	SeasonManager._is_free_market = false
-	SeasonManager._season_start_capital = 15_000_000
+	SeasonManager._season_start_deposit = 15_000_000
 	SeasonManager._weekly_start_capital = 16_000_000
 	SeasonManager._weekly_trade_count = 3
 
@@ -262,13 +262,13 @@ func test_save_and_load_round_trip() -> void:
 	# Reset state then restore
 	SeasonManager._current_tier = SeasonManager.TIER_FREE_MARKET
 	SeasonManager._is_free_market = true
-	SeasonManager._season_start_capital = 0
+	SeasonManager._season_start_deposit = 0
 	SeasonManager.load_save_data(saved)
 
 	# Assert
 	assert_eq(SeasonManager._current_tier, SeasonManager.TIER_GOLD, "tier 복원")
 	assert_false(SeasonManager._is_free_market, "is_free_market 복원")
-	assert_eq(SeasonManager._season_start_capital, 15_000_000, "season_start_capital 복원")
+	assert_eq(SeasonManager._season_start_deposit, 15_000_000, "season_start_deposit 복원")
 	assert_eq(SeasonManager._weekly_start_capital, 16_000_000, "weekly_start_capital 복원")
 	assert_eq(SeasonManager._weekly_trade_count, 3, "weekly_trade_count 복원")
 
@@ -297,7 +297,7 @@ func test_participant_counts_sum_equals_ai_total() -> void:
 # ─────────────────────────────────────────────
 
 func test_is_season_active_false_before_start() -> void:
-	# Arrange: reset ensures _season_start_capital == 0
+	# Arrange: reset ensures _season_start_deposit == 0
 	# Assert
 	assert_false(SeasonManager.is_season_active(), "시즌 시작 전 → false")
 
@@ -311,7 +311,7 @@ func test_is_season_active_true_after_start() -> void:
 
 
 func test_get_leaderboard_returns_empty_before_season() -> void:
-	# Arrange: no season started (_season_start_capital == 0)
+	# Arrange: no season started (_season_start_deposit == 0)
 	# Act
 	var result: Array = SeasonManager.get_leaderboard()
 	# Assert
@@ -321,7 +321,7 @@ func test_get_leaderboard_returns_empty_before_season() -> void:
 func test_get_leaderboard_returns_empty_in_free_market() -> void:
 	# Arrange: free-market mode
 	SeasonManager._is_free_market = true
-	SeasonManager._season_start_capital = 500_000  # below threshold but season "started"
+	SeasonManager._season_start_deposit = 500_000  # below threshold but season "started"
 	# Act
 	var result: Array = SeasonManager.get_leaderboard(SeasonManager.TIER_FREE_MARKET)
 	# Assert

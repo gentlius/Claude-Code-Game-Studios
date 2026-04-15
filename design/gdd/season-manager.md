@@ -12,7 +12,7 @@
 4주(20거래일) 단위 시즌으로 실전투자대회를 진행한다. 전체 참가자 2만 명(AI 포함)이
 11개 티어에 피라미드 구조로 배치되며, 시즌 종료 후 다음 시즌 시작 버튼을 누르는
 시점의 자산으로 티어가 재결정된다. 강등 판정은 없으며, 자산이 100만 원 미만이면
-공식 리그 대신 프리마켓으로 이동한다. 자산 1,000억 원 돌파 시 '투자의 거장' 엔딩이
+공식 리그 대신 프리마켓으로 이동한다. 시즌 정산 후 현금 자산 1,000억 원 돌파 시 '투자의 거장' 엔딩이
 발동되고, 프리마켓에서 자산 1만 원 미만으로 추락하면 '한강 엔딩'으로 게임이 종료된다.
 
 ## 2. Player Fantasy
@@ -32,9 +32,10 @@
 ```
 [시즌 시작 화면]
   └─ 플레이어가 "시즌 시작" 버튼 누름
-       └─ 현재 sim_total_assets 스냅샷 → season_start_capital 저장
-            ├─ < 1,000,000원  → 프리마켓 진입
-            └─ 그 외 → 티어 자동 배정 후 시즌 시작
+       └─ 현재 cash_assets 기준 티어 자동 배정
+            ├─ cash_assets < 1,000,000원  → 프리마켓 진입
+            └─ 그 외 → 티어 배정 → cash_assets에서 tier_threshold만큼 sim_cash 자동 입금
+                       → season_start_deposit = sim_cash 스냅샷 저장 → 시즌 시작
 
 [시즌 진행]
   └─ 20거래일 (월~금 × 4주)
@@ -49,33 +50,35 @@
 [시즌 종료 — Day 20 금요일]
   ① WEEK_END: 4주차 주간 수익률상 산정 및 지급
   ② SEASON_END: 보유 주식 전량 시가 청산 (종가 기준)
-       → 청산 완료 후 sim_total_assets = sim_cash (보유 주식 없음)
+       → 청산 완료 후 sim_cash += 청산대금. account_total_value = sim_cash (보유 주식 없음)
   ③ 시즌 순위 확정 (return_pct 기준)
-  ④ 시즌 상금 입금 (is_rank_eligible 검사 후)
-  ⑤ 시즌 XP 지급
+  ④ 시즌 상금 계산
+  ⑤ sim_cash 잔액 + 상금 → cash_assets 전환. sim_cash = 0.
+       (CurrencySystem.settle_to_cash(prize_amount) 호출)
+  ⑥ 시즌 XP 지급
        - 공식 리그 참가자: `XPSystem.grant_season_bonus(final_rank, is_free_market=false, season_return_pct)`
        - 프리마켓 참가자: `XPSystem.grant_season_bonus(final_rank=0, is_free_market=true, season_return_pct)`
          → rank_bonus 없음. 완주 보너스(20 XP)는 수익률 ≥ 0% AND 체결 ≥ 5회 충족 시 지급 (§4-7 참조)
-  ⑥ sim_total_assets ≥ 100,000,000,000원 → 거장 엔딩 자동 발동
-  ⑦ 그 외 → 시즌 결과 화면 표시
+  ⑦ cash_assets ≥ 100,000,000,000원 → 거장 엔딩 자동 발동
+  ⑧ 그 외 → 시즌 결과 화면 표시
   ↓
 [비시즌 정산] — LifestyleManager.process_offseason() 자동 실행
-  ⑧ 부동산 임대 수익 → sim_cash 입금
-  ⑨ 스타트업 엑싯 이벤트 (만기 도달 시) → sim_cash 입금 또는 0원
-  ⑩ Recurring 비용 차감 (골프 클럽 연회비 등)
-     → 결과: 시즌 결산 자산 확정
+  ⑨ 부동산 임대 수익 → cash_assets 입금
+  ⑩ 스타트업 엑싯 이벤트 (만기 도달 시) → cash_assets 입금 또는 0원
+  ⑪ Recurring 비용 차감 (골프 클럽 연회비 등)
+     → 결과: 시즌 결산 자산 확정 (cash_assets 기준)
   ↓
-[라이프스타일 소비 화면] — 시즌 결산 자산에서 선택 소비 (lifestyle-spending.md 참조)
+[라이프스타일 소비 화면] — cash_assets에서 선택 소비 (lifestyle-spending.md 참조)
   ↓
-[다음 시즌 시작 대기] — 소비 후 잔여 sim_cash = 다음 시즌 시드 = 티어 배정 기준
+[다음 시즌 시작 대기] — 소비 후 잔여 cash_assets = 티어 배정 기준
 ```
 
-> **티어 배정 기준**: 다음 시즌 시작 버튼을 누르는 시점의 sim_cash (라이프스타일 소비 후 잔여). 비시즌 정산 수익과 라이프스타일 소비가 모두 반영된 최종값.
+> **티어 배정 기준**: 다음 시즌 시작 버튼을 누르는 시점의 `cash_assets` (라이프스타일 소비 후 잔여). 비시즌 정산 수익과 라이프스타일 소비가 모두 반영된 최종값.
 
 > **⚠️ Alpha 단계 폴백 (LifestyleManager 미구현 기간)**:
-> LifestyleManager 및 LifestyleSpending UI가 구현되기 전까지 ⑧~⑩(비시즌 정산)과 라이프스타일 소비 화면은 스킵된다.
-> ⑦ 시즌 결과 화면 종료 직후 → 다음 시즌 시작 대기 화면으로 진입.
-> 이 기간의 티어 배정 기준 = 시즌 종료 직후 sim_cash (청산 + 상금 반영, 소비 없음).
+> LifestyleManager 및 LifestyleSpending UI가 구현되기 전까지 ⑨~⑪(비시즌 정산)과 라이프스타일 소비 화면은 스킵된다.
+> ⑧ 시즌 결과 화면 종료 직후 → 다음 시즌 시작 대기 화면으로 진입.
+> 이 기간의 티어 배정 기준 = 시즌 종료 직후 `cash_assets` (청산 + 상금 반영, 소비 없음).
 
 ### 3-2. 리그 티어 테이블 (The Ladder)
 
@@ -93,7 +96,7 @@
 | 레전드 | ₩30,000,000,000 | ₩100,000,000,000 | ~6.2% | 국가 경제 고문 |
 | 거장 | ₩100,000,000,000+ | — | — | [투자의 거장] 엔딩 |
 
-> **티어 배정 규칙**: 시즌 시작 버튼 시점의 `sim_total_assets`가 해당 티어 진입 기준 자산 이상이며
+> **티어 배정 규칙**: 시즌 시작 버튼 시점의 `cash_assets`가 해당 티어 진입 기준 자산 이상이며
 > 다음 티어 진입 기준 자산 미만인 티어에 배정된다.
 >
 > **일일 필요 수익률 산출 공식** (디자인 참고용, UI 미표시):
@@ -146,7 +149,7 @@
 > **권위 문서**: 상금 규칙의 단일 소스는 이 문서다. `currency-system.md`는 이 문서를 참조한다.
 
 - **상금 기준**: 각 티어의 **진입 기준 자산** (개인 시드가 아닌 티어 고정값)
-- 모든 현금 보상은 시즌 종료 후 `sim_cash`에 즉시 입금
+- 모든 현금 보상은 시즌 종료 후 `cash_assets`에 즉시 입금 (`settle_to_cash()` 호출 시 일괄 처리)
 - 입상권 밖이어도 자산은 그대로 이월
 
 #### 순위 보상 (1~10위)
@@ -204,9 +207,9 @@
 
 **프리마켓 (Free Market)**
 
-- 진입 조건: 시즌 시작 시점 `sim_total_assets` < 1,000,000원
+- 진입 조건: 시즌 시작 시점 `cash_assets` < 1,000,000원
 - 제약: 공식 리그 순위/상금 제외
-- **XP 지급 범위**: 일일 보너스 XP는 공식 리그와 동일하게 지급(감면 없음). 시즌 XP(BASE_SEASON_XP·rank_bonus·return_bonus) 미지급(순위 없음). 완주 보너스 XP(20 XP)는 수익률 ≥ 0% AND 체결 ≥ 5회 충족 시 동일하게 지급.
+- **XP 지급 범위**: 일일 보너스 XP는 `FREE_MARKET_XP_RATE`(0.50) 배율 **감면** (§4-7). 시즌 XP(BASE_SEASON_XP·rank_bonus·return_bonus) 미지급(순위 없음). 완주 보너스 XP(20 XP)는 수익률 ≥ 0% AND 체결 ≥ 5회 충족 시 동일하게 지급.
 - 복귀 조건: 자산 ≥ 1,000,000원이 되면 다음 시즌 시작 시 브론즈 재진입 가능
 - 청산 조건: 보유 주식 없음 AND sim_cash < 10,000원 → 한강 엔딩
 
@@ -214,7 +217,7 @@
 
 | 엔딩 | 조건 | 연출 요약 |
 |------|------|---------|
-| 투자의 거장 | 시즌 정산 후 최종 자산 ≥ 100,000,000,000원 | 자선 재단 설립, 전설로 추앙, 차기 회차 금수저 모드(1억 시작) 해금 |
+| 투자의 거장 | 시즌 정산 후 현금 자산(`cash_assets`) ≥ 100,000,000,000원 (1,000억) | 자선 재단 설립, 전설로 추앙, 차기 회차 금수저 모드(1억 시작) 해금 |
 | 한강의 바람 | 프리마켓 중 보유 주식 없음 AND sim_cash < 10,000원 | 블랙유머 메시지, 세이브 초기화 (100만 원 재시작) |
 
 ## 4. Formulas
@@ -222,23 +225,28 @@
 ### 4-1. 티어 배정
 
 ```
-# 시즌 종료 강제 청산 완료 → sim_cash == sim_total_assets (보유 주식 없음)
-# 따라서 시즌 시작 버튼 시점에 sim_total_assets = sim_cash
+# 시즌 종료 강제 청산 완료 → sim_cash 잔액 + 상금 → cash_assets 전환. sim_cash = 0.
+# 따라서 시즌 시작 버튼 시점에 cash_assets = 플레이어 실생활 자금 전액
 tier = first T where:
-    TIER_THRESHOLD[T] ≤ sim_total_assets < TIER_THRESHOLD[T+1]
+    TIER_THRESHOLD[T] ≤ cash_assets < TIER_THRESHOLD[T+1]
+
+# 티어 배정 후: cash_assets에서 tier_threshold 만큼 sim_cash 자동 입금
+# CurrencySystem.auto_deposit_to_sim(TIER_THRESHOLD[tier]) 호출
+season_start_deposit = sim_cash  # = TIER_THRESHOLD[tier]
 ```
 
 ### 4-2. 시즌 수익률 (핵심 순위 지표)
 
 ```
-# 시즌 시작 버튼 시점: 강제 청산 완료 후이므로 sim_total_assets == sim_cash
-season_start_capital = sim_total_assets  (시즌 시작 버튼 시점 스냅샷)
+# 시즌 시작 시점: cash_assets에서 tier_threshold 자동 입금 후
+season_start_deposit = sim_cash  # = TIER_THRESHOLD[tier], 스냅샷 저장
 
-sim_total_assets = sim_cash + reserved_cash
-                 + Σ(holding.quantity × current_price[stock_id])
+# 시즌 진행 중 계좌 총 평가금액 (순위 산정 기준)
+account_total_value = sim_cash + reserved_cash
+                    + Σ(holding.quantity × current_price[stock_id])
 
-return_pct = (sim_total_assets - season_start_capital)
-             / season_start_capital × 100
+return_pct = (account_total_value - season_start_deposit)
+             / season_start_deposit × 100
 ```
 
 ### 4-3. 글로벌 순위 (순수 수익률 통합)
@@ -266,10 +274,10 @@ tier_rank = rank_by(return_pct DESC) among same-tier participants
 
 ```
 # 캡처 시점: 월요일 PRE_MARKET 진입 시
-weekly_start_capital = sim_total_assets
+weekly_start_capital = account_total_value
 
-# 산정 시점: 금요일 장 마감 후 강제 청산 전 sim_total_assets
-weekly_return_pct = (sim_total_assets_friday_close - weekly_start_capital)
+# 산정 시점: 금요일 장 마감 후 강제 청산 전 account_total_value
+weekly_return_pct = (account_total_value_friday_close - weekly_start_capital)
                    / weekly_start_capital × 100
 
 # 주간 순위 갱신 주기: 매 틱 (weekly_return_pct이 매 틱 재계산되므로 잠정 순위 실시간 제공)
@@ -317,18 +325,18 @@ daily_xp_granted = base_daily_xp × (FREE_MARKET_XP_RATE if is_free_market else 
 |---|------|------|
 | EC-01 | 시즌 시작 시점 자산 정확히 300만 원 (브론즈/실버 경계) | 실버 배정 (TIER_THRESHOLD[T] **이상**이면 해당 티어) |
 | EC-02 | 시즌 진행 중 자산이 프리마켓 기준(100만) 아래로 떨어짐 | 시즌 중에는 강제 이탈 없음 — 다음 시즌 시작 버튼 시점에 판단 |
-| EC-03 | 시즌 종료 시 자산이 정확히 100,000,000,000원 | 거장 엔딩 발동 (≥ 조건이므로 포함) |
+| EC-03 | 시즌 종료 후 현금 자산(`cash_assets`)이 정확히 100,000,000,000원 | 거장 엔딩 발동 (≥ 조건이므로 포함). 판정 시점: `settle_to_cash()` 완료 직후 |
 | EC-04 | 상금 수령 후 자산이 다음 티어 진입 기준을 초과 | 다음 시즌 시작 버튼 시점에 반영 — 상금 수령 즉시 티어 변동 없음 |
 | EC-05 | 최소 거래 횟수(5회) 미달로 상금 자격 없는 1위 | 자격 미달 순위의 상금은 **소멸(미지급)**. 다음 자격자에게 이전되지 않는다. 자격 있는 순위만 해당 배율대로 각자 지급받는다. (예: 1위 자격 미달, 2위 자격 있음 → 2위는 자신의 배율(30%)만 수령, 1위 몫(50%) 이전 없음) |
 | EC-06 | 프리마켓 중 주식 보유 중에 현금이 1만 원 미만 | 보유 주식이 1주라도 있으면 한강 엔딩 미발동 — 보유 주식 없음 AND sim_cash < 10,000원 동시 충족 시만 발동 |
 | EC-07 | 프리마켓에서 자산 회복 후 시즌 시작 안 누르고 대기 | 브론즈 재진입 자격은 유지. 시작 버튼 누르는 시점에 다시 자산 체크 |
-| EC-08 | season_start_capital = 0 (이론상 불가, 가드 필요) | 티어 배정 전 sim_total_assets > 0 검증. 0이면 시즌 시작 불가 처리 |
+| EC-08 | season_start_deposit = 0 (이론상 불가, 가드 필요) | 티어 배정 전 cash_assets > 0 검증. 0이면 시즌 시작 불가 처리 |
 
 ## 6. Dependencies
 
 | 시스템 | 방향 | 내용 |
 |--------|------|------|
-| `CurrencySystem` | 읽기/쓰기 | `sim_cash`, `reserved_cash` 읽기; 상금 입금 (`add_cash()`); 시즌 시작 자본금 스냅샷 저장 |
+| `CurrencySystem` | 읽기/쓰기 | `get_cash_assets()`, `get_sim_cash()`, `reserved_cash` 읽기; 정산 `settle_to_cash(prize)` (sim_cash + 상금 → cash_assets, sim_cash=0); 예수금 입금 `auto_deposit_to_sim(tier_threshold)` |
 | `OrderEngine` | 읽기/쓰기 | 시즌 종료 시 미체결 주문 전량 취소; `season_trade_count` 집계 |
 | `PriceEngine` | 읽기 | `get_current_price(stock_id)` — 실시간 총 자산 계산 및 강제 청산 가격 |
 | `PortfolioManager` | 읽기/쓰기 | 보유 주식 목록 조회; 시즌 종료 강제 청산 실행 |
@@ -392,42 +400,42 @@ daily_xp_granted = base_daily_xp × (FREE_MARKET_XP_RATE if is_free_market else 
 
 #### 시즌 수명주기
 
-- [ ] AC-01: 시즌 시작 버튼 시점 `sim_total_assets` 기준으로 올바른 티어에 배정된다
-- [ ] AC-02: 시즌 종료 시 보유 주식 전량 강제 청산 후 `sim_cash`에 반영된다
-- [ ] AC-03: 시즌 종료 후 `sim_total_assets ≥ 100,000,000,000`이면 거장 엔딩이 자동 발동된다
-- [ ] AC-04: 시즌 시작 시점 `sim_total_assets < 1,000,000`이면 프리마켓으로 진입된다
-- [ ] AC-05: 프리마켓 중 보유 주식 없음 AND `sim_cash < 10,000`이면 한강 엔딩이 발동된다
+- [x] AC-01: 시즌 시작 버튼 시점 `cash_assets` 기준으로 올바른 티어에 배정된다
+- [x] AC-02: 시즌 종료 시 보유 주식 전량 강제 청산 후 `sim_cash`에 반영된다
+- [x] AC-03: 시즌 종료 후 `cash_assets ≥ 100,000,000,000`이면 거장 엔딩이 자동 발동된다
+- [x] AC-04: 시즌 시작 시점 `cash_assets < 1,000,000`이면 프리마켓으로 진입된다
+- [x] AC-05: 프리마켓 중 보유 주식 없음 AND `sim_cash < 10,000`이면 한강 엔딩이 발동된다
 
 #### 순위 및 상금
 
-- [ ] AC-06: `return_pct = (sim_total_assets - season_start_capital) / season_start_capital × 100` 공식으로 정확히 계산된다
-- [ ] AC-07: `reserved_cash`가 `sim_total_assets` 계산에 포함된다
-- [ ] AC-08: 시즌 체결 < 5회인 참가자는 순위 표시는 되지만 현금 상금을 받지 못한다
-- [ ] AC-09: 브론즈 1위 상금은 `1,000,000 × 0.50 = 500,000원`으로 정확히 입금된다
-- [ ] AC-10: 상금은 `sim_cash`에 즉시 입금되고 다음 시즌 이월된다
+- [x] AC-06: `return_pct = (account_total_value - season_start_deposit) / season_start_deposit × 100` 공식으로 정확히 계산된다
+- [x] AC-07: `reserved_cash`가 `account_total_value` 계산에 포함된다
+- [x] AC-08: 시즌 체결 < 5회인 참가자는 순위 표시는 되지만 현금 상금을 받지 못한다
+- [x] AC-09: 브론즈 1위 상금은 `1,000,000 × 0.50 = 500,000원`으로 정확히 입금된다
+- [x] AC-10: 상금은 `settle_to_cash()` 경로로 `cash_assets`에 즉시 입금된다
 
 #### 특별 보상
 
-- [ ] AC-11: 주간 수익률상은 `(금요일 종가 시점 sim_total_assets - 월요일 PRE_MARKET sim_total_assets) / 월요일 PRE_MARKET sim_total_assets × 100` 기준 티어 내 1위이며 주간 체결 ≥ `MIN_WEEKLY_TRADES` 충족한 참가자에게 지급된다
-- [ ] AC-12: 완주 보너스는 수익률 ≥ 0% AND 체결 ≥ 5회 충족 시 20 XP가 부여된다
-- [ ] AC-12b: 수익률 < 0%이면 완주 보너스 XP가 지급되지 않는다
-- [ ] AC-13: 특별 보상은 순위 보상과 중복 수령 가능하다
+- [x] AC-11: 주간 수익률상은 `(금요일 종가 시점 account_total_value - 월요일 PRE_MARKET account_total_value) / 월요일 PRE_MARKET account_total_value × 100` 기준 티어 내 1위이며 주간 체결 ≥ `MIN_WEEKLY_TRADES` 충족한 참가자에게 지급된다
+- [x] AC-12: 완주 보너스는 수익률 ≥ 0% AND 체결 ≥ 5회 충족 시 20 XP가 부여된다
+- [x] AC-12b: 수익률 < 0%이면 완주 보너스 XP가 지급되지 않는다
+- [x] AC-13: 특별 보상은 순위 보상과 중복 수령 가능하다
 
 #### 순위 타이브레이커
 
-- [ ] AC-14: return_pct가 동일한 두 참가자 간 순위는 season_join_timestamp가 이른(작은) 참가자가 상위로 결정된다
-- [ ] AC-15: 거장 티어 AI는 글로벌 순위 계산에 포함되며 리더보드에 `[거장]` 뱃지로 표시된다
+- [x] AC-14: return_pct가 동일한 두 참가자 간 순위는 season_join_timestamp가 이른(작은) 참가자가 상위로 결정된다
+- [x] AC-15: 거장 티어 AI는 글로벌 순위 계산에 포함되며 리더보드에 `[거장]` 뱃지로 표시된다
 
 #### 시즌 마지막 주 처리 순서
 
-- [ ] AC-16: Day 20 금요일에 주간 수익률상(WEEK_END) → 강제 청산(SEASON_END) → 시즌 상금 → 시즌 XP 순서로 처리된다
+- [x] AC-16: Day 20 금요일에 주간 수익률상(WEEK_END) → 강제 청산(SEASON_END) → 시즌 상금 → 시즌 XP 순서로 처리된다
 
 #### 프리마켓
 
-- [ ] AC-17: 프리마켓 중 일일 보너스 XP가 정상 대비 50%로 감소한다
-- [ ] AC-18: 프리마켓 참가자는 시즌 순위 보너스 XP를 받지 못한다
-- [ ] AC-19: 프리마켓 참가자도 수익률 ≥ 0% AND 체결 ≥ 5회 충족 시 완주 보너스 20 XP를 받는다 (패널티 없음)
-- [ ] AC-20: 프리마켓에서 `sim_total_assets ≥ 1,000,000` 달성 시 다음 시즌 시작 버튼 시점에 브론즈로 배정된다
+- [x] AC-17: 프리마켓 중 일일 보너스 XP가 정상 대비 50%로 감소한다
+- [x] AC-18: 프리마켓 참가자는 시즌 순위 보너스 XP를 받지 못한다
+- [x] AC-19: 프리마켓 참가자도 수익률 ≥ 0% AND 체결 ≥ 5회 충족 시 완주 보너스 20 XP를 받는다 (패널티 없음)
+- [x] AC-20: 프리마켓에서 `cash_assets ≥ 1,000,000` 달성 시 다음 시즌 시작 버튼 시점에 브론즈로 배정된다
 
 ---
 

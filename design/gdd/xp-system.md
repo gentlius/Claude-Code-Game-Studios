@@ -66,7 +66,7 @@ daily_xp = floor(BASE_DAILY_XP × daily_alpha_multiplier(alpha_pct))
 - `BASE_DAILY_XP` = 30 (튜닝 가능)
 - 거래 0건인 날: 일일 보너스 XP 없음 (활동 조건 — 체결(FILLED) 1건 이상 필요)
 - 시장 대비 언더퍼폼 시에도 최소 XP 부여 — 배움의 과정도 성장
-- 시즌 첫 거래일: 전일 장 마감 데이터 없으므로 `season_start_cash` 대비 산출 (→ Edge Cases: 시즌 첫 거래일 기준)
+- 시즌 첫 거래일: 전일 장 마감 데이터 없으므로 `season_start_deposit` 대비 산출 (→ Edge Cases: 시즌 첫 거래일 기준)
 
 ##### 1-2. 시즌 보너스 XP (Season Bonus XP) — 시즌 종료 시
 
@@ -268,7 +268,7 @@ get_cumulative_xp_for_level(target_level) = Σ required_xp(lv) for lv = 1 to (ta
 | 현금 100% 보유, 시장 하락 | player_return_pct = 0.0%, market_return_pct < 0% → alpha > 0% → 올바른 판단 보상 (시장을 피한 것이 알파) |
 | 현금 100% 보유, 시장 상승 | player_return_pct = 0.0%, market_return_pct > 0% → alpha < 0% → 기회 비용 반영 |
 | 전 종목 가격 변동 없음 | market_return_pct = 0.0%. player_return_pct = alpha_pct. 정상 처리 |
-| 시즌 첫 거래일 기준 | prev_close_assets 없으므로 season_start_cash를 전일 자산으로 대체하여 player_return_pct를 산출. 첫 시즌: 1,000,000원. 이후 시즌: 이월된 season_start_cash. market_return_pct는 동일하게 당일 종목 평균으로 산출. |
+| 시즌 첫 거래일 기준 | prev_close_assets 없으므로 season_start_deposit를 전일 자산으로 대체하여 player_return_pct를 산출. 첫 시즌: 1,000,000원. 이후 시즌: 이월된 season_start_deposit. market_return_pct는 동일하게 당일 종목 평균으로 산출. |
 | 최대 레벨 | 제한 없음. XP와 레벨은 무한 성장 (스킬 포인트 잉여 누적) |
 | 저장 데이터 손상 | XP/레벨이 음수가 되면 0으로 클램프 |
 | 스팸 매매 | XP에 영향 없음. 거래 횟수는 XP 산출에 사용되지 않음 |

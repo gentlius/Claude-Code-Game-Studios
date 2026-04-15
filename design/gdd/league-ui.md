@@ -184,7 +184,7 @@ context_rows = SeasonManager.get_leaderboard(tier, my_rank - LEADERBOARD_CONTEXT
 |---|------|------|
 | EC-01 | 내 순위가 1~12위 이내 (±2 범위가 1~10 블록과 겹침) | 구분선 없이 1위부터 연속 표시. 내 행만 강조색 적용 |
 | EC-02 | 내 순위가 최하위권 (예: 7,598위) — ±2위 하단이 존재하지 않음 | 존재하는 행까지만 표시 (7,598~7,600위) |
-| EC-03 | 시즌 시작 직후 (season_start_capital 스냅샷 직후 첫 틱) | 수익률 0.0% 표시. 나누기 0 방지: season_start_capital > 0 가드 |
+| EC-03 | 시즌 시작 직후 (season_start_deposit 스냅샷 직후 첫 틱) | 수익률 0.0% 표시. 나누기 0 방지: season_start_deposit > 0 가드 |
 | EC-04 | 주간 첫날 (weekly_start_capital 스냅샷 직후) | 주간 수익률 0.0% 표시 |
 | EC-05 | 프리마켓 상태 (리그 미참여) | F2 화면에 "현재 프리마켓 참여 중 — 공식 리그 순위 없음" 안내 표시. 리더보드 숨김 |
 | EC-06 | 시즌 미시작 (첫 실행 또는 시즌 간 대기) | F2 화면에 "시즌 시작 전 — [시즌 시작] 버튼" 표시 |

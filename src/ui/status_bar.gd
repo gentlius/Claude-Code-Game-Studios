@@ -4,6 +4,17 @@
 class_name StatusBar
 extends VBoxContainer
 
+## Mirrors TradingScreen.UIState to break circular class_name dependency.
+## Both enums must have identical values — if TradingScreen.UIState changes, update here too.
+enum UIState {
+	LOADING,
+	PRE_MARKET,
+	MARKET_OPEN,
+	PAUSED,
+	SETTLEMENT,
+	SEASON_RESULT,
+}
+
 ## Emitted when the league HUD label is clicked → TradingScreen relays to league_tab_requested.
 signal league_hud_clicked
 ## Emitted when pause button pressed → TradingScreen relays to pause_toggle_requested.
@@ -12,8 +23,8 @@ signal pause_toggled
 signal speed_changed(multiplier: float)
 ## Emitted when the market-open / season-start button is pressed.
 signal market_open_pressed
-## Exposed for TradingScreen to wire skill-tree toggle.
-var xp_bar: XpBar
+## Emitted when SP alert button clicked — MainScreen switches to F3 growth tab.
+signal growth_tab_requested
 
 var _lbl_season_info: Label
 var _lbl_tick_progress: Label
@@ -31,13 +42,8 @@ var _lbl_cash: Label
 var _lbl_league_tier: Label
 var _lbl_season_return: Label
 var _lbl_weekly_return: Label
-var _lbl_sp_alert: Label
-var _ui_state: int = -1   ## mirrors TradingScreen.UIState (int)
-
-## Mirrors TradingScreen.UIState enum values — kept in sync with trading_screen.gd.
-const _STATE_PRE_MARKET: int = 1
-const _STATE_MARKET_OPEN: int = 2
-const _STATE_PAUSED: int = 3
+var _btn_sp_alert: Button
+var _ui_state: UIState = UIState.LOADING
 
 
 func _ready() -> void:
@@ -177,8 +183,6 @@ func _build_row2() -> void:
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row2.add_child(spacer)
 	_build_league_hud(row2)
-	xp_bar = XpBar.new()
-	row2.add_child(xp_bar)
 
 
 func _build_league_hud(row: HBoxContainer) -> void:
@@ -215,12 +219,13 @@ func _build_league_hud(row: HBoxContainer) -> void:
 
 
 func _build_sp_alert() -> void:
-	_lbl_sp_alert = Label.new()
-	_lbl_sp_alert.visible = false
-	_lbl_sp_alert.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_lbl_sp_alert.add_theme_font_size_override("font_size", 12)
-	_lbl_sp_alert.add_theme_color_override("font_color", Color(0.85, 0.70, 0.20))
-	add_child(_lbl_sp_alert)
+	_btn_sp_alert = Button.new()
+	_btn_sp_alert.visible = false
+	_btn_sp_alert.flat = true
+	_btn_sp_alert.add_theme_font_size_override("font_size", 12)
+	_btn_sp_alert.add_theme_color_override("font_color", Color(0.85, 0.70, 0.20))
+	_btn_sp_alert.pressed.connect(func() -> void: growth_tab_requested.emit())
+	add_child(_btn_sp_alert)
 
 
 func _on_tick(_tick: int, _day: int, _week: int) -> void:
@@ -242,7 +247,7 @@ func _update_row1() -> void:
 
 
 func _update_speed_label() -> void:
-	if _ui_state == _STATE_PAUSED:
+	if _ui_state == UIState.PAUSED:
 		_lbl_speed.text = tr("⏸ 일시정지")
 		return
 	var spd: float = GameClock.get_speed_multiplier()
@@ -323,15 +328,15 @@ func _apply_return_color(lbl: Label, value: float) -> void:
 ## Called by TradingScreen when UIState changes. Controls speed/pause visibility and SP alert.
 ## _speed_box and _btn_market_open are same-width siblings — toggling one at a time keeps layout stable.
 func set_ui_state(state: int) -> void:
-	_ui_state = state
-	var speed_visible: bool = state == _STATE_MARKET_OPEN or state == _STATE_PAUSED
+	_ui_state = state as UIState
+	var speed_visible: bool = state == UIState.MARKET_OPEN or state == UIState.PAUSED
 	_speed_box.visible = speed_visible
-	_btn_market_open.visible = (state == _STATE_PRE_MARKET)
-	if state == _STATE_PRE_MARKET:
+	_btn_market_open.visible = (state == UIState.PRE_MARKET)
+	if state == UIState.PRE_MARKET:
 		_btn_market_open.text = tr("장 시작 Enter") if SeasonManager.is_season_active() else tr("시즌 시작 Enter")
 		_update_sp_alert()
 	else:
-		_lbl_sp_alert.visible = false
+		_btn_sp_alert.visible = false
 	if speed_visible:
 		_update_speed_buttons(GameClock.get_speed_multiplier())
 	_update_row1()
@@ -351,10 +356,10 @@ func _update_speed_buttons(multiplier: float) -> void:
 func _update_sp_alert() -> void:
 	var sp: int = XpSystem.get_available_skill_points()
 	if sp > 0:
-		_lbl_sp_alert.text = tr("미사용 스킬 포인트 %d개 — 스킬 트리 열기 K") % sp
-		_lbl_sp_alert.visible = true
+		_btn_sp_alert.text = tr("미사용 스킬 포인트 %d개 — F3 성장 화면에서 해금") % sp
+		_btn_sp_alert.visible = true
 	else:
-		_lbl_sp_alert.visible = false
+		_btn_sp_alert.visible = false
 
 
 ## Called by TradingScreen after speed changes via keyboard.

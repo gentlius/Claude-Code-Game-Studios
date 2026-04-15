@@ -62,3 +62,4 @@
 - [ADR-015](../../docs/architecture/015-save-trigger-timing.md) — SaveSystem 저장 트리거 타이밍 (시즌/일별/초기 저장 순서)
 - [ADR-016](../../docs/architecture/016-qa-10day-scenario-findings.md) — QA 자동화 10일 시나리오 버그 기록
 - [ADR-017](../../docs/architecture/017-news-feed-cycling-state-machine.md) — 뉴스 카드 관련종목 순회 클로저 캡처 상태머신
+- [ADR-018](../../docs/architecture/018-anti-price-scout-rng-entropy.md) — 가격 정찰 익스플로잇 차단: PriceEngine 세션 RNG 엔트로피 격리

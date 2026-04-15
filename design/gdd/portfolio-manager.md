@@ -12,8 +12,9 @@
 포트폴리오 관리는 플레이어의 보유 종목을 추적하고 손익을 계산하는 Core 시스템이다.
 주문 처리 엔진에서 체결 통보를 받으면 보유 종목(holdings)을 갱신하고, 가격 엔진의
 현재가를 참조하여 매 틱 미실현 손익과 총 자산을 실시간 계산한다. 시즌 순위의
-기준이 되는 대회 내 총 자산(`sim_total_assets = sim_cash + 보유 주식 평가액`)을
-산출하는 핵심 시스템이다.
+기준이 되는 대회 내 계좌 총 평가금액(`account_total_value = sim_cash + reserved_cash + 보유 주식 평가액`)을
+산출하는 핵심 시스템이다. `account_total_value`는 3층 자산 구조의 두 번째 층으로,
+현금 자산(`cash_assets`) 및 유형 자산(`tangible_assets`)을 포함하지 않는다.
 
 MVP에서는 단일 포트폴리오(`SimPortfolio`)로 구현한다. `RealPortfolio`는 향후 확장용 스텁이다. 시즌 종료 시 보유 주식을 강제 청산하고,
 예수금 잔액은 다음 시즌으로 이월된다 (복리 구조).
@@ -54,7 +55,7 @@ BasePortfolio {
 PortfolioSummary {
     sim_cash: int               # 현금 잔액 (재화 시스템에서 조회)
     reserved_cash: int          # 지정가 매수 예약금 합계 (주문 엔진에서 조회)
-    total_assets: int           # sim_cash + reserved_cash + 보유 주식 평가액
+    account_total_value: int    # sim_cash + reserved_cash + 보유 주식 평가액 (대회 계좌 평가금액. 3층 구조의 현금 자산·유형 자산 미포함)
     return_rate: float          # 대회 수익률 (%)
     holding_count: int          # 현재 보유 종목 수
     max_holdings: int           # 최대 보유 가능 종목 수 (스킬 레벨 기준)
@@ -62,12 +63,12 @@ PortfolioSummary {
 
 SimPortfolio extends BasePortfolio {  # "Sim" = simulation (게임 경제). 예수금 직접 투자.
     season_id: string
-    season_start_cash: int      # 시즌 시작 시 예수금 스냅샷 (첫 시즌: 1,000,000, 이후 이월된 잔액)
+    season_start_deposit: int   # 시즌 시작 시 예수금 스냅샷 (= CurrencySystem.auto_deposit_to_sim() 입금액. 첫 시즌: 1,000,000, 이후 tier_threshold)
 
     update_valuation(price_provider, sim_cash, reserved_cash)
                                 # 틱별 호출. 평가 갱신 + 캐시 갱신
     get_return_rate(): float    # 캐시된 최신 수익률 반환 (파라미터 불필요)
-    get_total_assets(): int     # 캐시된 최신 총 자산 반환
+    get_total_assets(): int     # 캐시된 최신 대회 계좌 평가금액 반환 (= account_total_value. 현금·유형 자산 미포함)
     get_portfolio_summary(): PortfolioSummary
                                 # 캐시된 값으로 PortfolioSummary 조립.
                                 # 내부적으로 SkillTree.get_max_holdings()를 호출하여 슬롯 정보를 조회한다.
@@ -182,8 +183,9 @@ update_valuation(price_provider, sim_cash, reserved_cash):
         total_stock_value += holding.current_value
 
     // Step 2: 캐시 갱신 (get_total_assets, get_return_rate의 반환값)
+    // _cached_total_assets = account_total_value (대회 계좌 평가금액, 현금·유형 자산 미포함)
     _cached_total_assets = sim_cash + reserved_cash + total_stock_value
-    _cached_return_rate = (_cached_total_assets - season_start_cash) / season_start_cash × 100
+    _cached_return_rate = (_cached_total_assets - season_start_deposit) / season_start_deposit × 100
     _cached_sim_cash = sim_cash
     _cached_reserved_cash = reserved_cash
 ```
@@ -264,17 +266,21 @@ realized_pnl = (sell_price - avg_buy_price) × sell_quantity
 - `realized_pnl = (71,500 - 65,000) × 5 = 32,500원`
 - 잔여 5주의 avg_buy_price = 여전히 65,000원
 
-### F4. 대회 내 총 자산
+### F4. 대회 내 계좌 총 평가금액
 
 ```
-sim_total_assets = sim_cash + reserved_cash + Σ(holding_i.quantity × current_price_i)
+account_total_value = sim_cash + reserved_cash + Σ(holding_i.quantity × current_price_i)
 ```
+
+> **주의**: `account_total_value`는 3층 자산 구조의 2층(대회 계좌)만 반영한다.
+> 현금 자산(`cash_assets`) 및 유형 자산(`tangible_assets`)은 포함하지 않는다.
+> 게임 내 전체 자산 합계는 `cash_assets + account_total_value + tangible_assets`.
 
 | Variable | Type | Range | Source | Description |
 |----------|------|-------|--------|-------------|
 | `sim_cash` | int | 0+ | 재화 시스템 | 예수금 잔액 (지정가 예약금 차감 후) |
 | `reserved_cash` | int | 0+ | 주문 엔진 | 미체결 지정가 매수 주문의 예약금 합계. `Σ(pending_buy_limit.reserved_cash)` |
-| `sim_total_assets` | int | 0+ | calculated | 현금 + 예약금 + 보유 주식 평가액 |
+| `account_total_value` | int | 0+ | calculated | 현금 + 예약금 + 보유 주식 평가액 (= `get_total_assets()` 반환값) |
 
 `reserved_cash`는 `sim_cash`에서 이미 선차감된 금액이다. 총 자산에 합산하지 않으면
 지정가 매수 제출 시 총 자산이 예약금만큼 감소하여 플레이어에게 오해를 줄 수 있다.
@@ -282,17 +288,17 @@ sim_total_assets = sim_cash + reserved_cash + Σ(holding_i.quantity × current_p
 전환되므로 총 자산은 항상 일관된다.
 
 **예시**: sim_cash=300,000, reserved_cash=200,000, 스타칩 10주×71,500=715,000
-- `sim_total_assets = 300,000 + 200,000 + 715,000 = 1,215,000원`
+- `account_total_value = 300,000 + 200,000 + 715,000 = 1,215,000원`
 
 ### F5. 대회 수익률
 
 ```
-return_rate = (sim_total_assets - season_start_cash) / season_start_cash × 100
+return_rate = (account_total_value - season_start_deposit) / season_start_deposit × 100
 ```
 
 | Variable | Type | Range | Source | Description |
 |----------|------|-------|--------|-------------|
-| `season_start_cash` | int | 변동 (첫 시즌 1,000,000) | 재화 시스템 | 시즌 시작 시 예수금 스냅샷 |
+| `season_start_deposit` | int | 변동 (첫 시즌 1,000,000) | 재화 시스템 | 시즌 시작 시 예수금 자동 입금액 스냅샷 (= `CurrencySystem.season_start_deposit`) |
 | `return_rate` | float | -100%~∞ | calculated | 대회 수익률 (%) |
 
 **예시**: `return_rate = (1,015,000 - 1,000,000) / 1,000,000 × 100 = 1.5%`
@@ -300,20 +306,20 @@ return_rate = (sim_total_assets - season_start_cash) / season_start_cash × 100
 ### F6. 포트폴리오 비중
 
 ```
-if sim_total_assets == 0:
+if account_total_value == 0:
     weight_i = 0.0
     cash_weight = 0.0
     reserved_weight = 0.0
 else:
-    weight_i = (holding_i.quantity × current_price_i) / sim_total_assets × 100
-    cash_weight = sim_cash / sim_total_assets × 100
-    reserved_weight = reserved_cash / sim_total_assets × 100
+    weight_i = (holding_i.quantity × current_price_i) / account_total_value × 100
+    cash_weight = sim_cash / account_total_value × 100
+    reserved_weight = reserved_cash / account_total_value × 100
 ```
 
 전 보유 종목의 weight + cash_weight + reserved_weight = 100%.
 `reserved_cash`는 `OrderEngine.get_total_reserved_cash()`에서 조회한다.
 `reserved_cash = 0`이면 reserved_weight가 0이 되어 UI에 표시하지 않는다.
-`sim_total_assets = 0`은 예수금 전액 손실 시 발생할 수 있다.
+`account_total_value = 0`은 예수금 전액 손실 시 발생할 수 있다.
 방어 코드로 weight 0% 반환, 빈 상태 메시지 표시.
 
 ### 변수 마스터 테이블
@@ -323,9 +329,9 @@ else:
 | `max_holdings_p0` | 3 | 1~5 | config | P0 동시 보유 종목 수 |
 | `max_holdings_p1` | 5 | 3~7 | config | P1 동시 보유 종목 수 |
 | `max_holdings_p2` | 10 | 5~15 | config | P2 동시 보유 종목 수 |
-| `season_start_cash` | 변동 (이월) | N/A | 재화 시스템 | 시즌 시작 시 예수금 (이월, 첫 시즌 1,000,000) |
+| `season_start_deposit` | 변동 (tier_threshold) | N/A | 재화 시스템 | 시즌 시작 시 예수금 자동 입금액 (= `CurrencySystem.auto_deposit_to_sim()` 결과, 첫 시즌 1,000,000) |
 
-> **초기화 순서**: `season_start_cash`는 `on_season_start` 시그널 수신 시 `CurrencySystem.get_sim_cash()`를 호출하여 스냅샷한다. XP 시스템도 동일 시점에 동일 값을 스냅샷하므로 단일 소스(CurrencySystem)에서 읽어 일관성을 보장한다.
+> **초기화 순서**: `season_start_deposit`는 `on_season_start` 시그널 수신 시 `CurrencySystem.get_season_start_deposit()`을 호출하여 스냅샷한다. XP 시스템도 동일 시점에 동일 값을 스냅샷하므로 단일 소스(CurrencySystem)에서 읽어 일관성을 보장한다.
 
 ## Edge Cases
 
@@ -334,12 +340,12 @@ else:
 | 전량 매도 후 동일 종목 재매수 | 새로운 HoldingEntry 생성. 이전 평균 매수가는 무관 | 청산 후 재진입은 새 포지션 |
 | 동일 종목 반복 매수 (5회 연속) | 매번 avg_buy_price 재계산. 모든 거래 TransactionRecord에 기록 | 물타기/불타기 전략 지원 |
 | 전량 매도 시 holdings 정리 | holdings에서 해당 종목 제거. holding_count 감소. 새 종목 매수 가능 | 슬롯 즉시 해제 |
-| 시즌 종료 시 보유 종목 존재 | **오케스트레이터: 시즌/대회 관리 시스템** (Game Clock `on_season_end` 수신 후 실행). 강제 청산 시퀀스: ①시즌 관리가 주문 엔진에 `expire_all_pending()` 호출 → 미체결 전량 EXPIRED + 예약/잠금 복원 → ②시즌 관리가 포트폴리오에 `force_liquidate(price_provider)` 호출 → 아래 상세 참조 → ③포트폴리오 `get_total_assets()` → sim_total_assets 최종 스냅샷 (순위용) → ④시즌 관리가 재화 시스템 `settle_season()` 호출 → 상금 지급 (예수금은 이월, 리셋 없음) → ⑤시즌 관리가 포트폴리오 `reset()` 호출. **트리거 시점**: MARKET_CLOSED 직후, 플레이어에게 리포트를 표시하기 전에 ①~③ 실행하여 최종 자산 확정. 리포트 확인 후 ④~⑤ 실행. **`force_liquidate(price_provider)` 상세**: 주문 엔진을 거치지 않고 직접 처리. `for each holding: sell_price = price_provider.get_current_price(stock_id)` → `realized_pnl = (sell_price - avg_buy_price) × quantity` → TransactionRecord(type=SELL) 기록 → `currency.sim_add(sell_price × quantity)` 직접 호출 → `holdings.remove(stock_id)`. `on_order_filled` 시그널 미발행 (주문 엔진 비경유). | 순위 확정 필요. 가격 엔진은 마지막 틱 가격을 리셋 전까지 유지. 시즌/대회 관리가 V-Slice에서 구현 시 상세 설계 |
+| 시즌 종료 시 보유 종목 존재 | **오케스트레이터: 시즌/대회 관리 시스템** (Game Clock `on_season_end` 수신 후 실행). 강제 청산 시퀀스: ①시즌 관리가 주문 엔진에 `expire_all_pending()` 호출 → 미체결 전량 EXPIRED + 예약/잠금 복원 → ②시즌 관리가 포트폴리오에 `force_liquidate(price_provider)` 호출 → 아래 상세 참조 → ③포트폴리오 `get_total_assets()` → account_total_value 최종 스냅샷 (순위용) → ④시즌 관리가 재화 시스템 `settle_to_cash(prize)` 호출 → sim_cash + 상금 → cash_assets, sim_cash = 0 → ⑤시즌 관리가 포트폴리오 `reset()` 호출. **트리거 시점**: MARKET_CLOSED 직후, 플레이어에게 리포트를 표시하기 전에 ①~③ 실행하여 최종 자산 확정. 리포트 확인 후 ④~⑤ 실행. **`force_liquidate(price_provider)` 상세**: 주문 엔진을 거치지 않고 직접 처리. `for each holding: sell_price = price_provider.get_current_price(stock_id)` → `realized_pnl = (sell_price - avg_buy_price) × quantity` → TransactionRecord(type=SELL) 기록 → `currency.sim_add(sell_price × quantity)` 직접 호출 → `holdings.remove(stock_id)`. `on_order_filled` 시그널 미발행 (주문 엔진 비경유). | 순위 확정 필요. 가격 엔진은 마지막 틱 가격을 리셋 전까지 유지. 시즌/대회 관리가 V-Slice에서 구현 시 상세 설계 |
 | ①~③ 실행 중 게임 크래시 | **MVP 미대응**. 재시작 시 시즌 종료 직전 세이브에서 복구, ①부터 재실행. 원자성 보장은 세이브/로드 GDD에서 설계 | 시즌 정산은 단일 프레임 내 완료 가능 (46종목 청산 ~1ms). 크래시 확률 극히 낮음 |
-| 보유 종목 0개 상태에서 총 자산 조회 | sim_total_assets = sim_cash. 보유 주식 평가액 = 0 | 정상 작동 |
+| 보유 종목 0개 상태에서 총 자산 조회 | account_total_value = sim_cash. 보유 주식 평가액 = 0 | 정상 작동 |
 | 가격이 매우 높은 종목 (320,000원) 1주 매수 | 정상 처리. 금액 제한은 주문 엔진이 sim_cash 기준으로 검증 | 포트폴리오는 체결 후만 관여 |
 | floor() 반올림으로 1원 오차 | 허용. 모든 금액은 floor() 후 정수. 누적 오차 최대 보유 종목 수만큼 | 정수 원칙 일관 유지 |
-| get_return_rate() 호출 시 season_start_cash가 0 | 예수금 전액 손실 후 새 시즌 시작 시 발생 가능. 방어 코드로 return_rate = 0% 반환 | 0으로 나누기 방지. 완주 보너스(30,000원)로 복귀 |
+| get_return_rate() 호출 시 season_start_deposit가 0 | 예수금 전액 손실 후 새 시즌 시작 시 발생 가능. 방어 코드로 return_rate = 0% 반환 | 0으로 나누기 방지. 완주 보너스(30,000원)로 복귀 |
 | 스킬 레벨 다운그레이드 (현재 보유 > 새 한도) | 발생 불가 (스킬은 영구 해금). 만약 발생 시 기존 보유 유지, 추가 매수만 차단 | 플레이어 자산 보호 |
 
 ## Dependencies
@@ -377,8 +383,8 @@ else:
 - [ ] 매도 시 avg_buy_price가 변하지 않음
 - [ ] unrealized_pnl이 (current_price - avg_buy_price) × quantity와 일치
 - [ ] realized_pnl이 (sell_price - avg_buy_price) × sell_quantity와 일치
-- [ ] sim_total_assets = sim_cash + reserved_cash + Σ(quantity × current_price)
-- [ ] return_rate = (sim_total_assets - season_start_cash) / season_start_cash × 100
+- [ ] account_total_value = sim_cash + reserved_cash + Σ(quantity × current_price)  (= get_total_assets() 반환값)
+- [ ] return_rate = (account_total_value - season_start_deposit) / season_start_deposit × 100
 - [ ] 보유 종목 수가 max_holdings를 초과하지 않음
 - [ ] 시즌 종료 시 종가 기준 강제 청산 후 전체 리셋
 - [ ] 시즌 리셋 후 holdings 빈 상태, 거래 내역 초기화

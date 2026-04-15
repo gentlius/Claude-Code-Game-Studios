@@ -1,9 +1,9 @@
 # AI Competitor System
 
-*Created: 2026-04-03*
-*Status: In Review*
-*Sprint: S2-01*
-*Last Updated: 2026-04-14 — 순위/수익률 정합성 재설계 (전일 EOD 기준 통일, 틱 분산 계산, snapshot save/load)*
+> **Status**: Approved
+> **Sprint**: S2-01
+> **Created**: 2026-04-03
+> **Last Updated**: 2026-04-14 — 순위/수익률 정합성 재설계 (전일 EOD 기준 통일, 틱 분산 계산, snapshot save/load)
 
 ---
 

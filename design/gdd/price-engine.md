@@ -1020,6 +1020,14 @@ EXTREME 변동성(메디진, base_price=180,000원) + 대형 이벤트 1회, vol
 | 시즌 첫 틱 (모든 종목 SIDEWAYS) | 정상 작동. 전환 체크는 min_duration(40) 이후. VI/CB 카운터 = 0 | 시즌 시작은 평온하게 |
 | base_price 극단값 (38,000 vs 320,000) | 동일 변동률(%) 적용. 절대 금액은 다르나 % 기준 동일 메카닉 | 가격 공정성 |
 | deviation_ratio가 음수 (가격 < base_price) | drift_force 양수 → 상승 회귀 압력 | 대칭 회귀 설계 |
+
+### 익스플로잇 체크
+
+| Exploit | 방어 방법 |
+|---------|---------|
+| BREAKOUT_DOWN 상태 저장 → 로드 → BREAKOUT_DOWN 회피 | 마코프 상태(`markov_state`)는 §3-4 미저장 시스템 목록에 명시대로 **저장하지 않는다.** 로드 후 항상 SIDEWAYS로 리셋. 플레이어가 저장/로드로 급락 상태를 리셋할 수 있으나 이는 수용 범위. 저장 직전 가격(`current_price`, `prev_day_close`)과 `season_bias`는 저장되므로 가격 조작 불가. |
+| 오늘 BREAKOUT_UP 저장 → 로드 반복 → 오늘 BREAKOUT_UP 수익 재현 | 가격/OHLCV는 저장됨. 로드 후 마코프 상태는 SIDEWAYS로 리셋되나 오늘 이미 기록된 `ohlcv_daily`와 `prev_day_close`는 복원 그대로. 오늘 수익을 "재실행"할 수 없음 — 장 마감 후 저장하므로 당일 가격 이동은 이미 확정됨. |
+| VI/CB 발동 직전 저장 → 로드 → VI/CB 회피 | VI 카운터(`vi_triggered_today`, `cb_stage1_triggered`)는 저장하지 않음 — 로드 후 리셋. **수용 범위**: 로드 후 하루치 재플레이로 VI 회피 가능하나 이는 완전한 방어가 어려운 근본 한계 (장 중간 저장 타이밍이 없음). 완화: 가격 자체는 복원되므로 출발점 조작 불가. |
 | BREAKOUT 상태에서 또 다른 대형 이벤트 | min_duration 리셋. BREAKOUT 연장 | 연쇄 급등/급락 허용 |
 | 이벤트 없이 시즌 전체 진행 | 패턴+드리프트만으로 정상 가격 생성. 지표도 의미 유지 | 이벤트 시스템 미완성 시에도 독립 작동 |
 | MEGA+EXTREME+BREAKOUT 삼중 조합 시 단일 틱 VI 발동 | event_delta(15% clamped) + pattern_delta(BREAKOUT bias)로 total_delta > 15% 가능. 이 경우 해당 틱에서 VI 발동. 의도된 동작 — MEGA 이벤트와 BREAKOUT 상태의 극단적 조합에서만 발생 | 극히 드문 시나리오이지만 VI가 정상 작동하여 가격 안정화 |

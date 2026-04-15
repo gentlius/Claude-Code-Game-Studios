@@ -1,8 +1,8 @@
 # Intro Sequence (도입부 서사)
 
-*Created: 2026-04-06*
-*Status: Approved*
-*Sprint: S5 (Alpha)*
+> **Status**: Approved
+> **Sprint**: S5 (Alpha)
+> **Created**: 2026-04-06
 
 ---
 

@@ -111,7 +111,7 @@ var _current_tier: int = TIER_FREE_MARKET
 var _is_free_market: bool = true
 ## Number of seasons started since application launch (increments each start_season call).
 var _seasons_played: int = 0
-var _season_start_capital: int = 0
+var _season_start_deposit: int = 0
 var _weekly_start_capital: int = 0
 
 ## Accumulated fill count for the current week (reset each week-end).
@@ -150,7 +150,7 @@ func start_season() -> bool:
 		return false
 
 	_seasons_played += 1
-	_season_start_capital = total_assets
+	_season_start_deposit = total_assets
 	_weekly_start_capital = total_assets
 	_weekly_trade_count = 0
 	_last_week_trade_count = 0
@@ -198,12 +198,12 @@ func get_is_free_market() -> bool:
 
 
 ## Season return rate in percent (GDD §4-2).
-## Includes reserved_cash in sim_total_assets.
+## Includes reserved_cash in account_total_value.
 func get_season_return_pct() -> float:
-	if _season_start_capital <= 0:
+	if _season_start_deposit <= 0:
 		return 0.0
 	var total_assets: int = PortfolioManager.get_total_assets()
-	return float(total_assets - _season_start_capital) / float(_season_start_capital) * 100.0
+	return float(total_assets - _season_start_deposit) / float(_season_start_deposit) * 100.0
 
 
 ## Weekly return rate in percent (GDD §4-4).
@@ -214,9 +214,9 @@ func get_weekly_return_pct() -> float:
 	return float(total_assets - _weekly_start_capital) / float(_weekly_start_capital) * 100.0
 
 
-## Season start capital snapshot.
-func get_season_start_capital() -> int:
-	return _season_start_capital
+## Season start deposit snapshot (amount in account at season open).
+func get_season_start_deposit() -> int:
+	return _season_start_deposit
 
 
 ## True when a season has been started (delegates to GameClock — single source of truth).
@@ -489,7 +489,7 @@ func get_save_data() -> Dictionary:
 	return {
 		"current_tier": _current_tier,
 		"is_free_market": _is_free_market,
-		"season_start_capital": _season_start_capital,
+		"season_start_deposit": _season_start_deposit,
 		"weekly_start_capital": _weekly_start_capital,
 		"weekly_trade_count": _weekly_trade_count,
 		"seasons_played": _seasons_played,
@@ -500,19 +500,17 @@ func get_save_data() -> Dictionary:
 func load_save_data(data: Dictionary) -> void:
 	_current_tier = data.get("current_tier", TIER_FREE_MARKET)
 	_is_free_market = data.get("is_free_market", true)
-	_season_start_capital = data.get("season_start_capital", 0)
+	_season_start_deposit = data.get("season_start_deposit", data.get("season_start_capital", 0))  ## 구버전 키 마이그레이션
 	_weekly_start_capital = data.get("weekly_start_capital", 0)
 	_weekly_trade_count = data.get("weekly_trade_count", 0)
 	_seasons_played = data.get("seasons_played", 0)  # 픽션 날짜 복원용 (EC: 구버전 세이브 → 0)
 
 
-## Resets all season state to initial values for unit tests. Call in before_each.
-## Resets all season state for a new game.
 ## Resets all season state. Called by GameMain (new game) and tests (before_each).
 func reset() -> void:
 	_current_tier = TIER_FREE_MARKET
 	_is_free_market = true
-	_season_start_capital = 0
+	_season_start_deposit = 0
 	_weekly_start_capital = 0
 	_weekly_trade_count = 0
 	_last_week_trade_count = 0

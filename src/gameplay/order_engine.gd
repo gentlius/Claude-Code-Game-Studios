@@ -292,6 +292,10 @@ func process_tick(tick_number: int, _day: int, _week: int) -> void:
 	for entry: Array in to_fill:
 		_fill_limit_order(entry[0] as Dictionary, entry[1] as int)
 
+	# 3-d. Stop-loss / take-profit auto-sell check (GDD: stop-loss-take-profit.md §규칙 3)
+	# Runs after limit fills (3-c) so residual available_quantity is accurate.
+	StopTakeSystem.check_and_trigger(GameClock.get_market_state())
+
 	# Update portfolio valuation after order processing
 	var reserved: int = get_total_reserved_cash()
 	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), reserved)

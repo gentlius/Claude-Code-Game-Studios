@@ -22,7 +22,7 @@ if [ -n "$DESIGN_FILES" ]; then
         done
         # Implementation Checklist 미완 항목 차단
         if grep -q "Implementation Checklist" "$file" 2>/dev/null; then
-            UNCHECKED=$(awk '/Implementation Checklist/,0' "$file" | grep -c "^- \[ \]" 2>/dev/null || echo 0)
+            UNCHECKED=$(awk '/Implementation Checklist/,0' "$file" | grep "^- \[ \]" | wc -l)
             if [ "$UNCHECKED" -gt 0 ]; then
                 echo "BLOCKED [GDD]: $file — Implementation Checklist 미완 항목 ${UNCHECKED}개" >&2
                 exit 2

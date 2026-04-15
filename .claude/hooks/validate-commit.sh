@@ -43,7 +43,7 @@ if [ -n "$DESIGN_FILES" ]; then
             # Implementation Checklist 미완 항목 블록 -- [ ] 항목이 남아있으면 커밋 불가
             # 구현 완료 커밋에 GDD를 포함했으나 체크리스트를 갱신하지 않은 경우를 잡는다
             if grep -q "Implementation Checklist" "$file" 2>/dev/null; then
-                UNCHECKED=$(awk '/Implementation Checklist/,0' "$file" | grep -c "^- \[ \]" 2>/dev/null || echo 0)
+                UNCHECKED=$(awk '/Implementation Checklist/,0' "$file" | grep "^- \[ \]" | wc -l)
                 if [ "$UNCHECKED" -gt 0 ]; then
                     echo "BLOCKED: $file — Implementation Checklist에 미완 항목 ${UNCHECKED}개 남음." >&2
                     echo "  DoD 체크 전 GDD Implementation Checklist를 전부 [x]로 갱신하라." >&2
@@ -152,7 +152,7 @@ if [ -f "$CACHE_FILE" ]; then
         if ! grep -q "\"class\": &\"$classname\"" "$CACHE_FILE" 2>/dev/null; then
             MISSING_CLASSES="$MISSING_CLASSES\n  - $classname"
         fi
-    done <<< "$(grep -rh 'class_name ' src/ --include='*.gd' 2>/dev/null | awk '{print $2}')"
+    done <<< "$(grep -rh '^class_name ' src/ --include='*.gd' 2>/dev/null | awk '{print $2}')"
 
     if [ -n "$MISSING_CLASSES" ]; then
         echo "BLOCKED [B] 클래스 캐시 불일치 — 다음 class_name이 Godot 캐시에 없습니다:" >&2

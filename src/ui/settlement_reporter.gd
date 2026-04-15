@@ -22,7 +22,6 @@ const _C_DIM: String     = "5A5A66"  ## ThemeSetup.TEXT_SECONDARY.to_html(false)
 var _settlement_queue: Array[String] = []
 var _last_xp_gained: int = 0
 var _last_xp_source: String = ""
-var _weekly_xp_gained: int = 0
 var _pending_level_up: Dictionary = {}
 var _season_reveal_step: int = 0
 var _season_reveal_timer: Timer
@@ -237,7 +236,7 @@ func _show_weekly() -> void:
 	bbcode += _holdings_section(summary)
 	bbcode += _weekly_theme_hint()
 	bbcode += _weekly_xp_section()
-	_weekly_xp_gained = 0
+	XpSystem.reset_weekly_xp()
 	_lbl_body.text = bbcode
 	_btn_confirm.text = "다음 →  Enter" if not _settlement_queue.is_empty() else "다음 주  Enter"
 
@@ -280,8 +279,9 @@ func _weekly_theme_hint() -> String:
 func _weekly_xp_section() -> String:
 	var gold: String = _C_GOLD
 	var bbcode: String = "\n[color=#%s]━━━ 경험치 ━━━[/color]\n" % gold
-	if _weekly_xp_gained > 0:
-		bbcode += "[color=#%s][b]+%d XP[/b] 주간 획득[/color]\n" % [gold, _weekly_xp_gained]
+	var weekly_xp: int = XpSystem.get_weekly_xp()
+	if weekly_xp > 0:
+		bbcode += "[color=#%s][b]+%d XP[/b] 주간 획득[/color]\n" % [gold, weekly_xp]
 	else:
 		bbcode += "거래 없음 — XP 미부여\n"
 	var level: int = XpSystem.get_current_level()
@@ -388,10 +388,6 @@ func _season_trades_section() -> String:
 func _on_xp_gained(amount: int, _new_total: int, source: String) -> void:
 	_last_xp_gained = amount
 	_last_xp_source = source
-	if source == "daily_bonus":
-		# TD-CR-02: 세이브/로드 시 _weekly_xp_gained가 0으로 초기화됨.
-		# 세션 간 주간 XP 합산을 유지하려면 SaveSystem에 직렬화 추가 필요.
-		_weekly_xp_gained += amount
 
 
 func _on_level_up(new_level: int, _skill_points: int) -> void:

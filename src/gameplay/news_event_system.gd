@@ -152,26 +152,34 @@ static func _minutes_to_ticks(minutes: int) -> int:
 	return minutes * GameClock.TICKS_PER_MINUTE
 
 
-## Saves pending overnight display entries. MarketEvent objects cannot be serialized;
-## price effects are already captured in PriceEngine.get_save_data(). On load, these
-## entries are delivered to NewsFeed when it calls get_and_clear_loaded_news() in _ready().
+## Saves pending overnight display entries AND MarketEvent reconstruction data.
+## MarketEvent objects cannot be serialized directly; we save the fields needed
+## to reconstruct them. On load, load_save_data() pushes reconstructed events to
+## PriceEngine so overnight price bias survives save/load.
 func get_save_data() -> Dictionary:
 	var entries: Array = []
 	for e: Dictionary in _overnight_buffer:
+		var mev: MarketEvent = e["market_event"]
 		entries.append({
 			"headline":         e.get("headline",         ""),
 			"body":             e.get("body",             ""),
 			"impact_hint":      e.get("impact_hint",      ""),
 			"scope":            e.get("scope",            "MACRO"),
 			"impact_tier":      e.get("impact_tier",      "SMALL"),
-			"direction":        e.get("direction",        ""),
+			"direction":        e.get("direction",        1),
 			"target_stock_ids": e.get("target_stock_ids", []),
+			## MarketEvent 재구성 필드 — PriceEngine 가격 바이어스 복원용
+			"base_impact":      mev.base_impact,
+			"decay_ticks":      mev.decay_ticks,
+			"decay_curve":      int(mev.decay_curve),
+			"event_type":       int(mev.event_type),
 		})
 	return {"overnight_display": entries}
 
 
-## Restores pending overnight news from save. Does NOT re-push MarketEvents.
-## NewsFeed._ready() calls get_and_clear_loaded_news() to display these.
+## Restores pending overnight news from save.
+## Re-pushes reconstructed MarketEvents to PriceEngine so overnight price bias
+## survives save/load. NewsFeed._ready() calls get_and_clear_loaded_news() for display.
 func load_save_data(data: Dictionary) -> void:
 	_loaded_news_bundle.clear()
 	for e: Dictionary in data.get("overnight_display", []):
@@ -181,11 +189,32 @@ func load_save_data(data: Dictionary) -> void:
 			"impact_hint":      e.get("impact_hint",      ""),
 			"scope":            e.get("scope",            "MACRO"),
 			"impact_tier":      e.get("impact_tier",      "SMALL"),
-			"direction":        e.get("direction",        ""),
+			"direction":        e.get("direction",        1),
 			"target_stock_ids": e.get("target_stock_ids", []),
 			"display_tick":     0,
 			"is_pre_market":    true,
 		})
+		# Reconstruct MarketEvent and push to PriceEngine.
+		# base_impact absent in pre-fix saves → skip gracefully (backward compat).
+		var base_impact: float = float(e.get("base_impact", 0.0))
+		if base_impact <= 0.0:
+			continue
+		var direction: int = int(e.get("direction", 1))
+		var scope: MarketEvent.EventScope = _scope_str_to_enum(e.get("scope", "MACRO"))
+		var targets: Array[String] = [] as Array[String]
+		for id: Variant in e.get("target_stock_ids", []):
+			targets.append(str(id))
+		var decay_ticks: int = int(e.get("decay_ticks", 0))
+		var decay_curve: MarketEvent.DecayCurve = \
+			int(e.get("decay_curve", MarketEvent.DecayCurve.LINEAR)) as MarketEvent.DecayCurve
+		var event_type: int = int(e.get("event_type", MarketEvent.EventType.GRADUAL_SHIFT))
+		var market_event: MarketEvent
+		if event_type == MarketEvent.EventType.GRADUAL_SHIFT:
+			market_event = MarketEvent.gradual_shift(
+				base_impact, direction, scope, targets, decay_ticks, decay_curve)
+		else:
+			market_event = MarketEvent.instant_shock(base_impact, direction, scope, targets)
+		PriceEngine.push_event(market_event)
 	# Must be READY so _on_market_open() calls _generate_daily_schedule() instead of
 	# returning early. Default UNINITIALIZED silently suppresses all intraday news.
 	_state = SystemState.READY

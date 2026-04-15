@@ -44,6 +44,7 @@ var DAILY_RETURN_MULTIPLIERS: Array[Array] = [
 var _total_xp: int = 0
 var _current_level: int = 1
 var _spent_skill_points: int = 0
+var _weekly_xp: int = 0  ## XP this week (reset after weekly report via reset_weekly_xp())
 var _daily_has_trade: bool = false  ## Tracks if at least 1 fill occurred today
 var _prev_close_assets: int = 0     ## Previous day's closing total assets
 var _last_daily_return_pct: float = 0.0  ## Player daily return % (before alpha adjustment)
@@ -65,6 +66,17 @@ func _ready() -> void:
 ## Total accumulated XP (permanent across seasons)
 func get_total_xp() -> int:
 	return _total_xp
+
+
+## XP gained this week (since last reset_weekly_xp() call).
+## SettlementReporter reads this for the weekly report; call reset_weekly_xp() after display.
+func get_weekly_xp() -> int:
+	return _weekly_xp
+
+
+## Resets the weekly XP counter. Called by SettlementReporter after the weekly report is shown.
+func reset_weekly_xp() -> void:
+	_weekly_xp = 0
 
 
 ## Current player level
@@ -118,6 +130,7 @@ func _grant_xp(amount: int, source: String) -> int:
 	if amount <= 0:
 		return 0
 	_total_xp += amount
+	_weekly_xp += amount
 	on_xp_gained.emit(amount, _total_xp, source)
 	return _check_level_ups()
 
@@ -279,6 +292,7 @@ func get_save_data() -> Dictionary:
 		"last_daily_return_pct": _last_daily_return_pct,
 		"last_market_return_pct": _last_market_return_pct,
 		"last_alpha_pct": _last_alpha_pct,
+		"weekly_xp": _weekly_xp,
 	}
 
 
@@ -295,6 +309,7 @@ func load_save_data(data: Dictionary) -> void:
 	_last_daily_return_pct  = data.get("last_daily_return_pct", 0.0)
 	_last_market_return_pct = data.get("last_market_return_pct", 0.0)
 	_last_alpha_pct         = data.get("last_alpha_pct", 0.0)
+	_weekly_xp = maxi(data.get("weekly_xp", 0), 0)
 
 
 ## Resets all XP state to initial values for a new game.
@@ -309,3 +324,4 @@ func reset() -> void:
 	_last_market_return_pct = 0.0
 	_last_alpha_pct = 0.0
 	_last_season_breakdown = {}
+	_weekly_xp = 0

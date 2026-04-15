@@ -168,8 +168,8 @@ Sprint 8에서 QA Lead가 AC 체크리스트 기반 검증 실행 후 갱신.
 
 **출처**: 2026-04-15 전체 코드 리뷰  
 **우선순위**: Low  
-**목표 스프린트**: Sprint 9  
-세이브/로드 시 주간 XP 누산값(`_weekly_xp_gained`)이 0으로 초기화됨. 주간 XP 표시가 세션 내 XP만 합산. SaveSystem 직렬화에 `settlement_reporter.weekly_xp_gained` 추가 필요.
+**목표 스프린트**: Sprint 9 → **✅ 2026-04-15 해결**  
+XpSystem._weekly_xp 필드 추가 + get_weekly_xp()/reset_weekly_xp() API. SettlementReporter는 자체 카운터 제거 후 XpSystem.get_weekly_xp() 읽기. 세이브/로드 직렬화는 XpSystem.get_save_data()에서 처리.
 
 ### TD-CR-05. 단위 테스트 미작성 시스템 (P1)
 

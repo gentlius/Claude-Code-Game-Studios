@@ -53,6 +53,22 @@ sudo pacman -S jq       # Arch
 - Bash is available natively
 - Install `jq` via your package manager for full hook support
 
+## Git Hooks 설치 (필수)
+
+Claude Code 훅과 별도로, 터미널·IDE에서 직접 커밋할 때도 품질 게이트가 실행되도록
+git hooks를 설치해야 한다.
+
+```bash
+bash tools/hooks/install.sh
+```
+
+설치 내용:
+- `.git/hooks/pre-commit` — GDD 섹션 검증, API contracts, 클래스 캐시, 유령 메서드
+- `.git/hooks/pre-push` — main 브랜치 푸시 시 GUT 테스트 전체 실행
+
+> **새 팀원 온보딩 시**: 저장소 클론 후 이 명령을 반드시 실행해야 한다.
+> Git은 `.git/` 디렉토리를 버전 관리하지 않으므로 자동 설치되지 않는다.
+
 ## Verifying Your Setup
 
 Run these commands to check prerequisites:

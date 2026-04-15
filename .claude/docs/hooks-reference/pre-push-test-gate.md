@@ -2,79 +2,61 @@
 
 ## Trigger
 
-Runs before any push to a remote branch. Mandatory for pushes to `develop`
-and `main`.
+`git push` 시 `main` 브랜치에 푸시하는 경우 실행.
+구현 위치: `tools/hooks/pre-push` — 설치: `bash tools/hooks/install.sh`
 
 ## Purpose
 
-Ensures the build compiles, unit tests pass, and critical smoke tests pass
-before code reaches shared branches. This is the last automated quality gate
-before code affects other developers.
+공유 브랜치에 broken 상태가 진입하기 전 빌드·테스트 게이트를 강제한다.
+코드가 다른 개발자에게 영향을 미치기 전 마지막 자동화 품질 관문.
 
-## Implementation
+## 프레임워크 원래 의도
+
+팀 개발 환경에서는 아래 단계별 게이트를 운용한다:
+
+```
+develop 브랜치: 빌드 + 유닛 테스트 + 통합 테스트
+main 브랜치:    빌드 + 유닛 + 통합 + 스모크 + 퍼포먼스 회귀
+```
+
+## 이 프로젝트의 구현
+
+**현재 적용 범위**: `main` 브랜치 푸시 시 Step 1~2 실행.
 
 ```bash
-#!/bin/bash
-# Pre-push hook: Build and test gate
+# Step 1: 릴리즈 빌드 검증
+# 클래스 캐시 깨짐, 스크립트 컴파일 오류 등 런타임 전 오류를 모두 잡는다.
+"$GODOT_BIN" --headless \
+    --export-release "Windows Desktop" "$BUILD_OUT" \
+    --path "d:/Github/ta"
 
-REMOTE="$1"
-URL="$2"
-
-# Only enforce full gate for develop and main
-PROTECTED_BRANCHES="develop main"
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-
-FULL_GATE=false
-for branch in $PROTECTED_BRANCHES; do
-    if [ "$CURRENT_BRANCH" = "$branch" ]; then
-        FULL_GATE=true
-        break
-    fi
-done
-
-echo "=== Pre-Push Quality Gate ==="
-
-# Step 1: Build
-echo "Building..."
-# Adapt to your build system:
-# make build || exit 1
-# dotnet build || exit 1
-# cargo build || exit 1
-echo "Build: PASS"
-
-# Step 2: Unit tests
-echo "Running unit tests..."
-# Adapt to your test framework:
-# python -m pytest tests/unit/ -x || exit 1
-# dotnet test tests/unit/ || exit 1
-# cargo test || exit 1
-echo "Unit tests: PASS"
-
-if [ "$FULL_GATE" = true ]; then
-    # Step 3: Integration tests (only for protected branches)
-    echo "Running integration tests..."
-    # python -m pytest tests/integration/ -x || exit 1
-    echo "Integration tests: PASS"
-
-    # Step 4: Smoke tests
-    echo "Running smoke tests..."
-    # python -m pytest tests/playtest/smoke/ -x || exit 1
-    echo "Smoke tests: PASS"
-
-    # Step 5: Performance regression check
-    echo "Checking performance baselines..."
-    # python tools/ci/perf_check.py || exit 1
-    echo "Performance: PASS"
-fi
-
-echo "=== All gates passed ==="
-exit 0
+# Step 2: GUT 유닛 테스트 전체
+# 존재하지 않는 메서드 호출, 로직 오류, 회귀 등을 잡는다.
+"$GODOT_BIN" --headless \
+    -s addons/gut/gut_cmdln.gd \
+    -gdir=res://tests/unit/ \
+    -gexit \
+    --path "$(pwd)"
 ```
+
+| 단계 | 상태 | 미적용 이유 |
+|------|------|------------|
+| 릴리즈 빌드 | **구현됨** | — |
+| 유닛 테스트 (GUT) | **구현됨** | — |
+| `develop` 브랜치 보호 | 미적용 | 솔로 개발, trunk-based, develop 브랜치 미운용 |
+| 통합 테스트 | 미적용 | `tests/integration/` 미구현 — 구현 시 Step 3으로 추가 |
+| 스모크 테스트 | 미적용 | 동일 |
+| 퍼포먼스 회귀 | 미적용 | 베이스라인 미정의 — Polish 단계에서 추가 |
+
+## 확장 시점
+
+- `tests/integration/` 구현 시 → Step 3 추가
+- `develop` 브랜치 도입 시 → `PROTECTED_BRANCHES="develop main"` 으로 복원
+- Polish 단계 진입 시 → 퍼포먼스 회귀 검사 추가
 
 ## Agent Integration
 
-When this hook fails:
-1. Build failure: invoke `lead-programmer` to diagnose
-2. Unit test failure: invoke `qa-tester` to identify the failing test and
-   `gameplay-programmer` or relevant programmer to fix
-3. Performance regression: invoke `performance-analyst` to analyze
+훅 실패 시:
+1. **빌드 실패** → 스크립트 컴파일 오류 또는 클래스 캐시 불일치 확인. `--headless --path . --import` 실행 후 재시도
+2. **GUT 테스트 실패** → 실패 로그 확인 → GDD → 코드 → 테스트 순서로 판단 (`coding-standards.md` 테스트 수정 방향 참조)
+3. **Godot 실행 파일 없음** → `GODOT_BIN` 경로 확인 또는 `tools/hooks/pre-push` 수정

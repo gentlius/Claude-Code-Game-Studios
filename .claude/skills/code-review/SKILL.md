@@ -44,7 +44,17 @@ When this skill is invoked:
    - [ ] Thread safety where required
    - [ ] Resource cleanup (no leaks)
 
-8. **Output the review** in this format:
+8. **Apply project-specific Code Review Checklist** from `.claude/docs/coding-standards.md`:
+   - [ ] ADR 동기화 — 이 구현의 아키텍처 결정이 기존 ADR로 커버되는가
+   - [ ] GDD 동기화 — 관련 GDD의 Implementation Checklist 전부 [x], Status 최신화
+   - [ ] 인터페이스 정확성 — 호출하는 외부 메서드가 실제로 존재하는가 (Grep 확인)
+   - [ ] 표시 포맷 중복 없음 — 새로 추가한 포맷 문자열이 다른 파일에 이미 있는가
+   - [ ] 상수 기반 문자열 — 튜닝 상수값이 문자열에 리터럴로 박혀 있지 않은가
+   - [ ] 빌드 검증 — 실행 로그에 SCRIPT ERROR 없음
+   - [ ] API Contracts — 새 public 메서드가 test_api_contracts.gd에 등록됐는가
+   - [ ] 테스트 동시 갱신 — GDD/코드 변경과 테스트가 같은 커밋에 있는가
+
+9. **Output the review** in this format:
 
 ```
 ## Code Review: [File/System Name]

@@ -1,0 +1,60 @@
+#!/bin/bash
+# Git pre-push hook — Seed Money project quality gate
+# main 브랜치에 푸시하기 전 빌드 검증 + GUT 유닛 테스트를 실행한다.
+#
+# 설치: bash tools/hooks/install.sh
+# 또는 수동: cp tools/hooks/pre-push .git/hooks/pre-push && chmod +x .git/hooks/pre-push
+
+GODOT_BIN="D:/Godot4/Godot_v4.6.2-stable_win64_console.exe"
+BUILD_OUT="d:/Github/ta/build/windows/SeedMoney.exe"
+PROTECTED="main"
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+# main 브랜치 푸시 시에만 전체 게이트 실행
+if [ "$CURRENT_BRANCH" != "$PROTECTED" ]; then
+    exit 0
+fi
+
+echo "=== Pre-Push Quality Gate (branch: $CURRENT_BRANCH) ==="
+
+# Godot 실행 파일 확인
+if [ ! -f "$GODOT_BIN" ]; then
+    echo "WARN: Godot 실행 파일을 찾을 수 없습니다: $GODOT_BIN" >&2
+    echo "      GODOT_BIN 경로를 수정하거나 tools/hooks/pre-push를 편집하세요." >&2
+    exit 1
+fi
+
+# Step 1: 릴리즈 빌드 검증
+# 클래스 캐시 깨짐, 스크립트 컴파일 오류 등 런타임 전 오류를 모두 잡는다.
+echo "Step 1: 릴리즈 빌드 검증 중..."
+mkdir -p "$(dirname "$BUILD_OUT")"
+"$GODOT_BIN" --headless \
+    --export-release "Windows Desktop" "$BUILD_OUT" \
+    --path "d:/Github/ta" 2>&1
+
+if [ $? -ne 0 ]; then
+    echo "" >&2
+    echo "BLOCKED: 릴리즈 빌드 실패 — 스크립트 오류 또는 리소스 누락을 확인하세요." >&2
+    exit 1
+fi
+echo "Step 1: PASS"
+
+# Step 2: GUT 유닛 테스트 전체 실행
+# 존재하지 않는 메서드 호출, 로직 오류, 회귀 등을 잡는다.
+echo "Step 2: GUT 유닛 테스트 실행 중..."
+"$GODOT_BIN" --headless \
+    -s addons/gut/gut_cmdln.gd \
+    -gdir=res://tests/unit/ \
+    -gexit \
+    --path "$(pwd)" 2>&1
+
+if [ $? -ne 0 ]; then
+    echo "" >&2
+    echo "BLOCKED: GUT 테스트 실패 — 테스트를 수정한 뒤 다시 푸시하세요." >&2
+    echo "  판단 순서: GDD → 코드 → 테스트" >&2
+    exit 1
+fi
+echo "Step 2: PASS"
+
+echo "=== 모든 게이트 통과 ==="
+exit 0

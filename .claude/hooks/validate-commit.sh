@@ -34,7 +34,7 @@ if [ -n "$DESIGN_FILES" ]; then
     while IFS= read -r file; do
         if [[ "$file" == *.md ]] && [ -f "$file" ]; then
             # Required sections check
-            for section in "Overview" "Player Fantasy" "Detailed" "Formulas" "Edge Cases" "Dependencies" "Tuning Knobs" "Acceptance Criteria"; do
+            for section in "Overview" "Player Fantasy" "Detailed" "Formulas" "Edge Cases" "Dependencies" "Tuning Knobs" "Acceptance Criteria" "Implementation Checklist"; do
                 if ! grep -qi "$section" "$file"; then
                     WARNINGS="$WARNINGS\nDESIGN: $file missing required section: $section"
                 fi
@@ -108,6 +108,85 @@ fi
 # Print warnings (non-blocking) and allow commit
 if [ -n "$WARNINGS" ]; then
     echo -e "=== Commit Validation Warnings ===$WARNINGS\n================================" >&2
+fi
+
+# ── Check A: API Contracts 완전성 ─────────────────────────────────────────────
+# src/gameplay/ 또는 src/core/에 새로 추가된 public func이 test_api_contracts.gd에 없으면 차단.
+# "public" = 언더스코어로 시작하지 않는 func
+CONTRACTS_FILE="tests/unit/test_api_contracts.gd"
+GAMEPLAY_CORE_FILES=$(echo "$STAGED" | grep -E '^src/(gameplay|core)/.*\.gd$')
+if [ -n "$GAMEPLAY_CORE_FILES" ] && [ -f "$CONTRACTS_FILE" ]; then
+    MISSING_CONTRACTS=""
+    while IFS= read -r file; do
+        [ -f "$file" ] || continue
+        # 이 커밋에서 새로 추가된 public func 라인만 추출
+        NEW_FUNCS=$(git diff --cached "$file" 2>/dev/null \
+            | grep '^+func ' \
+            | grep -v '^+func _' \
+            | grep -oE 'func [a-z][a-z0-9_]+' \
+            | awk '{print $2}')
+        while IFS= read -r fn; do
+            [ -z "$fn" ] && continue
+            if ! grep -q "\"$fn\"" "$CONTRACTS_FILE" 2>/dev/null; then
+                MISSING_CONTRACTS="$MISSING_CONTRACTS\n  - $fn  ($file)"
+            fi
+        done <<< "$NEW_FUNCS"
+    done <<< "$GAMEPLAY_CORE_FILES"
+
+    if [ -n "$MISSING_CONTRACTS" ]; then
+        echo "BLOCKED [A] API Contracts 누락 — 다음 public 메서드가 test_api_contracts.gd에 없습니다:" >&2
+        echo -e "$MISSING_CONTRACTS" >&2
+        echo "  → tests/unit/test_api_contracts.gd에 has_method() 테스트를 추가한 뒤 다시 커밋하세요." >&2
+        exit 2
+    fi
+fi
+
+# ── Check B: Godot 클래스 캐시 일관성 ────────────────────────────────────────
+# src/ 의 class_name 선언이 .godot/global_script_class_cache.cfg에 없으면 차단.
+# 없으면 에디터에서 해당 노드를 찾지 못해 빈 화면 등의 런타임 오류 발생.
+CACHE_FILE=".godot/global_script_class_cache.cfg"
+if [ -f "$CACHE_FILE" ]; then
+    MISSING_CLASSES=""
+    while IFS= read -r classname; do
+        [ -z "$classname" ] && continue
+        if ! grep -q "\"class\": &\"$classname\"" "$CACHE_FILE" 2>/dev/null; then
+            MISSING_CLASSES="$MISSING_CLASSES\n  - $classname"
+        fi
+    done <<< "$(grep -rh 'class_name ' src/ --include='*.gd' 2>/dev/null | awk '{print $2}')"
+
+    if [ -n "$MISSING_CLASSES" ]; then
+        echo "BLOCKED [B] 클래스 캐시 불일치 — 다음 class_name이 Godot 캐시에 없습니다:" >&2
+        echo -e "$MISSING_CLASSES" >&2
+        echo "  → 'D:/Godot4/Godot_v4.6.2-stable_win64_console.exe --headless --path . --import'" >&2
+        echo "    실행 후 다시 커밋하세요." >&2
+        exit 2
+    fi
+fi
+
+# ── Check C: 테스트 파일의 has_method 참조 존재 확인 ─────────────────────────
+# has_method("X") 로 테스트하는 메서드 X가 src/ 에 실제로 존재하지 않으면 차단.
+# 존재하지 않는 함수를 상상으로 테스트하는 실수를 방지한다.
+TEST_FILES_STAGED=$(echo "$STAGED" | grep -E '^tests/.*\.gd$')
+if [ -n "$TEST_FILES_STAGED" ]; then
+    PHANTOM_METHODS=""
+    while IFS= read -r file; do
+        [ -f "$file" ] || continue
+        TESTED=$(grep -oE 'has_method\("[a-z][a-z0-9_]+"\)' "$file" 2>/dev/null \
+            | grep -oE '"[a-z][a-z0-9_]+"' | tr -d '"')
+        while IFS= read -r method; do
+            [ -z "$method" ] && continue
+            if ! grep -rq "^func $method\b" src/ --include='*.gd' 2>/dev/null; then
+                PHANTOM_METHODS="$PHANTOM_METHODS\n  - $method  (in $file)"
+            fi
+        done <<< "$TESTED"
+    done <<< "$TEST_FILES_STAGED"
+
+    if [ -n "$PHANTOM_METHODS" ]; then
+        echo "BLOCKED [C] 유령 메서드 — 테스트가 src/에 없는 메서드를 참조합니다:" >&2
+        echo -e "$PHANTOM_METHODS" >&2
+        echo "  → 실제 메서드명을 확인하거나, 소스 파일에 해당 메서드를 추가하세요." >&2
+        exit 2
+    fi
 fi
 
 exit 0

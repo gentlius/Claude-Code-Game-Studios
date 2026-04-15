@@ -15,7 +15,7 @@ When this skill is invoked:
 3. **Read related design documents** referenced or implied by the target doc
    (check `design/gdd/` for related systems).
 
-4. **Evaluate against the Design Document Standard checklist**:
+4. **Evaluate against the Design Document Standard checklist** (9 required sections):
    - [ ] Has Overview section (one-paragraph summary)
    - [ ] Has Player Fantasy section (intended feeling)
    - [ ] Has Detailed Rules section (unambiguous mechanics)
@@ -24,6 +24,7 @@ When this skill is invoked:
    - [ ] Has Dependencies section (other systems listed)
    - [ ] Has Tuning Knobs section (configurable values identified)
    - [ ] Has Acceptance Criteria section (testable success conditions)
+   - [ ] Has Implementation Checklist section (진입점, 호출 경로, AC→테스트 매핑, 빌드 검증 포함)
 
 5. **Check for internal consistency**:
    - Do the formulas produce values that match the described behavior?

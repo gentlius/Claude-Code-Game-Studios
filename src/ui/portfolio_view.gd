@@ -346,8 +346,8 @@ func _refresh_transactions() -> void:
 		var tx_sid: String = tx["stock_id"]
 		var tx_stock: StockData = StockDatabase.get_stock(tx_sid)
 		var tx_name: String = tx_stock.get_display_name() if tx_stock != null else tx_sid
-		lbl.text = tr("틱 %d | %s | %s(%s) %d주 @ ₩%s%s") % [
-			tx.get("tick", 0), type_str, tx_name, tx_sid,
+		lbl.text = tr("틱 %d | %s | %s %d주 @ ₩%s%s") % [
+			tx.get("tick", 0), type_str, tx_name,
 			tx["quantity"], _format_number(tx["price"]), pnl_str
 		]
 

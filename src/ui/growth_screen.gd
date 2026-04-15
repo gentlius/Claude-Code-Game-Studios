@@ -137,13 +137,14 @@ func _refresh_detail(skill_id: String) -> void:
 
 
 func _refresh_assets() -> void:
-	var total: int = PortfolioManager.get_total_assets()
-	var cash: int = CurrencySystem.get_cash_assets()
-	var account: int = PortfolioManager.get_account_total_value()
-	_lbl_total_assets.text = tr("총 자산  %s") % FormatUtils.currency(total)
-	_lbl_cash_assets.text = tr("현금 자산 %s") % FormatUtils.currency(cash)
-	_lbl_account_value.text = tr("계좌  %s") % FormatUtils.currency(account)
-	_lbl_tangible.text = tr("유형 ₩0")  ## Beta: LifestyleManager.get_tangible_value() 추가 예정
+	var cash: int = 0           ## Beta Sprint 9 (B-02): CurrencySystem.get_real_cash() — LifestyleManager 구현 시 활성화
+	var portfolio: int = PortfolioManager.get_total_assets()  ## 예수금 + 예약금 + 보유종목 평가액
+	var tangible: int = 0       ## Beta Sprint 9 (B-02): LifestyleManager.get_tangible_value()
+	var total: int = cash + portfolio + tangible
+	_lbl_total_assets.text = tr("총 자산 평가액  %s") % FormatUtils.currency(total)
+	_lbl_cash_assets.text = tr("보유 현금  %s") % FormatUtils.currency(cash)
+	_lbl_account_value.text = tr("포트폴리오 평가액  %s") % FormatUtils.currency(portfolio)
+	_lbl_tangible.text = tr("실물 자산  %s") % FormatUtils.currency(tangible)
 
 # ── UI Construction ──
 
@@ -340,7 +341,7 @@ func _build_asset_panel(parent: VBoxContainer) -> void:
 	panel.add_child(vbox)
 
 	_lbl_total_assets = Label.new()
-	_lbl_total_assets.text = "총 자산  ₩0"
+	_lbl_total_assets.text = "총 자산 평가액  ₩0"
 	_lbl_total_assets.add_theme_font_size_override("font_size", 18)
 	_lbl_total_assets.add_theme_color_override("font_color", Color.WHITE)
 	vbox.add_child(_lbl_total_assets)
@@ -350,19 +351,19 @@ func _build_asset_panel(parent: VBoxContainer) -> void:
 	vbox.add_child(sub_row)
 
 	_lbl_cash_assets = Label.new()
-	_lbl_cash_assets.text = "현금 자산 ₩0"
+	_lbl_cash_assets.text = "보유 현금  ₩0"
 	_lbl_cash_assets.add_theme_font_size_override("font_size", 13)
 	_lbl_cash_assets.add_theme_color_override("font_color", Color(0.75, 0.75, 0.80))
 	sub_row.add_child(_lbl_cash_assets)
 
 	_lbl_account_value = Label.new()
-	_lbl_account_value.text = "계좌  ₩0"
+	_lbl_account_value.text = "포트폴리오 평가액  ₩0"
 	_lbl_account_value.add_theme_font_size_override("font_size", 13)
 	_lbl_account_value.add_theme_color_override("font_color", Color(0.75, 0.75, 0.80))
 	sub_row.add_child(_lbl_account_value)
 
 	_lbl_tangible = Label.new()
-	_lbl_tangible.text = "유형 ₩0"
+	_lbl_tangible.text = "실물 자산  ₩0"
 	_lbl_tangible.add_theme_font_size_override("font_size", 13)
 	_lbl_tangible.add_theme_color_override("font_color", Color(0.50, 0.50, 0.55))
 	sub_row.add_child(_lbl_tangible)

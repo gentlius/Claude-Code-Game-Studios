@@ -59,19 +59,29 @@ Not every decision requires user input. Use this table to determine who decides:
 
 ## Auto-Resume Protocol
 
-세션 시작 또는 컴팩션 후 다음을 확인하고 실행한다:
+세션 시작 또는 컴팩션 후 `active.md` 에 `STATUS: IN PROGRESS` 항목이 있으면:
 
-1. `production/session-state/active.md` 가 존재하고 `STATUS: IN PROGRESS` 이면:
-   - 사용자 재지시를 기다리지 않는다
-   - 첫 응답에서 `## NEXT:` 항목부터 즉시 재개한다
-   - 완료 후 `STATUS: DONE` 으로 갱신한다
+### 사용자가 새 작업(Task B)을 지시한 경우
 
-2. `active.md` 가 없고 pre-compact 경고가 있으면:
-   - 수정 파일 목록으로 진행 중이던 작업을 파악한다
-   - `active.md` 를 작성하고 파악한 미완 작업을 재개한다
+1. **Task B 먼저 실행** (사용자의 현재 지시가 우선)
+2. Task B 완료 후 → "Task A(이전 미완 작업)를 이어서 진행합니다" 고지
+3. Task A 재개 → 완결까지 반복
+
+단, Task B가 Task A를 무효화하거나 대체하는 경우 Task A를 폐기하고 사용자에게 알린다.
+
+### 사용자가 새 작업 없이 세션만 재개한 경우 (예: "안녕", "계속해")
+
+1. 즉시 Task A NEXT 항목부터 재개 — 사용자 재지시 불필요
+2. 완결까지 반복
+
+### active.md 없이 pre-compact 경고만 있는 경우
+
+1. 수정 파일 목록으로 미완 작업 파악
+2. `active.md` 작성
+3. Task B가 있으면 Task B 먼저 → Task A 재개. 없으면 즉시 Task A 재개.
 
 **리뷰 작업 (코드 리뷰 / GDD 리뷰 / 디자인 리뷰)은 반드시 active.md 작성 후 시작한다.**
-컨텍스트 한계로 중단되더라도 active.md → AUTO-RESUME 메커니즘으로 사용자 재지시 없이 완결까지 반복 진행한다.
+컨텍스트 한계로 중단되더라도 active.md → AUTO-RESUME 메커니즘으로 완결까지 반복 진행한다.
 
 ## Coding Standards
 

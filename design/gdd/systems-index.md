@@ -197,3 +197,16 @@
 - [x] Design remaining V-Slice systems: AI 경쟁자 (Approved), 시즌/대회 관리 (Approved), 리그/시즌 UI (Approved) — Sprint 2, 2026-04-03
 - [ ] Run `/gate-check pre-production` when ready
 - [ ] Run `/design-review` on each new GDD
+
+---
+
+## Non-GDD Design Documents
+
+GDD가 아닌 디자인 보조 문서. 여기에 없는 `design/*.md` 파일은 참조 루틴이 없는 것이므로 폐기 대상.
+
+| 파일 | 목적 | 최종 갱신 | 상태 |
+|------|------|----------|------|
+| [art-bible.md](../art-bible.md) | 색상 팔레트, 타이포그래피, UI 컴포넌트 스타일 가이드 | 2026-04-15 | Draft |
+| [audio-plan.md](../audio-plan.md) | 시장 상태별 BGM 방향, SFX 가이드 | 2026-04-15 | Draft |
+| [residence-art-direction.md](../residence-art-direction.md) | 거주지 배경 이미지 스타일 기준 + 에셋 현황 | 2026-04-15 | Draft |
+| [residence-image-prompts.md](../residence-image-prompts.md) | 11티어 거주지 AI 이미지 생성 프롬프트 | 2026-04-15 | Active |

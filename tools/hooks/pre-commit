@@ -10,7 +10,7 @@ STAGED=$(git diff --cached --name-only 2>/dev/null)
 
 # ── GDD 필수 섹션 검증 ────────────────────────────────────────────────────────
 # design/gdd/ 파일 커밋 시 9개 필수 섹션이 모두 있어야 한다.
-DESIGN_FILES=$(echo "$STAGED" | grep -E '^design/gdd/[^/]+\.md$')
+DESIGN_FILES=$(echo "$STAGED" | grep -E '^design/gdd/[^/]+\.md$' | grep -v 'systems-index\.md')
 if [ -n "$DESIGN_FILES" ]; then
     while IFS= read -r file; do
         [ -f "$file" ] || continue

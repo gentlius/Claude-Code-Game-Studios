@@ -1,7 +1,6 @@
 # Audio Asset Download Guide
 
 **작성일**: 2026-04-07  
-**참조**: production/asset-plan.md
 
 Freesound.org에서 직접 다운로드 필요. 로그인 후 각 링크에서 Download 버튼 클릭.  
 OGG 포맷으로 다운로드하거나 WAV → OGG 변환(Audacity).

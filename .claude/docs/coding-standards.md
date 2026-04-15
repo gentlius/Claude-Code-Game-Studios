@@ -1,5 +1,16 @@
 # Coding Standards
 
+- **문서 수명주기 (Document Lifecycle)**: 새 문서를 작성하면 반드시 그 세션 안에 아래 인덱스 중 하나에 등록한다.
+  등록되지 않은 문서는 다음 세션에서 존재를 알 수 없으므로 작성과 동시에 폐기된 것과 같다.
+  | 문서 유형 | 인덱스 |
+  |---------|--------|
+  | GDD (`design/gdd/*.md`) | `design/gdd/systems-index.md` |
+  | ADR (`docs/architecture/*.md`) | `.claude/docs/technical-preferences.md` Architecture Decisions Log |
+  | 프로덕션 (`production/*.md`) | `production/milestones/beta.md` 또는 해당 스프린트 파일 |
+  | 디자인 보조 (`design/*.md`) | `design/gdd/systems-index.md` §Non-GDD Design Documents |
+  | 에셋 가이드 (`assets/**/*.md`) | 해당 파일 헤더에 참조 문서 명시 |
+  참조 루틴이 없는 문서(어떤 인덱스에도 없고, 어떤 활성 문서도 링크하지 않는 문서)는 폐기한다.
+
 - All game code must include doc comments on public APIs
 - Every system must have a corresponding architecture decision record in `docs/architecture/`
 - Gameplay values must be data-driven (external config), never hardcoded

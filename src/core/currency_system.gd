@@ -50,10 +50,10 @@ func get_total_prize_earned() -> int:
 	return _total_prize_earned
 
 
-## Deprecated: use get_cash_assets() instead.
-## 구버전 세이브 호환 및 인트로 화면 직접 참조용으로 잠시 유지.
+## Returns sim trading account balance (예수금). Kept for UI/test compatibility.
+## Note: 라이프스타일 현금 자산은 get_cash_assets() 사용.
 func get_deposit() -> int:
-	return _cash_assets
+	return _sim_cash
 
 
 # ── Public API: Sim Cash Operations ──

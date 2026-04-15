@@ -11,11 +11,14 @@ const MOCK_STOCK_ID: String = "STC"
 
 func _set_mock_price(stock_id: String, price: int) -> void:
 	## Inject a full valid _stock_states entry so PriceEngine internals don't crash.
+	## S8-01: order_book 포함 필수 — _fill_market_order가 consume_order_book() 호출.
+	## 충분한 잔량 제공하여 stop-loss 체결이 즉시 이루어지도록 한다.
 	PriceEngine._stock_states[stock_id] = {
 		"stock_id":            stock_id,
 		"current_price":       price,
 		"base_price":          10000,
 		"prev_day_close":      10000,
+		"season_open_price":   10000,
 		"volatility_profile":  StockData.VolatilityProfile.MEDIUM,
 		"macro_sensitivity":   1.0,
 		"sector_sensitivity":  1.0,
@@ -27,6 +30,10 @@ func _set_mock_price(stock_id: String, price: int) -> void:
 		"ohlcv_daily":         [] as Array[Dictionary],
 		"event_queue":         [] as Array,
 		"gradual_events":      [] as Array,
+		"order_book": {
+			"ask": [{"price": price, "qty": 10000}],
+			"bid": [{"price": price, "qty": 10000}],
+		},
 	}
 
 

@@ -45,8 +45,13 @@
 | 19 | 오디오 시스템 (Audio) | Audio | Alpha | Approved | ✅ Done | [audio.md](audio.md) | 주문 엔진, 뉴스 시스템 |
 | 20 | 라이프스타일 소비 (Lifestyle Spending) | Economy | Beta | Draft | — ¹ | [lifestyle-spending.md](lifestyle-spending.md) | 재화 시스템, 시즌 관리, 세이브/로드 |
 | 21 | 수익 실현 팡파레 (Profit Celebration) | UI | Beta | Draft | — | [profit-celebration.md](profit-celebration.md) | 주문 엔진, 오디오, 트레이딩 스크린 |
-| 22 | 튜토리얼 (Tutorial) | Meta | Full | Not Started | — | — | 전체 게임플레이 시스템 |
-| 23 | 설정 (Settings) | Meta | Full | Not Started | — | — | — |
+| 22 | 오더북 (Order Book) | Gameplay | Beta | In Review | — | [order-book.md](order-book.md) | 가격 엔진, 주문 엔진 |
+| 23 | TR2 손절/익절 (Stop-Loss/Take-Profit) | Gameplay | Beta | In Review | ✅ Done | [stop-loss-take-profit.md](stop-loss-take-profit.md) | 주문 엔진, 스킬 트리 |
+| 24 | 스타트 스크린 (Start Screen) | UI | Alpha | In Review | ✅ Done | [start-screen.md](start-screen.md) | 세이브/로드 |
+| 25 | 인트로 시퀀스 (Intro Sequence) | UI | Alpha | Approved | ✅ Done | [intro-sequence.md](intro-sequence.md) | — |
+| 26 | 크레딧 화면 (Credits Screen) | UI | Full | Draft | — | [credits-screen.md](credits-screen.md) | — |
+| 27 | 튜토리얼 (Tutorial) | Meta | Full | Not Started | — | — | 전체 게임플레이 시스템 |
+| 28 | 설정 (Settings) | Meta | Beta | Not Started | — | — | 오디오, 게임 시계 |
 
 > **¹ 라이프스타일 소비 Alpha 폴백**: Alpha 빌드에서 `LifestyleManager`는 존재하지 않으며 `tangible_assets = 0`으로 고정. `SeasonManager`는 시즌 종료 후 라이프스타일 처리 단계를 건너뛴다. Beta Sprint 9(B-02)에서 첫 기능 활성화 예정. 상세 내용: `lifestyle-spending.md §1 Overview Alpha 폴백 박스` 참조.
 

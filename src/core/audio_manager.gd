@@ -188,10 +188,12 @@ func set_muted(muted: bool) -> void:
 	_save_settings()
 
 
+## Returns the master volume (0.0–1.0).
 func get_volume() -> float:
 	return _master_volume
 
 
+## Returns true if audio is currently muted.
 func is_muted() -> bool:
 	return _muted
 

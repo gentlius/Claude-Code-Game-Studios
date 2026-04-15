@@ -253,6 +253,7 @@ func _do_load_stock(stock_id: String) -> void:
 	queue_redraw()
 
 
+## Switch the active timeframe and refresh the chart display.
 func set_timeframe(tf: Timeframe) -> void:
 	_timeframe = tf
 	_update_tf_buttons()

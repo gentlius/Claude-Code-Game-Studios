@@ -104,7 +104,7 @@ func _update_row(idx: int, stock_id: String, price: int) -> void:
 	var change_pct: float = 0.0
 	if prev_close > 0:
 		change_pct = float(price - prev_close) / float(prev_close) * 100.0
-	(row.get_child(2) as Label).text = "₩%s" % FormatUtils.number(price)
+	(row.get_child(2) as Label).text = FormatUtils.currency(price)
 	_apply_change_label(row.get_child(3) as Label, change_pct)
 	(row.get_child(4) as Label).text = "★" if _held_stocks.has(stock_id) else ""
 

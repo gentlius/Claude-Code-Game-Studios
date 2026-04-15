@@ -235,10 +235,12 @@ func set_limit_price_from_chart(price: int) -> void:
 	_update_estimated_amount()
 
 
+## Returns the quantity currently entered in the order form.
 func get_pending_quantity() -> int:
 	return int(_spin_quantity.value)
 
 
+## Resets the quantity field and clears any order error message.
 func clear_quantity() -> void:
 	_spin_quantity.value = 0
 	_lbl_order_error.text = ""

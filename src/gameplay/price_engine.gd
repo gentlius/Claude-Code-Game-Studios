@@ -98,6 +98,11 @@ const ENERGY_MAX_BOOST: float = 4.0
 const LIMIT_DAMPEN_START: float = 0.7
 const LIMIT_DAMPEN_MIN: float = 0.15
 
+# ── Constants: Time-of-Day Volume Multipliers (GDD Rule 4-5) ──
+
+const TOD_OPEN_VOLUME_MULT: float = 2.5   ## Opening 10 min (ticks 0–39) volume boost
+const TOD_CLOSE_VOLUME_MULT: float = 2.0  ## Closing 10 min (ticks 1520–1559) volume boost
+
 # ── Constants: Season Bias (GDD Rule 1-5, updated per prototype) ──
 
 const SEASON_BIAS_UP: Array[float]   = [+0.01, 0.00, -0.01]  # BULL, NEUTRAL, BEAR
@@ -789,9 +794,9 @@ func _compute_volume(
 	# Opening 10 min = ticks 0-39, Closing 10 min = ticks 1520-1559
 	var tod_mult: float = 1.0
 	if tick_in_day < 40:
-		tod_mult = 2.5
+		tod_mult = TOD_OPEN_VOLUME_MULT
 	elif tick_in_day >= 1520:
-		tod_mult = 2.0
+		tod_mult = TOD_CLOSE_VOLUME_MULT
 
 	# 4-6: Final volume
 	return base_vol * state_mult * energy_mult * limit_dampen * tod_mult

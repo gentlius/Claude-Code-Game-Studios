@@ -126,6 +126,7 @@ MVP(레벨 2 = 스킬 포인트 1개)에서 접근 가능한 T1 스킬:
 | 차트 렌더러 | 스킬 트리 → | `is_skill_unlocked("A1")` → 이동평균선 표시 여부, `is_skill_unlocked("A2")` → RSI/MACD 패널 |
 | 뉴스/이벤트 | 스킬 트리 → | `get_news_delay_ticks()` → 30/15/0초 반환 |
 | 주문 엔진 | 스킬 트리 → | `is_skill_unlocked("TR1")` → 지정가 허용, `is_skill_unlocked("TR3")` → 공매도 허용, `is_skill_unlocked("TR4")` → 레버리지 허용 |
+| 호가창 UI | 스킬 트리 → | `is_skill_unlocked("TR1")` → 호가창 섹션 표시 (`OrderPanel._order_book_section.visible`) |
 | 포트폴리오 | 스킬 트리 → | `get_max_holdings()` → 3/5/10 반환 |
 | 스킬 트리 UI | 스킬 트리 → | `get_all_skills()`, `unlock_skill(id)`, `get_skill_state(id)` |
 | 세이브/로드 | ↔ 스킬 트리 | 해금 상태 직렬화/역직렬화 |

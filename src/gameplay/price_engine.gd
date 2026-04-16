@@ -93,6 +93,11 @@ const ORDER_BOOK_OUTFLOW_RATE: float = 0.06
 const ORDER_BOOK_VOLUME_FACTOR_MIN: float = 0.1
 const ORDER_BOOK_VOLUME_FACTOR_MAX: float = 5.0
 
+## Player order market impact scale (ADR-019).
+## filled_qty / daily_volume * SCALE → next-tick price delta contribution.
+## 100% of daily volume filled in one tick moves price by this fraction.
+const PLAYER_PRESSURE_SCALE: float = 0.30
+
 ## Number of levels on each side of the book.
 const ORDER_BOOK_LEVELS: int = 5
 
@@ -215,6 +220,7 @@ var _index_history: Array[float] = []  ## 틱별 지수 기록
 var _vi_states: Dictionary = {}  ## stock_id -> {halt_remaining: int, count_today: int, cooldown: int}
 var _cb_stage: int = 0  ## 0=none, 1=stage1 active, 2=stage2 (early close)
 var _cb_halt_remaining: int = 0  ## Stage 1 remaining halt ticks
+var _player_pressure: Dictionary = {}  ## stock_id -> float; pending price delta from player fills (ADR-019)
 
 # ── Lifecycle ──
 
@@ -248,6 +254,7 @@ func initialize_for_load(save_data: Dictionary) -> void:
 	_reseed_session()  # ADR-018: new session → fresh intraday RNG
 	_stock_states.clear()
 	_transition_matrices.clear()
+	_player_pressure.clear()
 
 	var stocks_saved: Dictionary = save_data.get("stocks", {})
 	# Backward compat — pre-v2 saves stored a flat {stock_id: price} dict.
@@ -366,6 +373,7 @@ func get_save_data() -> Dictionary:
 func reset() -> void:
 	_stock_states.clear()
 	_vi_states.clear()
+	_player_pressure.clear()
 	_cb_stage = 0
 	_cb_halt_remaining = 0
 	_prev_day_index = 0.0
@@ -424,12 +432,20 @@ func get_ohlcv_history(stock_id: String) -> Array[Dictionary]:
 ## high  = max(tick_prices), low = min(tick_prices), volume = sum(tick_volumes)
 func get_today_ohlcv(stock_id: String) -> Dictionary:
 	var state: Dictionary = _stock_states.get(stock_id, {})
-	var tick_prices: Array = state.get("tick_prices", [])
-	var tick_volumes: Array = state.get("tick_volumes", [])
+	var all_prices: Array = state.get("tick_prices", [])
+	var all_volumes: Array = state.get("tick_volumes", [])
 	var cur: int = state.get("current_price", 0)
 	var prev_close: int = state.get("prev_day_close", cur)
-	if tick_prices.is_empty():
+	if all_prices.is_empty():
 		return {"open": prev_close, "high": cur, "low": cur, "volume": 0}
+	# Slice to today's ticks only.
+	# get_current_tick() returns 0-based tick within today; +1 = prices added so far today.
+	# Using TICKS_PER_DAY here (like _end_trading_day does) is wrong mid-day —
+	# it would slide into yesterday's data, making open drift every tick.
+	var today_ticks: int = GameClock.get_current_tick() + 1
+	var day_start: int = maxi(0, all_prices.size() - today_ticks)
+	var tick_prices: Array = all_prices.slice(day_start)
+	var tick_volumes: Array = all_volumes.slice(maxi(0, all_volumes.size() - today_ticks))
 	var open_price: int = tick_prices[0] as int
 	var high_price: int = open_price
 	var low_price: int = open_price
@@ -614,6 +630,7 @@ func _reset_season_mechanics() -> void:
 		_vi_states[stock_id] = {"halt_remaining": 0, "count_today": 0, "cooldown": 0}
 	_cb_stage = 0
 	_cb_halt_remaining = 0
+	_player_pressure.clear()
 
 	# Recompute index baseline from current (carried-forward) prices so each season
 	# starts fresh at INDEX_BASE regardless of prior season's price level.
@@ -697,8 +714,12 @@ func _process_stock_tick(stock_id: String, tick_in_day: int) -> void:
 	# Clear event queue after processing
 	s["event_queue"] = [] as Array
 
+	# Step 4b: Player market impact (ADR-019)
+	var player_delta: float = _player_pressure.get(stock_id, 0.0)
+	_player_pressure.erase(stock_id)
+
 	# Step 5: Additive combination
-	var total_delta: float = pattern_delta + drift_delta + event_delta
+	var total_delta: float = pattern_delta + drift_delta + event_delta + player_delta
 
 	# Step 6: Price update
 	var raw_price: float = float(s["current_price"]) * (1.0 + total_delta)
@@ -1129,6 +1150,16 @@ func consume_order_book(
 	var avg_price: int = 0
 	if filled_qty > 0:
 		avg_price = round_to_tick(float(total_cost) / float(filled_qty))
+		# Fix 1: volume feedback — player fills count toward tick volume (ADR-019)
+		var vols: Array = s.get("tick_volumes", [])
+		if not vols.is_empty():
+			vols[vols.size() - 1] += float(filled_qty)
+		# Fix 2: price pressure — accumulate for next tick's total_delta (ADR-019)
+		var daily_vol: float = float(DAILY_VOLUME_BY_PROFILE[s["volatility_profile"]])
+		var pressure: float = float(filled_qty) / daily_vol * PLAYER_PRESSURE_SCALE
+		if side == "sell":
+			pressure = -pressure
+		_player_pressure[stock_id] = _player_pressure.get(stock_id, 0.0) + pressure
 	return {"filled_qty": filled_qty, "avg_price": avg_price, "remaining_qty": remaining}
 
 

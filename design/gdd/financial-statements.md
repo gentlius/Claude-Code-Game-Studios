@@ -8,6 +8,18 @@
 
 ---
 
+> **⚠️ 구현 전 필독 — ADR-019 연동**
+>
+> 이 스킬 구현 시 `StockData`에 `total_shares: int`와 `major_shareholder_pct: float`를
+> 추가해야 한다. 이 값이 도입되면 `PriceEngine`의 `DAILY_VOLUME_BY_PROFILE` 고정값을
+> `daily_volume = total_shares * turnover_rate_by_profile`로 교체할 수 있다.
+>
+> - 교체 후 호가잔량·압력 정규화·슬리피지가 시총 비례로 자동 조정됨
+> - 현재 `PLAYER_PRESSURE_SCALE`의 선형 충격 모델을 제곱근 충격 법칙으로 고도화 가능
+> - 설계 근거 및 교체 조건: [ADR-019](../../docs/architecture/019-player-market-impact.md) §이연된 개선 참조
+
+---
+
 ## 1. Overview
 
 A3 스킬 해금 시 거래 화면 종목 패널에 PER·PBR·ROE 세 가지 기업 재무 지표가 표시된다.
@@ -157,10 +169,10 @@ dividend_display = StockData.dividend_yield / (current_price / season_start_pric
 
 | 시스템 | 방향 | 내용 |
 |--------|------|------|
-| `StockData` (`src/data/stock_data.gd`) | Hard | `pbr`, `roe` 필드 추가 필요 |
-| `StockDatabase` (`src/core/stock_database.gd`) | Hard | JSON에서 `pbr`, `roe` 로드 로직 추가 |
-| `assets/data/stocks.json` | Hard | 46개 종목 `pbr`, `roe` 값 추가 |
-| `PriceEngine` | Soft | `season_start_price` 참조 (이미 존재) |
+| `StockData` (`src/data/stock_data.gd`) | Hard | `pbr`, `roe`, **`total_shares`**, **`major_shareholder_pct`** 필드 추가 필요 |
+| `StockDatabase` (`src/core/stock_database.gd`) | Hard | JSON에서 `pbr`, `roe`, `total_shares`, `major_shareholder_pct` 로드 로직 추가 |
+| `assets/data/stocks.json` | Hard | 46개 종목 `pbr`, `roe`, `total_shares`, `major_shareholder_pct` 값 추가 |
+| `PriceEngine` | **Hard** | `total_shares` 도입 시 `DAILY_VOLUME_BY_PROFILE` → 파생값으로 교체. [ADR-019](../../docs/architecture/019-player-market-impact.md) §이연된 개선 참조 |
 | `SkillTree` | Hard | `is_skill_unlocked("A3")` → 패널 표시 여부 |
 | `TradingScreen` / 종목 정보 패널 | Hard | A3 섹션 UI 노드 추가 |
 | `chart-renderer.md` | Soft | A2 패널 배치 패턴 참조 |
@@ -201,9 +213,10 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 ### 호출 경로
 
 **데이터 레이어**
-- [ ] `src/data/stock_data.gd`: `pbr: float = 0.0`, `roe: float = 0.0` 필드 추가
-- [ ] `src/core/stock_database.gd`: `_load_stock()` 에서 `pbr`, `roe` JSON 파싱 추가
-- [ ] `assets/data/stocks.json`: 46개 종목 `pbr`, `roe` 값 추가 (§3-4 섹터 범위 기준)
+- [ ] `src/data/stock_data.gd`: `pbr: float = 0.0`, `roe: float = 0.0`, `total_shares: int = 0`, `major_shareholder_pct: float = 0.0` 필드 추가
+- [ ] `src/core/stock_database.gd`: `_load_stock()` 에서 `pbr`, `roe`, `total_shares`, `major_shareholder_pct` JSON 파싱 추가
+- [ ] `assets/data/stocks.json`: 46개 종목 `pbr`, `roe`, `total_shares`, `major_shareholder_pct` 값 추가 (§3-4 섹터 범위 기준)
+- [ ] `src/gameplay/price_engine.gd`: `DAILY_VOLUME_BY_PROFILE` → `total_shares * turnover_rate_by_profile` 파생값으로 교체 ([ADR-019](../../docs/architecture/019-player-market-impact.md) §이연된 개선)
 
 **표시 로직**
 - [ ] `PriceEngine` 또는 종목 정보 패널: `get_per_display()`, `get_pbr_display()` 계산 메서드 추가

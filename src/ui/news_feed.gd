@@ -242,6 +242,7 @@ func _add_news_card(entry: Dictionary, insert_top: bool) -> void:
 
 func _create_card(entry: Dictionary) -> PanelContainer:
 	var card: PanelContainer = PanelContainer.new()
+	card.mouse_filter = Control.MOUSE_FILTER_STOP
 	var style: StyleBoxFlat = StyleBoxFlat.new()
 
 	var is_read: bool = entry.get("is_read", false)
@@ -384,26 +385,28 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 
 	# Click to mark as read + toggle body (add/remove from tree)
 	# 관련 종목 >= 1이면 클릭마다 종목을 순회하여 stock_clicked emit.
-	# _cycle_index는 이 카드 전용 캡처 변수 — 카드마다 독립적으로 유지.
+	# _cycle_box는 이 카드 전용 Array 박스 — int를 Array로 감싸 클로저 캡처 보장.
+	# (GDScript 클로저에서 int 값 타입은 변이가 보장되지 않으므로 Array[int] 사용)
 	var _body_ref: MarginContainer = body_margin
 	var _stocks_ref: MarginContainer = stocks_margin
 	var _vbox_ref: VBoxContainer = vbox
-	# _cycle_index: 이 카드 전용 순회 커서. -1 = 닫힘/리셋 상태.
+	# _cycle_box[0]: 이 카드 전용 순회 커서.
 	# 관련 종목 없음(0개) → toggle 동작. 1개 이상 → 순회 선택 + 마지막 이후 닫기.
-	var _cycle_index: int = 0
+	var _cycle_box: Array[int] = [0]
 	card.gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventMouseButton:
 			var mb: InputEventMouseButton = event as InputEventMouseButton
 			if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+				card.accept_event()
 				_mark_read(entry, card, marker)
-				if _cycle_index >= max(_stock_ids.size(), 1):
+				if _cycle_box[0] >= max(_stock_ids.size(), 1):
 					_collapse_body(_vbox_ref, _body_ref, _stocks_ref)
-					_cycle_index = 0
+					_cycle_box[0] = 0
 				else:
 					_expand_body(_vbox_ref, _body_ref, _stocks_ref)
-					if _cycle_index < _stock_ids.size():
-						stock_clicked.emit(_stock_ids[_cycle_index])
-					_cycle_index += 1
+					if _cycle_box[0] < _stock_ids.size():
+						stock_clicked.emit(_stock_ids[_cycle_box[0]])
+					_cycle_box[0] += 1
 	)
 
 	return card

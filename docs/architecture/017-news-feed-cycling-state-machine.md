@@ -71,6 +71,27 @@ cycle_index 초기값 = 0
   `tree_exiting` 연결이 추가로 필요하고, 관리 포인트가 분산된다.
   GDScript Dictionary는 WeakRef가 아니므로 소멸된 카드 참조가 남으면 메모리 누수 위험.
 
+## Implementation Notes (2026-04-16)
+
+### int 클로저 캡처 버그 → Array[int] 박스 패턴
+
+초기 구현에서 `var _cycle_index: int = 0`을 클로저에 캡처했으나, 실제 게임에서
+클릭해도 순환 상태가 유지되지 않는 버그가 확인됐다. 원인: GDScript 클로저는 int
+(값 타입)를 캡처할 때 변이(mutation)가 호출 간에 보장되지 않는다.
+
+**수정 패턴**: `Array[int]` 단일 원소 박스로 래핑.
+- `var _cycle_box: Array[int] = [0]`
+- 람다 내부에서 `_cycle_box[0] += 1` / `_cycle_box[0] = 0`
+- Array는 참조 타입이므로 클로저가 동일 힙 객체를 공유 → 변이 영속 보장
+
+또한 PanelContainer는 `mouse_filter`를 MOUSE_FILTER_STOP으로 기본값을 가지지만,
+명시적 설정 없이는 Godot 4.6에서 입력 이벤트 수신이 불안정할 수 있다.
+→ `card.mouse_filter = Control.MOUSE_FILTER_STOP` 명시 추가.
+→ `card.accept_event()` 추가로 ScrollContainer의 드래그-스크롤 재처리 방지.
+
+**일반 규칙**: GDScript 클로저에서 변이 가능한 카운터/플래그가 필요하면
+항상 `Array[T]` 단일 원소 박스 패턴을 사용한다. `int`/`bool`/`float` 직접 캡처 금지.
+
 ## Consequences
 
 ### 긍정적
@@ -78,8 +99,7 @@ cycle_index 초기값 = 0
 - N=0 / N≥1 분기 없는 단일 코드 경로
 
 ### 부정적
-- GDScript 클로저 변수 캡처는 `var x = value` 형태로만 동작.
-  캡처 변수를 외부에서 관찰하거나 디버그하기 어려움.
+- `Array[int]` 박스 패턴은 직관적이지 않음 — 위 Implementation Notes에 이유 기록됨.
 - 향후 "현재 어떤 카드가 열려 있는가"를 NewsFeed에서 조회해야 할 경우
   클로저 캡처 방식으로는 직접 접근 불가 → 그 시점에 Dictionary 방식으로 전환 고려.
 

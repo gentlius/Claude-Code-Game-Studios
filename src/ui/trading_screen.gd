@@ -88,7 +88,7 @@ func _connect_signals() -> void:
 	_level_up_banner.banner_closed.connect(func() -> void: GameClock.confirm_transition())
 	if _chart_renderer.has_signal("price_clicked"):
 		_chart_renderer.price_clicked.connect(
-			func(price: int) -> void: _order_panel.set_limit_price_from_chart(price)
+			func(price: int) -> void: _order_panel.set_price_from_click(price)
 		)
 	if _news_panel.has_signal("stock_clicked"):
 		_news_panel.stock_clicked.connect(_select_stock)

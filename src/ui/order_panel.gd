@@ -44,6 +44,19 @@ var _fill_strength_fill: Panel
 var _lbl_fill_pct: Label
 var _lbl_fill_side: Label
 
+## 호가창 섹션. GDD order-book.md §3-5.
+## TR1 미해금 시 트리에서 제거. on_skill_unlocked("TR1") → add_child로 삽입.
+var _order_book_section: VBoxContainer
+var _vbox: VBoxContainer
+
+## S/T 자동 조건 섹션. GDD stop-loss-take-profit.md.
+## TR2 해금 + 보유 종목 선택 시에만 표시.
+var _st_section: VBoxContainer
+var _spin_stop_loss: SpinBox
+var _spin_take_profit: SpinBox
+var _spin_st_qty: SpinBox
+var _lbl_st_error: Label
+
 ## A3 재무제표 섹션. GDD financial-statements.md §3.
 ## A3 미해금 시 숨김. on_skill_unlocked("A3") → 즉시 표시.
 var _a3_section: VBoxContainer
@@ -58,17 +71,18 @@ func _ready() -> void:
 	size_flags_stretch_ratio = 0.13
 	custom_minimum_size.x = 160
 	add_theme_stylebox_override("panel", ThemeSetup.make_panel_style(ThemeSetup.BG_DARK))
-	var vbox: VBoxContainer = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 6)
-	add_child(vbox)
-	_build_header(vbox)
-	_build_order_book_section(vbox)
-	_build_a3_section(vbox)
-	_build_side_tabs(vbox)
-	_build_type_row(vbox)
-	_build_qty_row(vbox)
-	_build_submit_area(vbox)
-	_build_pending_section(vbox)
+	_vbox = VBoxContainer.new()
+	_vbox.add_theme_constant_override("separation", 6)
+	add_child(_vbox)
+	_build_header(_vbox)
+	_build_order_book_section(_vbox)  # visible=false if TR1 not unlocked
+	_build_a3_section(_vbox)
+	_build_side_tabs(_vbox)
+	_build_type_row(_vbox)
+	_build_qty_row(_vbox)
+	_build_submit_area(_vbox)
+	_build_st_section(_vbox)
+	_build_pending_section(_vbox)
 	_set_order_side("BUY")
 	_set_order_type("MARKET")
 	OrderEngine.on_order_filled.connect(_on_order_filled)
@@ -77,6 +91,8 @@ func _ready() -> void:
 	OrderEngine.on_order_expired.connect(func(_o: Dictionary) -> void: _update_pending_orders())
 	CurrencySystem.sim_cash_changed.connect(func(_a: int, _d: int) -> void: _update_order_panel_price())
 	PriceEngine.on_price_updated.connect(_on_tick)
+	PortfolioManager.holding_added.connect(func(_sid: String, _qty: int, _price: int) -> void: _refresh_st_section())
+	PortfolioManager.holding_removed.connect(func(_sid: String, _qty: int, _price: int, _pnl: int) -> void: _refresh_st_section())
 
 
 func _build_header(vbox: VBoxContainer) -> void:
@@ -99,17 +115,23 @@ func _build_header(vbox: VBoxContainer) -> void:
 
 ## Builds the full order book panel: OHLCV + 10-level book + totals + fill strength.
 ## GDD order-book.md §3-5 (블록 1~5).
+## TR1 미해금 시 visible=false. _on_skill_unlocked("TR1") → visible=true.
 func _build_order_book_section(vbox: VBoxContainer) -> void:
+	_order_book_section = VBoxContainer.new()
+	_order_book_section.add_theme_constant_override("separation", 2)
+	_order_book_section.visible = SkillTree.is_skill_unlocked("TR1")
+	vbox.add_child(_order_book_section)
+
 	var ob_title: Label = Label.new()
 	ob_title.text = tr("호가창")
 	ob_title.add_theme_font_size_override("font_size", 12)
 	ThemeSetup.style_label_secondary(ob_title)
-	vbox.add_child(ob_title)
+	_order_book_section.add_child(ob_title)
 
 	# ── 블록 1: OHLCV 행 ──────────────────────────────────────────────
 	var ohlcv_vbox: VBoxContainer = VBoxContainer.new()
 	ohlcv_vbox.add_theme_constant_override("separation", 1)
-	vbox.add_child(ohlcv_vbox)
+	_order_book_section.add_child(ohlcv_vbox)
 
 	var ohlcv_row: HBoxContainer = HBoxContainer.new()
 	ohlcv_row.add_theme_constant_override("separation", 4)
@@ -122,12 +144,12 @@ func _build_order_book_section(vbox: VBoxContainer) -> void:
 	ohlcv_vbox.add_child(vol_row)
 	var vol_key: Label = Label.new()
 	vol_key.text = tr("거래량")
-	vol_key.add_theme_font_size_override("font_size", 10)
+	vol_key.add_theme_font_size_override("font_size", 11)
 	ThemeSetup.style_label_secondary(vol_key)
 	vol_row.add_child(vol_key)
 	_lbl_ob_volume = Label.new()
 	_lbl_ob_volume.text = "0"
-	_lbl_ob_volume.add_theme_font_size_override("font_size", 10)
+	_lbl_ob_volume.add_theme_font_size_override("font_size", 11)
 	_lbl_ob_volume.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_lbl_ob_volume.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	ThemeSetup.style_label_primary(_lbl_ob_volume)
@@ -135,16 +157,16 @@ func _build_order_book_section(vbox: VBoxContainer) -> void:
 
 	var sep0: HSeparator = HSeparator.new()
 	sep0.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
-	vbox.add_child(sep0)
+	_order_book_section.add_child(sep0)
 
 	# ── 블록 2: 매도 총잔량 합계 ──────────────────────────────────────
-	_lbl_ask_total = _make_total_label(vbox, true)
+	_lbl_ask_total = _make_total_label(_order_book_section, true)
 
 	# ── 블록 3: ask5 → ask1 ───────────────────────────────────────────
 	_order_book_rows.clear()
 	for display_rank: int in range(5):
 		var row: HBoxContainer = _make_order_book_row(true, display_rank)
-		vbox.add_child(row)
+		_order_book_section.add_child(row)
 		_order_book_rows.append(row)
 
 	# 현재가 구분 행
@@ -154,17 +176,17 @@ func _build_order_book_section(vbox: VBoxContainer) -> void:
 	var cur_style: StyleBoxFlat = StyleBoxFlat.new()
 	cur_style.bg_color = Color(0.18, 0.22, 0.28)
 	cur_row.add_theme_stylebox_override("panel", cur_style)
-	vbox.add_child(cur_row)
+	_order_book_section.add_child(cur_row)
 	_lbl_ob_cur_price = Label.new()
 	_lbl_ob_cur_price.text = "₩0"
-	_lbl_ob_cur_price.add_theme_font_size_override("font_size", 12)
+	_lbl_ob_cur_price.add_theme_font_size_override("font_size", 13)
 	_lbl_ob_cur_price.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_lbl_ob_cur_price.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ThemeSetup.style_label_primary(_lbl_ob_cur_price)
 	cur_row.add_child(_lbl_ob_cur_price)
 	_lbl_ob_cur_change = Label.new()
 	_lbl_ob_cur_change.text = ""
-	_lbl_ob_cur_change.add_theme_font_size_override("font_size", 10)
+	_lbl_ob_cur_change.add_theme_font_size_override("font_size", 11)
 	_lbl_ob_cur_change.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	ThemeSetup.style_label_secondary(_lbl_ob_cur_change)
 	cur_row.add_child(_lbl_ob_cur_change)
@@ -172,20 +194,20 @@ func _build_order_book_section(vbox: VBoxContainer) -> void:
 	# bid1 → bid5
 	for display_rank: int in range(5):
 		var row: HBoxContainer = _make_order_book_row(false, display_rank)
-		vbox.add_child(row)
+		_order_book_section.add_child(row)
 		_order_book_rows.append(row)
 
 	# ── 블록 4: 매수 총잔량 합계 ──────────────────────────────────────
-	_lbl_bid_total = _make_total_label(vbox, false)
+	_lbl_bid_total = _make_total_label(_order_book_section, false)
 
 	# ── 블록 5: 체결강도 ──────────────────────────────────────────────
 	var fs_row: HBoxContainer = HBoxContainer.new()
 	fs_row.add_theme_constant_override("separation", 3)
-	vbox.add_child(fs_row)
+	_order_book_section.add_child(fs_row)
 
 	var fs_key: Label = Label.new()
 	fs_key.text = tr("체결강도")
-	fs_key.add_theme_font_size_override("font_size", 10)
+	fs_key.add_theme_font_size_override("font_size", 11)
 	ThemeSetup.style_label_secondary(fs_key)
 	fs_row.add_child(fs_key)
 
@@ -216,16 +238,16 @@ func _build_order_book_section(vbox: VBoxContainer) -> void:
 
 	_lbl_fill_pct = Label.new()
 	_lbl_fill_pct.text = "-"
-	_lbl_fill_pct.add_theme_font_size_override("font_size", 10)
-	_lbl_fill_pct.custom_minimum_size.x = 38
+	_lbl_fill_pct.add_theme_font_size_override("font_size", 11)
+	_lbl_fill_pct.custom_minimum_size.x = 42
 	_lbl_fill_pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	ThemeSetup.style_label_primary(_lbl_fill_pct)
 	fs_row.add_child(_lbl_fill_pct)
 
 	_lbl_fill_side = Label.new()
 	_lbl_fill_side.text = ""
-	_lbl_fill_side.add_theme_font_size_override("font_size", 10)
-	_lbl_fill_side.custom_minimum_size.x = 36
+	_lbl_fill_side.add_theme_font_size_override("font_size", 11)
+	_lbl_fill_side.custom_minimum_size.x = 40
 	ThemeSetup.style_label_secondary(_lbl_fill_side)
 	fs_row.add_child(_lbl_fill_side)
 
@@ -234,18 +256,18 @@ func _build_order_book_section(vbox: VBoxContainer) -> void:
 
 	var sep_end: HSeparator = HSeparator.new()
 	sep_end.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
-	vbox.add_child(sep_end)
+	_order_book_section.add_child(sep_end)
 
 
 func _make_ohlcv_label(parent: HBoxContainer, key: String) -> Label:
 	var key_lbl: Label = Label.new()
 	key_lbl.text = key
-	key_lbl.add_theme_font_size_override("font_size", 10)
+	key_lbl.add_theme_font_size_override("font_size", 11)
 	ThemeSetup.style_label_secondary(key_lbl)
 	parent.add_child(key_lbl)
 	var val_lbl: Label = Label.new()
 	val_lbl.text = "-"
-	val_lbl.add_theme_font_size_override("font_size", 10)
+	val_lbl.add_theme_font_size_override("font_size", 11)
 	val_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	ThemeSetup.style_label_primary(val_lbl)
@@ -258,12 +280,12 @@ func _make_total_label(parent: VBoxContainer, ask_side: bool) -> Label:
 	parent.add_child(row)
 	var key: Label = Label.new()
 	key.text = tr("매도잔량") if ask_side else tr("매수잔량")
-	key.add_theme_font_size_override("font_size", 10)
+	key.add_theme_font_size_override("font_size", 11)
 	ThemeSetup.style_label_secondary(key)
 	row.add_child(key)
 	var val: Label = Label.new()
 	val.text = "-"
-	val.add_theme_font_size_override("font_size", 10)
+	val.add_theme_font_size_override("font_size", 11)
 	val.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	val.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	if ask_side:
@@ -281,7 +303,7 @@ func _make_total_label(parent: VBoxContainer, ask_side: bool) -> Label:
 func _make_order_book_row(ask_side: bool, display_rank: int) -> HBoxContainer:
 	var row: HBoxContainer = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 2)
-	row.custom_minimum_size.y = 17
+	row.custom_minimum_size.y = 20
 
 	# Bar fill color
 	var fill_color: Color = Color(0.85, 0.32, 0.32, 0.55) if ask_side \
@@ -290,16 +312,16 @@ func _make_order_book_row(ask_side: bool, display_rank: int) -> HBoxContainer:
 	# Shared label factories
 	var lbl_price: Label = Label.new()
 	lbl_price.text = "-"
-	lbl_price.add_theme_font_size_override("font_size", 11)
-	lbl_price.custom_minimum_size.x = 50
+	lbl_price.add_theme_font_size_override("font_size", 13)
+	lbl_price.custom_minimum_size.x = 56
 	lbl_price.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	lbl_price.add_theme_color_override("font_color",
 		ThemeSetup.PROFIT_RED if ask_side else ThemeSetup.LOSS_BLUE)
 
 	var lbl_qty: Label = Label.new()
 	lbl_qty.text = "-"
-	lbl_qty.add_theme_font_size_override("font_size", 11)
-	lbl_qty.custom_minimum_size.x = 38
+	lbl_qty.add_theme_font_size_override("font_size", 13)
+	lbl_qty.custom_minimum_size.x = 42
 	lbl_qty.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	ThemeSetup.style_label_primary(lbl_qty)
 
@@ -354,8 +376,6 @@ func _make_order_book_row(ask_side: bool, display_rank: int) -> HBoxContainer:
 ## Handles a click on an order book row — uses the row's last-displayed price.
 ## GDD order-book.md §3-5 클릭 인터랙션.
 func _on_order_book_row_clicked_price(price_text: String, ask_side: bool) -> void:
-	if _order_type == "MARKET":
-		return
 	if not SkillTree.is_skill_unlocked("TR1"):
 		return
 	# FormatUtils.number() uses comma separators — strip them to parse
@@ -364,6 +384,13 @@ func _on_order_book_row_clicked_price(price_text: String, ask_side: bool) -> voi
 		return
 	var price: int = clean.to_int()
 	if price <= 0:
+		return
+	# Route to focused S/T field if applicable
+	if _spin_stop_loss != null and _spin_stop_loss.get_line_edit().has_focus():
+		_spin_stop_loss.value = float(price)
+		return
+	if _spin_take_profit != null and _spin_take_profit.get_line_edit().has_focus():
+		_spin_take_profit.value = float(price)
 		return
 	# ask click → fill limit buy; bid click → fill limit sell
 	if ask_side:
@@ -442,6 +469,8 @@ func _on_tick(_tick: int) -> void:
 
 ## Redraws all 10 order book rows + totals + fill strength. GDD §3-5 블록 2~5.
 func _refresh_order_book() -> void:
+	if _order_book_section == null or not _order_book_section.visible:
+		return
 	if _selected_stock_id == "" or _order_book_rows.size() < 10:
 		return
 	var book: Dictionary = PriceEngine.get_order_book(_selected_stock_id)
@@ -468,7 +497,7 @@ func _refresh_order_book() -> void:
 		var cur: int = PriceEngine.get_current_price(_selected_stock_id)
 		var limits: Dictionary = PriceEngine.get_daily_limits(_selected_stock_id)
 		var prev: int = limits.get("prev_close", cur)
-		_lbl_ob_cur_price.text = FormatUtils.price(cur)
+		_lbl_ob_cur_price.text = FormatUtils.number(cur)
 		var diff: int = cur - prev
 		var pct: float = float(diff) / float(prev) * 100.0 if prev > 0 else 0.0
 		var sign: String = "+" if diff >= 0 else ""
@@ -540,9 +569,9 @@ func _refresh_ohlcv() -> void:
 	_lbl_ob_volume.text = FormatUtils.number(ohlcv.get("volume", 0))
 	var cur: int = PriceEngine.get_current_price(_selected_stock_id)
 	_lbl_ob_high.add_theme_color_override("font_color",
-		ThemeSetup.PROFIT_RED if ohlcv.get("high", 0) >= cur else ThemeSetup.COLOR_PRIMARY)
+		ThemeSetup.PROFIT_RED if ohlcv.get("high", 0) >= cur else ThemeSetup.TEXT_PRIMARY)
 	_lbl_ob_low.add_theme_color_override("font_color",
-		ThemeSetup.LOSS_BLUE if ohlcv.get("low", 0) <= cur else ThemeSetup.COLOR_PRIMARY)
+		ThemeSetup.LOSS_BLUE if ohlcv.get("low", 0) <= cur else ThemeSetup.TEXT_PRIMARY)
 
 
 ## 블록 5: 체결강도 바 + 퍼센트 갱신. GDD §3-5 블록5.
@@ -686,6 +715,171 @@ func _build_submit_area(vbox: VBoxContainer) -> void:
 	vbox.add_child(sep)
 
 
+## Builds the stop-loss / take-profit section. GDD stop-loss-take-profit.md.
+## Visible only when TR2 is unlocked and the selected stock is a held position.
+## Chart/order-book price clicks route here when a SpinBox line-edit has focus.
+func _build_st_section(vbox: VBoxContainer) -> void:
+	_st_section = VBoxContainer.new()
+	_st_section.add_theme_constant_override("separation", 3)
+	_st_section.visible = false
+	vbox.add_child(_st_section)
+
+	var title: Label = Label.new()
+	title.text = tr("자동 조건 (TR2)")
+	title.add_theme_font_size_override("font_size", 11)
+	ThemeSetup.style_label_secondary(title)
+	_st_section.add_child(title)
+
+	# 손절가 row
+	var sl_row: HBoxContainer = HBoxContainer.new()
+	sl_row.add_theme_constant_override("separation", 2)
+	_st_section.add_child(sl_row)
+	var sl_lbl: Label = Label.new()
+	sl_lbl.text = tr("손절")
+	sl_lbl.add_theme_font_size_override("font_size", 11)
+	sl_lbl.custom_minimum_size.x = 28
+	ThemeSetup.style_label_secondary(sl_lbl)
+	sl_row.add_child(sl_lbl)
+	_spin_stop_loss = SpinBox.new()
+	_spin_stop_loss.min_value = 0
+	_spin_stop_loss.max_value = 99999999
+	_spin_stop_loss.step = 100
+	_spin_stop_loss.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ThemeSetup.apply_spinbox_theme(_spin_stop_loss)
+	sl_row.add_child(_spin_stop_loss)
+
+	# 익절가 row
+	var tp_row: HBoxContainer = HBoxContainer.new()
+	tp_row.add_theme_constant_override("separation", 2)
+	_st_section.add_child(tp_row)
+	var tp_lbl: Label = Label.new()
+	tp_lbl.text = tr("익절")
+	tp_lbl.add_theme_font_size_override("font_size", 11)
+	tp_lbl.custom_minimum_size.x = 28
+	ThemeSetup.style_label_secondary(tp_lbl)
+	tp_row.add_child(tp_lbl)
+	_spin_take_profit = SpinBox.new()
+	_spin_take_profit.min_value = 0
+	_spin_take_profit.max_value = 99999999
+	_spin_take_profit.step = 100
+	_spin_take_profit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ThemeSetup.apply_spinbox_theme(_spin_take_profit)
+	tp_row.add_child(_spin_take_profit)
+
+	# 수량 row
+	var qty_row: HBoxContainer = HBoxContainer.new()
+	qty_row.add_theme_constant_override("separation", 2)
+	_st_section.add_child(qty_row)
+	var qty_lbl: Label = Label.new()
+	qty_lbl.text = tr("수량")
+	qty_lbl.add_theme_font_size_override("font_size", 11)
+	qty_lbl.custom_minimum_size.x = 28
+	ThemeSetup.style_label_secondary(qty_lbl)
+	qty_row.add_child(qty_lbl)
+	_spin_st_qty = SpinBox.new()
+	_spin_st_qty.min_value = 1
+	_spin_st_qty.max_value = 99999
+	_spin_st_qty.step = 1
+	_spin_st_qty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ThemeSetup.apply_spinbox_theme(_spin_st_qty)
+	qty_row.add_child(_spin_st_qty)
+
+	# 설정/해제 버튼 row
+	var btn_row: HBoxContainer = HBoxContainer.new()
+	btn_row.add_theme_constant_override("separation", 2)
+	_st_section.add_child(btn_row)
+	var btn_set: Button = Button.new()
+	btn_set.text = tr("설정")
+	btn_set.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_set.custom_minimum_size.y = 24
+	ThemeSetup.apply_accent_button(btn_set)
+	btn_set.pressed.connect(_submit_st_condition)
+	btn_row.add_child(btn_set)
+	var btn_clear: Button = Button.new()
+	btn_clear.text = tr("해제")
+	btn_clear.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_clear.custom_minimum_size.y = 24
+	ThemeSetup.apply_sell_button(btn_clear)
+	btn_clear.pressed.connect(_clear_st_condition)
+	btn_row.add_child(btn_clear)
+
+	_lbl_st_error = Label.new()
+	_lbl_st_error.text = ""
+	_lbl_st_error.add_theme_font_size_override("font_size", 11)
+	_lbl_st_error.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
+	_lbl_st_error.autowrap_mode = TextServer.AUTOWRAP_WORD
+	_st_section.add_child(_lbl_st_error)
+
+	var sep: HSeparator = HSeparator.new()
+	sep.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
+	_st_section.add_child(sep)
+
+
+## Refreshes S/T section visibility and SpinBox values for the current stock.
+func _refresh_st_section() -> void:
+	if _st_section == null:
+		return
+	var show: bool = (
+		SkillTree.is_skill_unlocked("TR2")
+		and _selected_stock_id != ""
+		and PortfolioManager.get_holding(_selected_stock_id) != null
+	)
+	_st_section.visible = show
+	if not show:
+		return
+	var holding: Dictionary = PortfolioManager.get_holding(_selected_stock_id) as Dictionary
+	var max_qty: int = holding.get("quantity", 1)
+	_spin_st_qty.max_value = max_qty
+	var cur: Variant = StopTakeSystem.get_setting(_selected_stock_id)
+	if cur != null:
+		var d: Dictionary = cur as Dictionary
+		var sl: Variant = d.get("stop_loss_price")
+		var tp: Variant = d.get("take_profit_price")
+		_spin_stop_loss.value = float(sl if sl != null else 0)
+		_spin_take_profit.value = float(tp if tp != null else 0)
+		_spin_st_qty.value = float(d.get("quantity", max_qty))
+	else:
+		_spin_stop_loss.value = 0.0
+		_spin_take_profit.value = 0.0
+		_spin_st_qty.value = float(max_qty)
+	_lbl_st_error.text = ""
+
+
+## Validates and submits the S/T condition for the current stock.
+func _submit_st_condition() -> void:
+	if _selected_stock_id == "":
+		return
+	var sl: int = int(_spin_stop_loss.value)
+	var tp: int = int(_spin_take_profit.value)
+	var sl_val: Variant = sl if sl > 0 else null
+	var tp_val: Variant = tp if tp > 0 else null
+	if sl_val == null and tp_val == null:
+		_lbl_st_error.text = tr("손절가 또는 익절가를 입력하세요")
+		return
+	var cur: int = PriceEngine.get_current_price(_selected_stock_id)
+	if sl_val != null and (sl_val as int) >= cur:
+		_lbl_st_error.text = tr("손절가는 현재가보다 낮아야 합니다")
+		return
+	if tp_val != null and (tp_val as int) <= cur:
+		_lbl_st_error.text = tr("익절가는 현재가보다 높아야 합니다")
+		return
+	if sl_val != null and tp_val != null and (sl_val as int) >= (tp_val as int):
+		_lbl_st_error.text = tr("손절가는 익절가보다 낮아야 합니다")
+		return
+	if not StopTakeSystem.set_condition(_selected_stock_id, sl_val, tp_val, int(_spin_st_qty.value)):
+		_lbl_st_error.text = tr("설정 실패 (한도 초과 또는 TR2 미해금)")
+		return
+	_lbl_st_error.text = ""
+
+
+## Clears the S/T condition for the current stock.
+func _clear_st_condition() -> void:
+	if _selected_stock_id == "":
+		return
+	StopTakeSystem.clear_condition(_selected_stock_id)
+	_refresh_st_section()
+
+
 func _build_pending_section(vbox: VBoxContainer) -> void:
 	var pending_title: Label = Label.new()
 	pending_title.text = tr("미체결 주문")
@@ -721,6 +915,7 @@ func set_stock(stock_id: String) -> void:
 	_refresh_a3_section()
 	_lbl_order_error.text = ""
 	_spin_quantity.value = 0
+	_refresh_st_section()
 
 
 ## Called by TradingScreen on PRE_MARKET state enter.
@@ -742,7 +937,20 @@ func set_ui_state_submit_enabled(enabled: bool, btn_text: String) -> void:
 	_refresh_limit_tab_state()
 
 
-## Called by TradingScreen when chart price is clicked.
+## Routes a price click from chart or order book to the focused input.
+## Priority: focused S/T SpinBox → limit price (TR1 behavior).
+## GDD stop-loss-take-profit.md, order-book.md §3-5.
+func set_price_from_click(price: int) -> void:
+	if _spin_stop_loss != null and _spin_stop_loss.get_line_edit().has_focus():
+		_spin_stop_loss.value = float(price)
+		return
+	if _spin_take_profit != null and _spin_take_profit.get_line_edit().has_focus():
+		_spin_take_profit.value = float(price)
+		return
+	set_limit_price_from_chart(price)
+
+
+## Called by TradingScreen when chart price is clicked (direct limit-price path).
 func set_limit_price_from_chart(price: int) -> void:
 	if not SkillTree.is_skill_unlocked("TR1"):
 		return
@@ -877,30 +1085,49 @@ func _update_pending_orders() -> void:
 		_pending_orders_container.add_child(_make_pending_row(order))
 
 
-func _make_pending_row(order: Dictionary) -> HBoxContainer:
-	var row: HBoxContainer = HBoxContainer.new()
-	var side_str: String = "매수" if order["side"] == "BUY" else "매도"
-	var info: Label = Label.new()
+func _make_pending_row(order: Dictionary) -> Control:
+	var outer: VBoxContainer = VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 1)
+
 	var pending_sid: String = order["stock_id"]
 	var pending_stock: StockData = StockDatabase.get_stock(pending_sid)
 	var pending_name: String = pending_stock.get_display_name() if pending_stock != null else pending_sid
-	info.text = "%s %s %s×%d주" % [
-		side_str, pending_name,
-		FormatUtils.number(order.get("limit_price", PriceEngine.get_current_price(pending_sid))),
-		order["quantity"]]
-	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ThemeSetup.style_label_primary(info)
-	row.add_child(info)
+	var side_str: String = "매수" if order["side"] == "BUY" else "매도"
+
+	# 1줄: [매수/매도 종목명]  [× 취소]
+	var top: HBoxContainer = HBoxContainer.new()
+	top.add_theme_constant_override("separation", 2)
+	outer.add_child(top)
+
+	var name_lbl: Label = Label.new()
+	name_lbl.text = "%s %s" % [side_str, pending_name]
+	name_lbl.clip_text = true
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.add_theme_font_size_override("font_size", 11)
+	ThemeSetup.style_label_primary(name_lbl)
+	top.add_child(name_lbl)
+
 	var cancel_btn: Button = Button.new()
-	cancel_btn.text = "취소"
+	cancel_btn.text = "×"
+	cancel_btn.custom_minimum_size = Vector2(22, 20)
 	ThemeSetup.apply_button_theme(cancel_btn)
 	var order_id: int = order["order_id"]
 	cancel_btn.pressed.connect(func() -> void:
 		OrderEngine.cancel_order(order_id)
 		_update_pending_orders()
 	)
-	row.add_child(cancel_btn)
-	return row
+	top.add_child(cancel_btn)
+
+	# 2줄: ₩가격 × 수량주 (오른쪽 정렬, 보조색)
+	var detail_lbl: Label = Label.new()
+	var price_val: int = order.get("limit_price", PriceEngine.get_current_price(pending_sid))
+	detail_lbl.text = "₩%s × %d주" % [FormatUtils.number(price_val), order["quantity"]]
+	detail_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	detail_lbl.add_theme_font_size_override("font_size", 11)
+	ThemeSetup.style_label_secondary(detail_lbl)
+	outer.add_child(detail_lbl)
+
+	return outer
 
 
 func _cancel_all_pending() -> void:
@@ -925,10 +1152,17 @@ func _refresh_limit_tab_state() -> void:
 	_radio_limit.tooltip_text = "" if unlocked else tr("TR1 해금 필요")
 
 
-## SkillTree.on_skill_unlocked 핸들러 — TR1 해금 즉시 버튼 활성, A3 해금 즉시 재무 섹션 표시.
+## SkillTree.on_skill_unlocked 핸들러.
+## TR1 해금: 호가창 섹션 즉시 표시 + 지정가 버튼 활성.
+## A3 해금: 재무 섹션 즉시 표시.
 func _on_skill_unlocked(skill_id: String) -> void:
 	if skill_id == "TR1":
+		_order_book_section.visible = true
+		_refresh_order_book()
+		_refresh_ohlcv()
 		_refresh_limit_tab_state()
+	elif skill_id == "TR2":
+		_refresh_st_section()
 	elif skill_id == "A3":
 		_a3_section.visible = true
 		_refresh_a3_section()

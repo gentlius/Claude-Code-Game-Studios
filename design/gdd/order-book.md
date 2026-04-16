@@ -168,6 +168,10 @@ else:
 
 ### 3-5. UI — 주문 패널 통합 (토스증권 호가탭 기준)
 
+**TR1 스킬 게이팅**: 호가창 섹션 전체(`_order_book_section`)는 TR1(지정가 주문) 해금 전까지
+`visible = false`. TR1 해금 즉시 표시. 플레이어가 처음 진입할 때는 차트와 시장가 주문만 보인다.
+해금 후에도 패널은 항상 표시(접기 없음) — 해금 자체가 충분한 진행감을 준다.
+
 호가창 패널은 **위에서 아래로** 다음 블록으로 구성된다. 좁은 패널(stretch 0.13)에
 최대한의 정보를 담기 위해 폰트 11px, 행 높이 최소화.
 
@@ -377,11 +381,12 @@ lower_limit = PriceEngine.round_to_tick(prev_day_close * 0.70)
 | AC-12 | 호가 클릭 → 지정가 입력 필드 가격 자동 입력 | E2E 시각 검증 |
 | AC-13 | 시장가 선택 중 호가 클릭 → 아무 반응 없음 | E2E 시각 검증 |
 | AC-14 | 종목 선택 변경 시 호가창 해당 종목으로 즉시 전환 | E2E 시각 검증 |
-| AC-15 | 시/고/저/거래량이 호가창 상단에 매 틱 표시된다 | E2E 시각 검증 |
-| AC-16 | 매도/매수 총잔량 합계 행이 5단 잔량 합산값과 일치한다 | E2E 시각 검증 |
-| AC-17 | 매도 바는 오른쪽 정렬, 매수 바는 왼쪽 정렬로 표시되고 매 틱 갱신된다 | E2E 시각 검증 |
-| AC-18 | 체결강도가 매수/매도 총잔량 비율로 계산되어 바+퍼센트로 표시된다 | E2E 시각 검증 |
-| AC-19 | (Sprint 9) 52주 최고/최저가 하단에 표시된다 | `StockData.week52_high/low` 구현 후 E2E |
+| AC-15 | TR1 미해금 시 호가창 섹션 전체가 숨겨진다. TR1 해금 즉시 표시된다 | E2E 시각 검증 |
+| AC-16 | 시/고/저/거래량이 호가창 상단에 매 틱 표시된다 | E2E 시각 검증 |
+| AC-17 | 매도/매수 총잔량 합계 행이 5단 잔량 합산값과 일치한다 | E2E 시각 검증 |
+| AC-18 | 매도 바는 오른쪽 정렬, 매수 바는 왼쪽 정렬로 표시되고 매 틱 갱신된다 | E2E 시각 검증 |
+| AC-19 | 체결강도가 매수/매도 총잔량 비율로 계산되어 바+퍼센트로 표시된다 | E2E 시각 검증 |
+| AC-20 | (Sprint 9) 52주 최고/최저가 하단에 표시된다 | `StockData.week52_high/low` 구현 후 E2E |
 
 ---
 
@@ -403,18 +408,19 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [ ] `PriceEngine.consume_order_book(stock_id, side, qty, limit_price) → Dictionary` — 반환: `{filled_qty, avg_price, remaining_qty}`
 - [ ] `OrderEngine.process_tick()` — 체결 로직에서 `consume_order_book()` 사용
 - [ ] `GameClock.confirm_market_open()` 또는 그 호출 체인에서 `initialize_order_books()` 연결
-- [ ] `OrderPanel._build_order_book_section()` — §3-5 레이아웃 구현:
-  - [ ] OHLCV 행 (블록 1): 시/고/저/거래량, 매 틱 `_refresh_ohlcv()` 갱신
-  - [ ] 매도 총잔량 합계 행 (블록 2)
-  - [ ] 10단 호가 본체 (블록 3): 매도 오른쪽정렬 바 + 매수 왼쪽정렬 바
-  - [ ] 현재가 구분행: 강조 배경 + 등락폭/률
-  - [ ] 매수 총잔량 합계 행 (블록 4)
-  - [ ] 체결강도 행 (블록 5): 바 + 퍼센트 + 매수/매도우위 텍스트
-  - [ ] 52주 행 (블록 6): Sprint 9까지 `visible = false`
-- [ ] `OrderPanel._refresh_order_book()` — 바 너비(custom_minimum_size 또는 size_flags)를
-  최대 잔량 기준 정규화하여 매 틱 갱신 (바가 움직여야 한다)
-- [ ] `OrderPanel._refresh_ohlcv()` — 시/고/저/거래량 레이블 매 틱 갱신
-- [ ] `OrderPanel._refresh_fill_strength()` — 체결강도 바+텍스트 매 틱 갱신
+- [x] `OrderPanel._build_order_book_section()` — §3-5 레이아웃 구현:
+  - [x] TR1 스킬 게이팅: `_order_book_section.visible = SkillTree.is_skill_unlocked("TR1")`
+  - [x] OHLCV 행 (블록 1): 시/고/저/거래량, 매 틱 `_refresh_ohlcv()` 갱신
+  - [x] 매도 총잔량 합계 행 (블록 2)
+  - [x] 10단 호가 본체 (블록 3): 매도 오른쪽정렬 바 + 매수 왼쪽정렬 바
+  - [x] 현재가 구분행: 강조 배경 + 등락폭/률
+  - [x] 매수 총잔량 합계 행 (블록 4)
+  - [x] 체결강도 행 (블록 5): 바 + 퍼센트 + 매수/매도우위 텍스트
+  - [ ] 52주 행 (블록 6): Sprint 9까지 숨김
+- [x] `OrderPanel._refresh_order_book()` — anchor 기반 바 너비 정규화, 매 틱 갱신
+- [x] `OrderPanel._refresh_ohlcv()` — 시/고/저/거래량 레이블 매 틱 갱신
+- [x] `OrderPanel._refresh_fill_strength()` — 체결강도 바+텍스트 매 틱 갱신
+- [x] `OrderPanel._on_skill_unlocked("TR1")` — 해금 즉시 `_order_book_section.visible = true`
 
 ### AC → 테스트 매핑
 
@@ -438,7 +444,8 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | AC-16 | E2E 시각 검증 | — |
 | AC-17 | E2E 시각 검증 | — |
 | AC-18 | E2E 시각 검증 | — |
-| AC-19 | E2E 시각 검증 (Sprint 9) | — |
+| AC-19 | E2E 시각 검증 | — |
+| AC-20 | E2E 시각 검증 (Sprint 9) | — |
 
 ### 빌드 검증
 - [ ] 바이너리 실행 확인: QA Lead 서명 _______

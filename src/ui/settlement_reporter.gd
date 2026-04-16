@@ -116,7 +116,7 @@ func show_next() -> void:
 
 func _confirm() -> void:
 	_season_reveal_timer.stop()
-	_season_reveal_step = 0
+	_season_reveal_step = -1  ## -1 = timer killed by dismiss; 0 = reveal not yet started
 	_btn_confirm.disabled = false
 	_panel.visible = false
 	var was_daily_xp: bool = _last_xp_gained > 0 and _last_xp_source == "daily_bonus"
@@ -320,8 +320,9 @@ func _season_xp_base_line() -> String:
 
 func _on_season_reveal_tick() -> void:
 	# _confirm()이 stop() 호출 직전 프레임에 timeout이 발화할 수 있음.
-	# _season_reveal_step == 0 은 _confirm()이 이미 리셋했다는 의미 → 무시.
-	if _season_reveal_step == 0:
+	# _season_reveal_step == -1 은 _confirm()이 이미 타이머를 kill했다는 의미 → 무시.
+	# (0은 reveal 시작 전 초기값 — 여기서 체크하면 첫 발화가 막히므로 -1로 구분)
+	if _season_reveal_step == -1:
 		return
 	if not is_inside_tree() or not is_instance_valid(_panel) or not _panel.visible:
 		return

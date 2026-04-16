@@ -63,3 +63,4 @@
 - [ADR-016](../../docs/architecture/016-qa-10day-scenario-findings.md) — QA 자동화 10일 시나리오 버그 기록
 - [ADR-017](../../docs/architecture/017-news-feed-cycling-state-machine.md) — 뉴스 카드 관련종목 순회 클로저 캡처 상태머신
 - [ADR-018](../../docs/architecture/018-anti-price-scout-rng-entropy.md) — 가격 정찰 익스플로잇 차단: PriceEngine 세션 RNG 엔트로피 격리
+- [ADR-019](../../docs/architecture/019-player-market-impact.md) — 플레이어 주문 시장 충격: 체결량 → tick_volumes 피드백 + 가격 압력 누적(_player_pressure)

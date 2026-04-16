@@ -74,7 +74,7 @@ Day 7-8:  S8-09 start-screen 검증 (Nice-to-Have)
 - [x] S8-04: `design/gdd/rumor-channel.md` 9개 섹션 Approved
 - [x] S8-05: S3 해금 → 루머 60틱 선행 수신 + 30% 반전 확인 + 테스트 통과 + 빌드 성공
 - [x] S8-06: 라이프스타일 비시즌 정산 E2E + 소비 화면 + 거주지 연출 + 세이브/로드 + 빌드 성공
-- [ ] S8-07 (Should Have): B-02 주거 시각화 F3 배경 전환 확인 + 빌드 성공
-- [ ] S8-08 (Should Have): QA 시나리오 문서 업데이트
-- [ ] S8-09 (Should Have): ADR-019 작성 + `technical-preferences.md` 링크 추가
+- [x] S8-07 (Should Have): B-02 주거 시각화 F3 배경 전환 확인 + 빌드 성공
+- [x] S8-08 (Should Have): QA 시나리오 문서 업데이트
+- [x] S8-09 (Should Have): ADR-019 작성 + `technical-preferences.md` 링크 추가
 - [ ] `sprint-08.md` DoD 전 항목 `[x]` — Producer 확인

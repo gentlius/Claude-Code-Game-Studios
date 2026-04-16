@@ -20,6 +20,23 @@ const COLOR_AVAILABLE: Color = Color(0.85, 0.70, 0.20)   ## 금색 — 해금 �
 const COLOR_LOCKED: Color = Color(0.40, 0.40, 0.40)      ## 회색 — 잠금
 const COLOR_PREREQ: Color = Color(0.25, 0.25, 0.25)      ## 어두운 회색 — 선행 조건 미충족
 
+## Residence background art — indexed by LifestyleManager residence tier.
+## Mirrors LifestyleManager.RESIDENCE_NAMES order (tier 0 = bronze default).
+## Implements: design/gdd/lifestyle-spending.md §3-5 F3 연동
+const RESIDENCE_ART: Array[String] = [
+	"res://assets/art/housing/bronze_jjokbang.png",
+	"res://assets/art/housing/silver_oneroom.png",
+	"res://assets/art/housing/gold_officetel.png",
+	"res://assets/art/housing/platinum_apartment.png",
+	"res://assets/art/housing/emerald_large_apartment.png",
+	"res://assets/art/housing/diamond_penthouse.png",
+	"res://assets/art/housing/master_mansion.png",
+	"res://assets/art/housing/grandmaster_island_villa.png",
+	"res://assets/art/housing/challenger_sky_residence.png",
+	"res://assets/art/housing/legend_official_residence.png",
+	"res://assets/art/housing/grandmaster_ending.png",
+]
+
 # ── Node References ──
 
 var _lbl_level: Label
@@ -43,13 +60,19 @@ var _lbl_total_assets: Label
 var _lbl_cash_assets: Label
 var _lbl_account_value: Label
 var _lbl_tangible: Label
+var _lbl_residence: Label
+
+## Background image layer — current residence art (S8-07).
+var _bg_texture: TextureRect
 
 # ── Lifecycle ──
 
 func _ready() -> void:
 	_build_ui()
 	SkillTree.on_skill_unlocked.connect(_on_skill_unlocked)
+	LifestyleManager.residence_changed.connect(_on_residence_changed)
 	visibility_changed.connect(_on_visibility_changed)
+	tree_exiting.connect(_disconnect_signals)
 	_refresh()
 
 
@@ -61,12 +84,24 @@ func _on_visibility_changed() -> void:
 func _on_skill_unlocked(_skill_id: String) -> void:
 	_refresh()
 
+
+func _on_residence_changed(_tier: int, _name: String) -> void:
+	_refresh_bg()
+
+
+func _disconnect_signals() -> void:
+	if SkillTree.on_skill_unlocked.is_connected(_on_skill_unlocked):
+		SkillTree.on_skill_unlocked.disconnect(_on_skill_unlocked)
+	if LifestyleManager.residence_changed.is_connected(_on_residence_changed):
+		LifestyleManager.residence_changed.disconnect(_on_residence_changed)
+
 # ── Refresh ──
 
 func _refresh() -> void:
 	_refresh_header()
 	_refresh_skill_nodes()
 	_refresh_assets()
+	_refresh_bg()
 	if not _selected_skill_id.is_empty():
 		_refresh_detail(_selected_skill_id)
 
@@ -146,9 +181,30 @@ func _refresh_assets() -> void:
 	_lbl_account_value.text = tr("포트폴리오 평가액  %s") % FormatUtils.currency(portfolio)
 	_lbl_tangible.text = tr("실물 자산  %s") % FormatUtils.currency(tangible)
 
+
+## Loads and displays the current residence background image (S8-07).
+## Called on _refresh() and _on_residence_changed() — Godot caches the texture after first load.
+## Implements: design/gdd/lifestyle-spending.md §3-5 — F3 배경 = 현재 거주지 이미지
+func _refresh_bg() -> void:
+	var tier: int = clampi(LifestyleManager.get_residence_tier(), 0, RESIDENCE_ART.size() - 1)
+	var path: String = RESIDENCE_ART[tier]
+	if ResourceLoader.exists(path):
+		_bg_texture.texture = load(path) as Texture2D
+	_lbl_residence.text = LifestyleManager.get_residence_name()
+
 # ── UI Construction ──
 
 func _build_ui() -> void:
+	# Background residence image layer — drawn first so UI panels appear on top.
+	# Alpha 0.25: atmospheric presence without obscuring text.
+	_bg_texture = TextureRect.new()
+	_bg_texture.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_bg_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_bg_texture.stretch_mode = TextureRect.STRETCH_COVER
+	_bg_texture.modulate = Color(1.0, 1.0, 1.0, 0.25)
+	_bg_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_bg_texture)
+
 	var scroll: ScrollContainer = ScrollContainer.new()
 	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -367,6 +423,13 @@ func _build_asset_panel(parent: VBoxContainer) -> void:
 	_lbl_tangible.add_theme_font_size_override("font_size", 13)
 	_lbl_tangible.add_theme_color_override("font_color", Color(0.50, 0.50, 0.55))
 	sub_row.add_child(_lbl_tangible)
+
+	# Current residence name — updated by _refresh_bg() (S8-07)
+	_lbl_residence = Label.new()
+	_lbl_residence.text = ""
+	_lbl_residence.add_theme_font_size_override("font_size", 12)
+	_lbl_residence.add_theme_color_override("font_color", Color(0.55, 0.55, 0.60))
+	vbox.add_child(_lbl_residence)
 
 # ── Interaction ──
 

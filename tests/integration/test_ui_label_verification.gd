@@ -15,7 +15,7 @@ extends GutTest
 # ── Helpers ──
 
 func _reset_autoloads() -> void:
-	SaveSystem.active_slot_id = -1
+	# _active_slot_id는 private — 파일 정리 후 auto-save 차단으로 충분.
 	XpSystem.reset()
 	SkillTree.reset()
 	SeasonManager.reset()

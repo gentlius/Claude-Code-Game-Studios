@@ -8,7 +8,8 @@ const INDEX_PATH: String = "user://save_index.json"
 
 func before_each() -> void:
 	_clean_save_files()
-	SaveSystem.active_slot_id = -1
+	# _active_slot_id는 private — create_slot/load_slot/delete_slot으로만 변경.
+	# 파일 정리 후 id가 stale해도 auto-save는 GameClock/SeasonManager 리셋으로 차단됨.
 	XpSystem.reset()
 	SkillTree.reset()
 	SeasonManager.reset()
@@ -18,7 +19,6 @@ func before_each() -> void:
 
 func after_each() -> void:
 	_clean_save_files()
-	SaveSystem.active_slot_id = -1
 	XpSystem.reset()
 	SkillTree.reset()
 	SeasonManager.reset()
@@ -50,7 +50,7 @@ func test_create_slot_returns_id_and_creates_index() -> void:
 	# Assert
 	assert_eq(id, 0, "첫 슬롯 ID는 0이어야 함")
 	assert_true(FileAccess.file_exists(INDEX_PATH), "인덱스 파일이 생성되어야 함")
-	assert_eq(SaveSystem.active_slot_id, 0, "active_slot_id가 설정되어야 함")
+	assert_eq(SaveSystem.get_active_slot_id(), 0, "active_slot_id가 설정되어야 함")
 
 
 func test_create_slot_ids_monotonically_increase() -> void:
@@ -239,13 +239,13 @@ func test_delete_slot_removes_file_and_index_entry() -> void:
 func test_delete_slot_resets_active_slot_id() -> void:
 	# Arrange
 	var id: int = SaveSystem.create_slot("활성 슬롯")
-	assert_eq(SaveSystem.active_slot_id, id)
+	assert_eq(SaveSystem.get_active_slot_id(), id)
 
 	# Act
 	SaveSystem.delete_slot(id)
 
 	# Assert
-	assert_eq(SaveSystem.active_slot_id, -1, "삭제 후 active_slot_id = -1")
+	assert_eq(SaveSystem.get_active_slot_id(), -1, "삭제 후 active_slot_id = -1")
 
 
 # ── is_slot_valid ──

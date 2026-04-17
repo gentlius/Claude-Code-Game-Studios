@@ -260,8 +260,8 @@ func _do_upgrade_residence(tier: int) -> void:
 		## GDD §3-4: 이사 날 연출 — 페이드 블랙 → 새 배경 페이드인 → 타이틀 카드
 		_play_moving_day_sequence()
 		## Save immediately on purchase (GDD §5 EC: 구매 확정 즉시 세이브)
-		if SaveSystem.active_slot_id >= 0:
-			SaveSystem.save_slot(SaveSystem.active_slot_id)
+		if SaveSystem.get_active_slot_id() >= 0:
+			SaveSystem.save_slot(SaveSystem.get_active_slot_id())
 		_rebuild_residence_tab()
 	_refresh_residual()
 
@@ -338,8 +338,8 @@ func _on_buy_luxury(data: Dictionary) -> void:
 		## Register recurring cost after successful purchase (GDD §3-2)
 		if data.get("recurring", false) and data.get("recurring_cost", 0) > 0:
 			LifestyleManager.add_recurring_cost(data["item_id"], data["recurring_cost"])
-		if SaveSystem.active_slot_id >= 0:
-			SaveSystem.save_slot(SaveSystem.active_slot_id)
+		if SaveSystem.get_active_slot_id() >= 0:
+			SaveSystem.save_slot(SaveSystem.get_active_slot_id())
 		_rebuild_luxury_tab()
 	_refresh_residual()
 
@@ -387,8 +387,8 @@ func _on_buy_network(data: Dictionary) -> void:
 		data.get("xp_bonus", 0),
 		data.get("recurring", false)
 	):
-		if SaveSystem.active_slot_id >= 0:
-			SaveSystem.save_slot(SaveSystem.active_slot_id)
+		if SaveSystem.get_active_slot_id() >= 0:
+			SaveSystem.save_slot(SaveSystem.get_active_slot_id())
 		_rebuild_network_tab()
 	_refresh_residual()
 
@@ -460,8 +460,8 @@ func _on_donate(text: String) -> void:
 	## GDD §3-2: 공익 캠페인 기부는 LifestyleManager.donate()로 위임
 	var amount: int = int(text.strip_edges())
 	if LifestyleManager.donate(amount):
-		if SaveSystem.active_slot_id >= 0:
-			SaveSystem.save_slot(SaveSystem.active_slot_id)
+		if SaveSystem.get_active_slot_id() >= 0:
+			SaveSystem.save_slot(SaveSystem.get_active_slot_id())
 	_refresh_residual()
 
 
@@ -472,8 +472,8 @@ func _on_buy_social(data: Dictionary) -> void:
 		data.get("xp_bonus", 0),
 		data.get("recurring", false)
 	):
-		if SaveSystem.active_slot_id >= 0:
-			SaveSystem.save_slot(SaveSystem.active_slot_id)
+		if SaveSystem.get_active_slot_id() >= 0:
+			SaveSystem.save_slot(SaveSystem.get_active_slot_id())
 	_refresh_residual()
 
 
@@ -552,8 +552,8 @@ func _build_startup_card(player_tier: int) -> Control:
 func _on_buy_property(data: Dictionary) -> void:
 	if not LifestyleManager.purchase_property(data["property_type"], data["cost"]):
 		return
-	if SaveSystem.active_slot_id >= 0:
-		SaveSystem.save_slot(SaveSystem.active_slot_id)
+	if SaveSystem.get_active_slot_id() >= 0:
+		SaveSystem.save_slot(SaveSystem.get_active_slot_id())
 	_refresh_residual()
 
 
@@ -566,8 +566,8 @@ func _on_invest_startup(text: String) -> void:
 	var seasons_to_exit: int = rng.randi_range(STARTUP_MIN_SEASONS, STARTUP_MAX_SEASONS)
 	if not LifestyleManager.invest_startup(amount, seasons_to_exit, rng.seed):
 		return
-	if SaveSystem.active_slot_id >= 0:
-		SaveSystem.save_slot(SaveSystem.active_slot_id)
+	if SaveSystem.get_active_slot_id() >= 0:
+		SaveSystem.save_slot(SaveSystem.get_active_slot_id())
 	_refresh_residual()
 
 

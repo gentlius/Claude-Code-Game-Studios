@@ -20,10 +20,8 @@ const LEGACY_SAVE_PATH: String = "user://save_data.json"  ## v1 단일 슬롯 �
 
 # ── State ──
 
-## 현재 로드된 슬롯 ID. -1이면 미로드 상태.
-## ⚠ TD: 외부에서 읽기 전용으로만 사용할 것. 직접 쓰기 금지 (테스트 before_each 제외).
-## TODO(TD-CR-01): get_active_slot_id() 게터 추가 후 private으로 전환.
-var active_slot_id: int = -1
+## 현재 로드된 슬롯 ID. -1이면 미로드 상태. 외부에서는 get_active_slot_id() 사용.
+var _active_slot_id: int = -1
 
 var _save_pending: bool = false
 
@@ -53,6 +51,11 @@ func _on_market_state_changed_for_save(
 
 # ── Public API ──
 
+## Returns the currently active slot ID, or -1 if no slot is loaded.
+func get_active_slot_id() -> int:
+	return _active_slot_id
+
+
 ## Returns true if a file write is currently in progress.
 ## Callers use this instead of reading the private _save_pending field directly.
 func is_save_pending() -> bool:
@@ -75,7 +78,7 @@ func get_slot_list() -> Array[Dictionary]:
 
 
 ## Create a new slot entry in the index. Returns the new slot ID.
-## Sets active_slot_id. Does NOT save game data — call save_slot() after init.
+## Sets _active_slot_id. Does NOT save game data — call save_slot() after init.
 func create_slot(slot_name: String) -> int:
 	var index: Dictionary = _read_index()
 	var slots: Array = index.get("slots", [])
@@ -97,12 +100,12 @@ func create_slot(slot_name: String) -> int:
 	index["slots"] = slots
 	index["next_id"] = new_id + 1  # monotonically increment so IDs are never reused
 	_write_index(index)
-	active_slot_id = new_id
+	_active_slot_id = new_id
 	return new_id
 
 
 ## Load all system state from save_slot_{id}.json. Returns true on success.
-## Sets active_slot_id on success.
+## Sets _active_slot_id on success.
 func load_slot(id: int) -> bool:
 	var path: String = "user://save_slot_%d.json" % id
 	if not FileAccess.file_exists(path):
@@ -167,7 +170,7 @@ func load_slot(id: int) -> bool:
 	# TR4: 레버리지 포지션 복원 (holding 복원 이후)
 	LeverageManager.load_save_data(data.get("leverage_positions", []))
 	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)
-	active_slot_id = id
+	_active_slot_id = id
 	return true
 
 
@@ -230,8 +233,8 @@ func delete_slot(id: int) -> void:
 	index["slots"] = new_slots
 	_write_index(index)
 
-	if active_slot_id == id:
-		active_slot_id = -1
+	if _active_slot_id == id:
+		_active_slot_id = -1
 
 
 ## Update slot name in index immediately. No-op if new_name is empty.
@@ -265,8 +268,8 @@ func is_slot_valid(id: int) -> bool:
 # ── Internal ──
 
 func _on_auto_save_trigger() -> void:
-	if active_slot_id >= 0:
-		save_slot(active_slot_id)
+	if _active_slot_id >= 0:
+		save_slot(_active_slot_id)
 
 
 func _read_index() -> Dictionary:

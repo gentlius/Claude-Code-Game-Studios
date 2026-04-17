@@ -300,3 +300,18 @@ func test_leverage_manager_signals():
 	assert_true("on_margin_call" in signal_names,                "on_margin_call 시그널 존재")
 	assert_true("on_leverage_forced_liquidation" in signal_names, "on_leverage_forced_liquidation 시그널 존재")
 	assert_true("on_leverage_position_closed" in signal_names,   "on_leverage_position_closed 시그널 존재")
+
+
+# ── SaveSystem ───────────────────────────────────────────────────────
+## Implements: design/gdd/save-load.md (TD-CR-01 — get_active_slot_id getter)
+
+func test_save_system_api():
+	assert_true(SaveSystem.has_method("get_active_slot_id"), "get_active_slot_id 존재")
+	assert_true(SaveSystem.has_method("is_save_pending"),    "is_save_pending 존재")
+	assert_true(SaveSystem.has_method("get_slot_list"),      "get_slot_list 존재")
+	assert_true(SaveSystem.has_method("create_slot"),        "create_slot 존재")
+	assert_true(SaveSystem.has_method("load_slot"),          "load_slot 존재")
+	assert_true(SaveSystem.has_method("save_slot"),          "save_slot 존재")
+	assert_true(SaveSystem.has_method("delete_slot"),        "delete_slot 존재")
+	assert_true(SaveSystem.has_method("rename_slot"),        "rename_slot 존재")
+	assert_true(SaveSystem.has_method("is_slot_valid"),      "is_slot_valid 존재")

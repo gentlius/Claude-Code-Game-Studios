@@ -88,7 +88,7 @@ func _on_new_game_confirmed(slot_id: int) -> void:
 	# 이후 get_current_price()는 언제나 base_price를 반환하므로 UI fallback 불필요.
 	PriceEngine.init_first_season()
 
-	# slot_id는 SaveSystem.create_slot()이 이미 설정했으므로 active_slot_id가 맞음
+	# slot_id는 SaveSystem.create_slot()이 이미 설정했으므로 get_active_slot_id()가 맞음
 	CurrencySystem.init_first_season()
 	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)
 
@@ -120,9 +120,9 @@ func _load_main_screen() -> void:
 	_main_screen.spending_screen_requested.connect(_on_spending_screen_requested)
 
 	# 새 게임: MainScreen 준비 완료 후 초기 상태 1회 저장 (GDD §3-5 Step 6)
-	if _pending_initial_save and SaveSystem.active_slot_id >= 0:
+	if _pending_initial_save and SaveSystem.get_active_slot_id() >= 0:
 		_pending_initial_save = false
-		SaveSystem.save_slot(SaveSystem.active_slot_id)
+		SaveSystem.save_slot(SaveSystem.get_active_slot_id())
 
 
 # ── Lifestyle Screen ──
@@ -148,8 +148,8 @@ func _show_lifestyle_screen(is_season_end: bool) -> void:
 	_lifestyle_screen.lifestyle_screen_closed.connect(_on_lifestyle_screen_closed)
 
 	# Save immediately on screen entry (GDD §5 EC: 라이프스타일 소비 화면 중 앱 종료 → 화면 진입 시 즉시 세이브)
-	if SaveSystem.active_slot_id >= 0:
-		SaveSystem.save_slot(SaveSystem.active_slot_id)
+	if SaveSystem.get_active_slot_id() >= 0:
+		SaveSystem.save_slot(SaveSystem.get_active_slot_id())
 
 
 func _on_lifestyle_screen_closed() -> void:

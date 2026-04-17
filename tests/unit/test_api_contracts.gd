@@ -240,6 +240,7 @@ func test_all_systems_have_reset():
 	assert_true(StopTakeSystem.has_method("reset"),      "StopTakeSystem.reset 존재")
 	assert_true(LifestyleManager.has_method("reset"),   "LifestyleManager.reset 존재")
 	assert_true(ShortSellingSystem.has_method("reset"), "ShortSellingSystem.reset 존재")
+	assert_true(LeverageManager.has_method("reset"),    "LeverageManager.reset 존재")
 
 
 # ── ShortSellingSystem (TR3) ─────────────────────────────────────────
@@ -268,3 +269,32 @@ func test_short_selling_signals():
 		signal_names.append(s["name"])
 	assert_true("on_forced_liquidation" in signal_names,    "on_forced_liquidation 시그널 존재")
 	assert_true("on_short_position_closed" in signal_names, "on_short_position_closed 시그널 존재")
+
+
+# ── LeverageManager (TR4) ────────────────────────────────────────────
+## Implements: design/gdd/leverage-trading.md §9 Implementation Checklist
+
+func test_leverage_manager_api():
+	assert_true(LeverageManager.has_method("has_leverage_position"),   "has_leverage_position 존재")
+	assert_true(LeverageManager.has_method("get_all_positions"),       "get_all_positions 존재")
+	assert_true(LeverageManager.has_method("is_valid_multiplier"),     "is_valid_multiplier 존재")
+	assert_true(LeverageManager.has_method("get_leverage_net_value"),  "get_leverage_net_value 존재")
+	assert_true(LeverageManager.has_method("open_position"),           "open_position 존재")
+	assert_true(LeverageManager.has_method("close_position"),          "close_position 존재")
+	assert_true(LeverageManager.has_method("check_margin_calls"),      "check_margin_calls 존재")
+	assert_true(LeverageManager.has_method("process_daily_interest"),  "process_daily_interest 존재")
+	assert_true(LeverageManager.has_method("liquidate_all_positions"), "liquidate_all_positions 존재")
+	assert_true(LeverageManager.has_method("add_margin"),              "add_margin 존재")
+	assert_true(LeverageManager.has_method("get_save_data"),           "get_save_data 존재")
+	assert_true(LeverageManager.has_method("load_save_data"),          "load_save_data 존재")
+	assert_true(LeverageManager.has_method("reset"),                   "reset 존재")
+
+
+func test_leverage_manager_signals():
+	var signal_list: Array = LeverageManager.get_signal_list()
+	var signal_names: Array[String] = []
+	for s: Dictionary in signal_list:
+		signal_names.append(s["name"])
+	assert_true("on_margin_call" in signal_names,                "on_margin_call 시그널 존재")
+	assert_true("on_leverage_forced_liquidation" in signal_names, "on_leverage_forced_liquidation 시그널 존재")
+	assert_true("on_leverage_position_closed" in signal_names,   "on_leverage_position_closed 시그널 존재")

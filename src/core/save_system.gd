@@ -164,6 +164,8 @@ func load_slot(id: int) -> bool:
 	StopTakeSystem.load_save_data(data.get("stop_take", []))
 	# TR3: 숏 포지션 복원 (holding 복원 이후 — margin_ratio는 첫 틱에 재계산)
 	ShortSellingSystem.load_save_data(data.get("short_positions", []))
+	# TR4: 레버리지 포지션 복원 (holding 복원 이후)
+	LeverageManager.load_save_data(data.get("leverage_positions", []))
 	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)
 	active_slot_id = id
 	return true
@@ -192,6 +194,7 @@ func save_slot(id: int) -> bool:
 		"stop_take": StopTakeSystem.get_save_data(),
 		"lifestyle": LifestyleManager.get_save_data(),
 		"short_positions": ShortSellingSystem.get_save_data(),
+		"leverage_positions": LeverageManager.get_save_data(),
 	}
 
 	var path: String = "user://save_slot_%d.json" % id

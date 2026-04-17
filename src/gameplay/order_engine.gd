@@ -1,7 +1,8 @@
 ## Autoload — Accepts, validates, and executes buy/sell orders.
 ## Core layer. Depends on: PriceEngine, CurrencySystem, PortfolioManager, GameClock,
-##   StockDatabase, MarketConfig, ShortSellingSystem (TR3).
-## See: design/gdd/order-engine.md, design/gdd/trading-fees.md, design/gdd/short-selling.md
+##   StockDatabase, MarketConfig, ShortSellingSystem (TR3), LeverageManager (TR4).
+## See: design/gdd/order-engine.md, design/gdd/trading-fees.md,
+##      design/gdd/short-selling.md, design/gdd/leverage-trading.md
 extends Node
 
 # ── Signals ──
@@ -57,8 +58,11 @@ func reset() -> void:
 # ── Public API ──
 
 ## Submit a market order. Returns the order dict (check status for result).
-## Supports side: "BUY", "SELL", "SELL_SHORT" (TR3), "BUY_TO_COVER" (TR3).
-func submit_market_order(side: String, stock_id: String, quantity: int) -> Dictionary:
+## Supports side: "BUY", "SELL", "SELL_SHORT" (TR3), "BUY_TO_COVER" (TR3),
+##   "LEVERAGE_BUY" (TR4), "LEVERAGE_SELL" (TR4).
+## leverage_multiplier: 2, 3, or 5 for LEVERAGE_BUY; ignored for all other sides.
+func submit_market_order(side: String, stock_id: String, quantity: int,
+		leverage_multiplier: int = 1) -> Dictionary:
 	var order: Dictionary = _create_order("MARKET", side, stock_id, quantity, 0)
 
 	# TR3 short-selling orders use a dedicated execution path (MARKET_OPEN only).
@@ -66,6 +70,13 @@ func submit_market_order(side: String, stock_id: String, quantity: int) -> Dicti
 		return _handle_sell_short_order(order)
 	if side == "BUY_TO_COVER":
 		return _handle_buy_to_cover_order(order)
+
+	# TR4 leverage orders use a dedicated execution path (GDD leverage-trading.md §3-1, §3-4).
+	if side == "LEVERAGE_BUY":
+		order["leverage_multiplier"] = leverage_multiplier
+		return _handle_leverage_buy_order(order)
+	if side == "LEVERAGE_SELL":
+		return _handle_leverage_sell_order(order)
 
 	var reject: String = _validate_order(order)
 	if reject != "":
@@ -221,6 +232,97 @@ func _validate_sell_short(order: Dictionary) -> String:
 		return "증거금 부족 (필요: %d원)" % required_margin
 
 	return ""
+
+
+## TR4: LEVERAGE_BUY order handler. GDD leverage-trading.md §3-1.
+func _handle_leverage_buy_order(order: Dictionary) -> Dictionary:
+	var reject: String = _validate_leverage_buy(order)
+	if reject != "":
+		return _reject_order(order, reject)
+
+	var filled_price: int = LeverageManager.open_position(
+		order["stock_id"], order["quantity"], order["leverage_multiplier"]
+	)
+	if filled_price <= 0:
+		return _reject_order(order, "레버리지 매수 처리 실패")
+
+	order["status"] = "FILLED"
+	order["filled_price"] = filled_price
+	order["filled_tick"] = GameClock.get_current_tick()
+	_history_append(order)
+	on_order_filled.emit(order)
+	return order
+
+
+## TR4: Validation for LEVERAGE_BUY orders. GDD §3-1 검증 단계 10-12.
+func _validate_leverage_buy(order: Dictionary) -> String:
+	var stock_id: String = order["stock_id"]
+	var multiplier: int = order.get("leverage_multiplier", 1)
+
+	# MARKET_OPEN only
+	if GameClock.get_market_state() != GameClock.MarketState.MARKET_OPEN:
+		return "레버리지 매수는 장 중에만 가능합니다"
+
+	# Stock existence
+	if StockDatabase.get_stock(stock_id) == null:
+		return "존재하지 않는 종목입니다"
+
+	# CB Stage 2 / VI halt
+	if PriceEngine.get_cb_stage() >= 2:
+		return "CB 2단계 발동 중 — 조기 장 마감"
+	if PriceEngine.is_vi_halted(stock_id):
+		return "변동성완화장치(VI) 발동 중입니다"
+
+	if order["quantity"] <= 0:
+		return "수량은 1 이상이어야 합니다"
+
+	# TR4 skill unlock check (GDD step 10 — UI gate)
+	if not SkillTree.has_leverage():
+		return "레버리지 거래가 해금되지 않았습니다"
+
+	# Valid multiplier (GDD step 11 — AC-10)
+	if not LeverageManager.is_valid_multiplier(multiplier):
+		return "유효하지 않은 레버리지 배율입니다"
+
+	# Sufficient equity check (GDD step 12)
+	var current_price: int = PriceEngine.get_current_price(stock_id)
+	var order_value: int = current_price * order["quantity"]
+	var equity_needed: int = int(ceil(float(order_value) / float(multiplier)))
+	if CurrencySystem.get_sim_cash() < equity_needed:
+		return "증거금 부족 (필요: %d원)" % equity_needed
+
+	return ""
+
+
+## TR4: LEVERAGE_SELL order handler. Closes leverage positions FIFO. GDD §3-4.
+func _handle_leverage_sell_order(order: Dictionary) -> Dictionary:
+	var stock_id: String = order["stock_id"]
+
+	# MARKET_OPEN only
+	if GameClock.get_market_state() != GameClock.MarketState.MARKET_OPEN:
+		return _reject_order(order, "레버리지 청산은 장 중에만 가능합니다")
+
+	if StockDatabase.get_stock(stock_id) == null:
+		return _reject_order(order, "존재하지 않는 종목입니다")
+
+	if PriceEngine.get_cb_stage() >= 2:
+		return _reject_order(order, "CB 2단계 발동 중 — 조기 장 마감")
+	if PriceEngine.is_vi_halted(stock_id):
+		return _reject_order(order, "변동성완화장치(VI) 발동 중입니다")
+
+	if order["quantity"] <= 0:
+		return _reject_order(order, "수량은 1 이상이어야 합니다")
+
+	if not LeverageManager.has_leverage_position(stock_id):
+		return _reject_order(order, "청산할 레버리지 포지션이 없습니다")
+
+	LeverageManager.close_position(stock_id, order["quantity"])
+	order["status"] = "FILLED"
+	order["filled_price"] = PriceEngine.get_current_price(stock_id)
+	order["filled_tick"] = GameClock.get_current_tick()
+	_history_append(order)
+	on_order_filled.emit(order)
+	return order
 
 
 ## Submit a limit order. Returns the order dict.

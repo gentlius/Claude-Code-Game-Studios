@@ -357,6 +357,10 @@ func _on_season_end() -> void:
 	# PortfolioManager.force_liquidate() so currency math is clean.
 	ShortSellingSystem.liquidate_all_for_season_end()
 
+	# Step ①-B: TR4 레버리지 포지션 전량 시즌 종료 청산 (GDD leverage-trading.md §3-5).
+	# Runs after TR3 short liquidation and before long position force_liquidate.
+	LeverageManager.liquidate_all_positions()
+
 	# Step ②: Forced liquidation — sell all holdings at current price (GDD §3-1).
 	PortfolioManager.force_liquidate()
 

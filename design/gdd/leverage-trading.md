@@ -1,6 +1,6 @@
 # TR4 레버리지 거래 (Leverage Trading)
 
-> **Status**: In Review
+> **Status**: In Review (게임플레이 시스템 구현 완료 2026-04-17 — UI 기능 및 빌드 검증 대기)
 > **Author**: user + game-designer
 > **Last Updated**: 2026-04-17
 > **Implements Pillar**: 판단이 곧 실력 (Judgment is King), 체감있는 성장 (Feel the Growth)
@@ -474,23 +474,23 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 호출 경로
 
-- [ ] `OrderEngine.submit_order()` 시그니처에 `leverage_multiplier: int = 1` 파라미터 추가
-- [ ] `LeverageManager` 신규 파일 생성: `src/gameplay/leverage_manager.gd`
-- [ ] `LeverageManager.process_daily_interest(day: int)` 구현
-- [ ] `LeverageManager.check_margin_calls()` 구현 (매 틱 호출)
-- [ ] `LeverageManager.liquidate_all_positions()` 구현 (시즌 종료 시)
-- [ ] `LeverageManager.add_margin(position_id, amount)` 구현 (증거금 추가)
-- [ ] `PortfolioManager.add_leverage_holding(stock_id, qty, entry_price, multiplier, borrowed)` 추가
-- [ ] `PortfolioManager.remove_leverage_holding(stock_id, qty)` 추가
-- [ ] `PortfolioManager.get_all_leverage_positions() -> Array[LeveragePosition]` 추가
-- [ ] `PortfolioManager` `account_total_value` 계산에 레버리지 포지션 기여분 반영
-- [ ] `SkillTree.has_skill("TR4")` 존재 확인 (기존 API 재사용)
-- [ ] `assets/data/leverage_config.json` 생성 및 모든 튜닝 수치 외부화
-- [ ] `SeasonManager._on_season_end()` Step ①-b에 `LeverageManager.liquidate_all_positions()` 호출 삽입
-- [ ] 트레이딩 스크린 레버리지 포지션 섹션 UI 추가
-- [ ] 배율 선택 콤보박스: TR4 미해금 시 잠금 처리
-- [ ] 마진콜 경고 팝업 구현
-- [ ] 강제청산 알림 토스트 구현
+- [x] `OrderEngine.submit_market_order()` 시그니처에 `leverage_multiplier: int = 1` 파라미터 추가 + "LEVERAGE_BUY"/"LEVERAGE_SELL" 사이드 추가
+- [x] `LeverageManager` 신규 파일 생성: `src/gameplay/leverage_manager.gd`
+- [x] `LeverageManager.process_daily_interest(day: int)` 구현 (on_market_close 연결)
+- [x] `LeverageManager.check_margin_calls()` 구현 (GameClock._process_tick() 4번째 단계 명시 호출)
+- [x] `LeverageManager.liquidate_all_positions()` 구현 (시즌 종료 시)
+- [x] `LeverageManager.add_margin(stock_id, multiplier, amount)` 구현 (증거금 추가)
+- [x] `PortfolioManager.update_valuation()` 계산에 `LeverageManager.get_leverage_net_value()` 반영 (단일 소유권 패턴 — ShortSellingSystem과 동일, PortfolioManager에 중복 보유 추적 없음)
+- [x] `SkillTree.has_leverage()` 기존 API 사용 (is_skill_unlocked("TR4"))
+- [x] `assets/data/leverage_config.json` 생성 및 모든 튜닝 수치 외부화
+- [x] `SeasonManager._on_season_end()` Step ①-b에 `LeverageManager.liquidate_all_positions()` 호출 삽입
+- [x] `LeverageManager` autoload 등록 (project.godot)
+- [x] `SaveSystem` save/load에 leverage_positions 직렬화 추가
+- [x] `GameMain` 신규 게임 리셋 시 `LeverageManager.reset()` 추가
+- [ ] 트레이딩 스크린 레버리지 포지션 섹션 UI 추가 (UI 스프린트 예정)
+- [ ] 배율 선택 콤보박스: TR4 미해금 시 잠금 처리 (UI 스프린트 예정)
+- [ ] 마진콜 경고 팝업 구현 (UI 스프린트 예정)
+- [ ] 강제청산 알림 토스트 구현 (UI 스프린트 예정)
 
 ### AC → 테스트 매핑
 

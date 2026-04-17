@@ -177,15 +177,12 @@ func test_forced_liquidation_triggers_below_threshold() -> void:
 	var liquidation_price: int = 400_000
 	_set_mock_price(MOCK_STOCK, liquidation_price)
 
-	var forced_liq_fired: bool = false
-	ShortSellingSystem.on_forced_liquidation.connect(
-		func(_sid: String, _p: int, _pnl: int) -> void: forced_liq_fired = true
-	)
+	watch_signals(ShortSellingSystem)
 	# Act
 	ShortSellingSystem.update_and_check_margin(1)
 	# Assert
 	assert_false(ShortSellingSystem.has_short(MOCK_STOCK), "포지션 제거됨")
-	assert_true(forced_liq_fired, "on_forced_liquidation 시그널 발행")
+	assert_signal_emitted(ShortSellingSystem, "on_forced_liquidation", "on_forced_liquidation 시그널 발행")
 
 
 # ── AC-07: BUY_TO_COVER 체결 시 realized_pnl 예수금 반영 ──────────────────────

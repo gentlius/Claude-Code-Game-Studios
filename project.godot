@@ -41,6 +41,7 @@ SaveSystem="*res://src/core/save_system.gd"
 AudioManager="*res://src/core/audio_manager.gd"
 MarketConfig="*res://src/core/market_config.gd"
 ShortSellingSystem="*res://src/gameplay/short_selling_system.gd"
+LeverageManager="*res://src/gameplay/leverage_manager.gd"
 
 [display]
 

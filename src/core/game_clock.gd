@@ -254,6 +254,8 @@ func _process_tick() -> void:
 	# TR3: margin monitoring after price update, before order matching (GDD short-selling.md §규칙 6)
 	ShortSellingSystem.update_and_check_margin(_current_tick)
 	OrderEngine.process_tick(_current_tick, _current_day, _current_week)
+	# TR4: leverage margin check after order matching (GDD leverage-trading.md §6 GameClock dependency)
+	LeverageManager.check_margin_calls()
 	# Emit the tick number that was just completed (1-based from the subscriber's
 	# perspective). The pre-increment value is passed so that subscribers calling
 	# get_current_tick() during on_tick receive the same value as tick_number.

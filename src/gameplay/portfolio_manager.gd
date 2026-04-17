@@ -201,7 +201,12 @@ func update_valuation(sim_cash: int, reserved_cash: int) -> void:
 	# TR3: include short position net value (margin_deposited + unrealized_pnl).
 	# margin_deposited was already deducted from sim_cash, so re-adding it here
 	# with the live pnl gives an undistorted total assets figure. GDD §규칙 10.
-	_cached_total_assets = sim_cash + reserved_cash + total_stock_value + ShortSellingSystem.get_short_net_value()
+	# TR4: include leverage equity (position_market_value − borrowed − accrued_interest).
+	# equity_used was deducted from sim_cash, so adding equity here restores it at live prices.
+	# GDD leverage-trading.md §6 PortfolioManager dependency.
+	_cached_total_assets = (sim_cash + reserved_cash + total_stock_value
+		+ ShortSellingSystem.get_short_net_value()
+		+ LeverageManager.get_leverage_net_value())
 
 	if _initial_seed > 0:
 		_cached_return_rate = float(_cached_total_assets - _initial_seed) / float(_initial_seed) * 100.0

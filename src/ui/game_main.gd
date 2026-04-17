@@ -110,7 +110,13 @@ func _load_main_screen() -> void:
 	_main_screen = screen_scene.instantiate()
 	add_child(_main_screen)
 	_main_screen.exit_to_start_requested.connect(_on_exit_to_start_requested)
-	LifestyleManager.offseason_settled.connect(_show_lifestyle_screen)
+	# Show lifestyle screen only AFTER the player confirms the season-end settlement dialog.
+	# offseason_settled fires immediately on SeasonManager.on_season_ended (before confirmation),
+	# which would stack the lifestyle screen behind/over the settlement dialog.
+	# Instead, watch GameClock leave SEASON_END — that happens on GameClock.confirm_transition()
+	# which TradingScreen calls when settlement_confirmed fires.
+	# process_offseason() has already run by this point (fired on on_season_ended).
+	GameClock.on_market_state_changed.connect(_on_clock_state_for_lifestyle)
 
 	# 새 게임: MainScreen 준비 완료 후 초기 상태 1회 저장 (GDD §3-5 Step 6)
 	if _pending_initial_save and SaveSystem.active_slot_id >= 0:
@@ -120,13 +126,19 @@ func _load_main_screen() -> void:
 
 # ── Lifestyle Screen ──
 
-## Shows LifestyleScreen after off-season auto-settlement completes.
-## GDD lifestyle-spending.md §3-1: offseason_settled → show spending screen.
+## Fired on every GameClock state transition while MainScreen is alive.
+## Shows LifestyleScreen when the clock leaves SEASON_END (= player confirmed season dialog).
+func _on_clock_state_for_lifestyle(
+	_new_state: GameClock.MarketState, prev_state: GameClock.MarketState
+) -> void:
+	if prev_state == GameClock.MarketState.SEASON_END:
+		_show_lifestyle_screen()
+
+
+## Shows LifestyleScreen after the season settlement dialog is confirmed.
+## GDD lifestyle-spending.md §3-1. process_offseason() has already run by this point.
 func _show_lifestyle_screen() -> void:
-	# Guard: only show during off-season (season not active). Ignore stale signals.
-	if SeasonManager.is_season_active():
-		return
-	# Guard: don't stack screens if already showing (e.g. duplicate signal).
+	# Guard: don't stack screens if already showing (e.g. load-slot edge case).
 	if _lifestyle_screen != null:
 		return
 
@@ -148,6 +160,8 @@ func _on_lifestyle_screen_closed() -> void:
 
 func _on_exit_to_start_requested() -> void:
 	# F4 나가기: MainScreen 제거 후 StartScreen 표시. 저장 없음(자동 저장 기반).
+	if GameClock.on_market_state_changed.is_connected(_on_clock_state_for_lifestyle):
+		GameClock.on_market_state_changed.disconnect(_on_clock_state_for_lifestyle)
 	_main_screen.queue_free()
 	_main_screen = null
 	_show_start_screen()

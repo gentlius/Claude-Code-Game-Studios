@@ -74,11 +74,14 @@ func get_fee_breakdown(
 
 
 ## 매수 주문 예약금 산정 — 수수료·매수세 포함 총 비용
-## GDD §3-2: buy_cost = gross × (1 + buy_tax + commission)
+## GDD §3-2: buy_cost = gross + floor(gross × buy_tax) + floor(gross × commission)
+## (floor per component — consistent with get_fee_breakdown; avoids float ceil rounding)
 func get_buy_cost(gross: int) -> int:
 	var buy_tax_rate: float = _active.get("buy_tax", 0.0)
 	var commission_rate: float = _active.get("commission", 0.0)
-	return int(ceil(float(gross) * (1.0 + buy_tax_rate + commission_rate)))
+	var buy_tax_amount: int = int(floor(float(gross) * buy_tax_rate))
+	var commission_amount: int = int(floor(float(gross) * commission_rate))
+	return gross + buy_tax_amount + commission_amount
 
 
 ## 현재 활성 시장 ID 반환

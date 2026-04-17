@@ -77,7 +77,8 @@ func test_kr_buy_fee_deduction() -> void:
 func test_kr_get_buy_cost() -> void:
 	var gross: int = 1_000_000
 	var cost: int = MarketConfig.get_buy_cost(gross)
-	# ceil(1,000,000 × 1.00015) = ceil(1,000,150.0) = 1,000,150
+	# commission = floor(1,000,000 × 0.00015) = floor(150.0) = 150
+	# buy_cost = 1,000,000 + 0 + 150 = 1,000,150
 	assert_eq(cost, 1_000_150, "buy_cost 1,000,150원")
 
 

@@ -179,13 +179,13 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - 이 기능은 어디서 호출되는가: `OrderEngine._execute_order()` → `MarketConfig.get_fee_breakdown()` → `CurrencySystem.cash_deduct(net)`
 
 ### 호출 경로
-- [ ] `assets/data/market_config.json` 생성 — KR 파라미터 + US/JP/HK/CN 예약 슬롯
-- [ ] `src/core/market_config.gd` autoload 등록 (`project.godot`)
-- [ ] `MarketConfig.get_fee_breakdown(side, gross, holding_days, realized_profit) → Dictionary`
-- [ ] `OrderEngine._execute_buy()`: `buy_cost = gross × (1 + buy_tax + commission)` → `CurrencySystem.cash_deduct(buy_cost)`
-- [ ] `OrderEngine._execute_sell()`: `get_fee_breakdown()` → `CurrencySystem.cash_add(net)`
-- [ ] `PortfolioManager`: 매도 시 `holding_days` 계산 (FIFO 가중평균) → `OrderEngine`에 전달
-- [ ] 체결 알림 패널에 수수료·세금 내역 표시
+- [x] `assets/data/market_config.json` 생성 — KR 파라미터 + US/JP/HK/CN 예약 슬롯
+- [x] `src/core/market_config.gd` autoload 등록 (`project.godot`)
+- [x] `MarketConfig.get_fee_breakdown(side, gross, holding_days, realized_profit) → Dictionary`
+- [x] `OrderEngine._execute_buy()`: `buy_cost = MarketConfig.get_buy_cost(gross)` → 예약금 포함 차감. 체결 시 actual_cost 기준 정산
+- [x] `OrderEngine._execute_sell()`: `get_fee_breakdown()` → `CurrencySystem.sim_add(net)` (3개 체결 경로 모두)
+- [ ] `PortfolioManager`: 매도 시 `holding_days` 계산 (FIFO 가중평균) → `OrderEngine`에 전달 — KR capital_gains=0이므로 현재 holding_days=0 전달, 향후 비KR 시장에서 구현
+- [ ] 체결 알림 패널에 수수료·세금 내역 표시 — AC-05, 수동 검증 대상. UI 구현은 S9-06 후속 작업
 
 ### AC → 테스트 매핑
 

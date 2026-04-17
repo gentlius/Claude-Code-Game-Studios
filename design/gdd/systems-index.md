@@ -57,6 +57,7 @@
 | 31 | TR3 공매도 (Short Selling) | Gameplay | Full | In Review | ✅ Done | [short-selling.md](short-selling.md) | 주문 엔진, 포트폴리오 관리, 재화 시스템, 가격 엔진, 스킬 트리, 시즌 관리, 세이브/로드 |
 | 32 | TR4 레버리지 거래 (Leverage Trading) | Gameplay | Beta | In Review | ✅ Done | [leverage-trading.md](leverage-trading.md) | 주문 엔진, 포트폴리오 관리, 스킬 트리, 라이프스타일 |
 | 33 | 튜토리얼 (Tutorial) | Meta | Full | Not Started | — | — | 전체 게임플레이 시스템 |
+| 34 | OHLCV 시즌 간 누적 (OhlcvHistory) | Gameplay | Beta | Approved | ✅ Done | [price-engine.md](price-engine.md) §OHLCV | 가격 엔진, 시즌 관리, 차트 렌더러, 세이브/로드 |
 
 > **라이프스타일 소비 (Sprint 8 B-12 완료)**: `LifestyleManager` 구현 완료. 매일 장 마감 시 `process_market_close(day, week)` 호출. 시즌 마지막 날에만 임대 수익·스타트업 엑싯·Recurring 비용 처리. 소비 화면은 매일 장 마감 후 표시. 실물 자산(`get_tangible_value()`)은 Sprint 9 B-02 이월.
 

@@ -83,6 +83,7 @@ func _on_new_game_confirmed(slot_id: int) -> void:
 	ShortSellingSystem.reset()
 	LeverageManager.reset()
 	CurrencySystem.reset()
+	OhlcvHistory.reset()
 
 	# 모든 autoload 리셋 완료 — 가격 데이터를 DB에서 로드해 UI 생성 전에 유효 상태로 만든다.
 	# 이후 get_current_price()는 언제나 base_price를 반환하므로 UI fallback 불필요.

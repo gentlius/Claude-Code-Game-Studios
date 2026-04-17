@@ -243,6 +243,20 @@ func test_all_systems_have_reset():
 	assert_true(LifestyleManager.has_method("reset"),   "LifestyleManager.reset 존재")
 	assert_true(ShortSellingSystem.has_method("reset"), "ShortSellingSystem.reset 존재")
 	assert_true(LeverageManager.has_method("reset"),    "LeverageManager.reset 존재")
+	assert_true(OhlcvHistory.has_method("reset"),       "OhlcvHistory.reset 존재")
+
+
+# ── OhlcvHistory (S9-07) ─────────────────────────────────────────────
+## Implements: design/gdd/price-engine.md §OHLCV (cross-season history accumulation)
+
+func test_ohlcv_history_api():
+	assert_true(OhlcvHistory.has_method("reset"),              "reset 존재")
+	assert_true(OhlcvHistory.has_method("get_candles"),        "get_candles 존재")
+	assert_true(OhlcvHistory.has_method("get_all_daily_bars"), "get_all_daily_bars 존재")
+	assert_true(OhlcvHistory.has_method("get_past_bar_count"), "get_past_bar_count 존재")
+	assert_true(OhlcvHistory.has_method("get_save_data"),      "get_save_data 존재")
+	assert_true(OhlcvHistory.has_method("load_save_data"),     "load_save_data 존재")
+	assert_true("history_seed" in OhlcvHistory,                "history_seed 속성 존재")
 
 
 # ── ShortSellingSystem (TR3) ─────────────────────────────────────────

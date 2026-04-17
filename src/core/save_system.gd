@@ -169,6 +169,8 @@ func load_slot(id: int) -> bool:
 	ShortSellingSystem.load_save_data(data.get("short_positions", []))
 	# TR4: 레버리지 포지션 복원 (holding 복원 이후)
 	LeverageManager.load_save_data(data.get("leverage_positions", []))
+	# OHLCV 시즌 간 누적 히스토리 복원 (S9-07)
+	OhlcvHistory.load_save_data(data.get("ohlcv_history", {}))
 	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)
 	_active_slot_id = id
 	return true
@@ -198,6 +200,7 @@ func save_slot(id: int) -> bool:
 		"lifestyle": LifestyleManager.get_save_data(),
 		"short_positions": ShortSellingSystem.get_save_data(),
 		"leverage_positions": LeverageManager.get_save_data(),
+		"ohlcv_history": OhlcvHistory.get_save_data(),
 	}
 
 	var path: String = "user://save_slot_%d.json" % id

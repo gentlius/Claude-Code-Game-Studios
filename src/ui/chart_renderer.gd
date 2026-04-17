@@ -12,8 +12,9 @@ signal price_clicked(price: int)
 
 enum ChartState { UNLOADED, LOADING, LIVE, PAUSED, STATIC }
 ## Ticks per candle. Derived from GameClock.TICKS_PER_MINUTE (4).
-## M1=4, M5=20, M15=60, D1=TICKS_PER_DAY (enum requires literal values).
-enum Timeframe { M1 = 4, M5 = 20, M15 = 60, D1 = 1560 }
+## M1=4, M5=20, M15=60, D1=TICKS_PER_DAY (literal values required).
+## W1/MN are sentinel values — these timeframes use OhlcvHistory.get_candles().
+enum Timeframe { M1 = 4, M5 = 20, M15 = 60, D1 = 1560, W1 = 9000, MN = 9001 }
 
 # ── Constants (Tuning Knobs from GDD) ──
 
@@ -124,6 +125,8 @@ var _btn_tf_1t: Button
 var _btn_tf_5t: Button
 var _btn_tf_15t: Button
 var _btn_tf_1d: Button
+var _btn_tf_w1: Button
+var _btn_tf_mn: Button
 var _btn_go_latest: Button
 
 # ── Lifecycle ──
@@ -199,6 +202,18 @@ func _build_header() -> void:
 	_btn_tf_1d.pressed.connect(func() -> void: set_timeframe(Timeframe.D1))
 	_header_bar.add_child(_btn_tf_1d)
 
+	_btn_tf_w1 = Button.new()
+	_btn_tf_w1.text = tr("주봉")
+	ThemeSetup.apply_button_theme(_btn_tf_w1)
+	_btn_tf_w1.pressed.connect(func() -> void: set_timeframe(Timeframe.W1))
+	_header_bar.add_child(_btn_tf_w1)
+
+	_btn_tf_mn = Button.new()
+	_btn_tf_mn.text = tr("월봉")
+	ThemeSetup.apply_button_theme(_btn_tf_mn)
+	_btn_tf_mn.pressed.connect(func() -> void: set_timeframe(Timeframe.MN))
+	_header_bar.add_child(_btn_tf_mn)
+
 	# Go-to-latest button (hidden by default)
 	_btn_go_latest = Button.new()
 	_btn_go_latest.text = tr("현재로 이동 →")
@@ -267,10 +282,10 @@ func set_timeframe(tf: Timeframe) -> void:
 
 ## Update timeframe button styles — active button gets accent style.
 func _update_tf_buttons() -> void:
-	var buttons: Array[Button] = [_btn_tf_1t, _btn_tf_5t, _btn_tf_15t, _btn_tf_1d]
-	var timeframes: Array[Timeframe] = [Timeframe.M1, Timeframe.M5, Timeframe.M15, Timeframe.D1]
+	var buttons: Array[Button] = [_btn_tf_1t, _btn_tf_5t, _btn_tf_15t, _btn_tf_1d, _btn_tf_w1, _btn_tf_mn]
+	var timeframes: Array[int] = [Timeframe.M1, Timeframe.M5, Timeframe.M15, Timeframe.D1, Timeframe.W1, Timeframe.MN]
 	for i: int in range(buttons.size()):
-		if timeframes[i] == _timeframe:
+		if timeframes[i] == int(_timeframe):
 			ThemeSetup.apply_accent_button(buttons[i])
 		else:
 			ThemeSetup.apply_button_theme(buttons[i])
@@ -406,6 +421,13 @@ func _zoom(delta: int) -> void:
 func _aggregate_candles() -> void:
 	_candles.clear()
 
+	# W1/MN: delegate to OhlcvHistory which owns cross-season daily bars.
+	if _timeframe == Timeframe.W1 or _timeframe == Timeframe.MN:
+		var tf_str: String = "W1" if _timeframe == Timeframe.W1 else "MN"
+		_candles = OhlcvHistory.get_candles(_stock_id, tf_str)
+		_rebuild_indicator_caches()
+		return
+
 	if _timeframe == Timeframe.D1:
 		# Use daily OHLCV from PriceEngine for completed days.
 		_candles = _ohlcv_daily.duplicate()
@@ -445,6 +467,9 @@ func _aggregate_candles() -> void:
 ## Incremental update — only rebuilds the last (in-progress) candle. O(1) per tick.
 ## Called from _on_price_updated when the buffer grew (normal tick, no day boundary).
 func _update_last_candle() -> void:
+	# W1/MN are built from completed daily bars — no per-tick update needed.
+	if _timeframe == Timeframe.W1 or _timeframe == Timeframe.MN:
+		return
 	if _timeframe == Timeframe.D1:
 		var n: int = _tick_prices.size()
 		if n == 0:

@@ -78,9 +78,12 @@ Day 8:    S9-10/S9-11 (Nice-to-Have)
 - [x] S9-05: 설정화면 볼륨·자동감속 E2E + 세이브/로드 확인 + 빌드 성공 (2026-04-17)
 - [x] S9-06 GDD: `design/gdd/trading-fees.md` 9개 섹션 Approved (2026-04-17)
 - [x] S9-06 구현: MarketConfig autoload + JSON + OrderEngine 수수료 적용 + 테스트 통과 + 빌드 성공 (2026-04-17)
-- [ ] S9-07 (Should Have): 5시즌 누적 데이터 세이브/로드 + 용량 검증 + 테스트 통과
+- [x] S9-07 (Should Have): 5시즌 누적 데이터 세이브/로드 + 용량 검증 + 테스트 통과 (2026-04-17)
+  - OhlcvHistory autoload: 시드 기반 pre-history(200시즌) + 실플레이 일봉 누적
+  - 차트 렌더러 W1(주봉)/MN(월봉) 타임프레임 추가
+  - test_ohlcv_history.gd 14개 테스트 — 5시즌 시뮬레이션 검증 포함
 - [x] S9-08 (Should Have): `active_slot_id` private 전환 + 기존 테스트 전부 통과 (2026-04-17)
 - [x] S9-09 (Should Have): UIState 공유 enum 전환 + 기존 테스트 전부 통과 (2026-04-17)
 - [x] S9-10 (Nice-to-Have): `portfolio_view.gd` 메서드 분리 — `_build_ui()` 6개, `_refresh_holdings()` 4개 함수로 분리, `tr()` 누락 수정 (2026-04-17)
 - [x] S9-11 (Nice-to-Have): `settlement_reporter.gd` 레이스 컨디션 — 재현 불가 확인, TD-AUDIT-01 종결 (2026-04-17)
-- [ ] `sprint-09.md` DoD 전 항목 `[x]` — Producer 확인
+- [x] `sprint-09.md` DoD 전 항목 `[x]` — Producer 확인 (2026-04-17, S9-07은 Should Have DoD 기준 충족)

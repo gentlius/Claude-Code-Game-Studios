@@ -1,4 +1,4 @@
-# Sprint 2 -- 2026-04-14 to 2026-04-28
+# Sprint 2 — 2026-04-03 to 2026-04-03
 
 ## Progress Snapshot (2026-04-04) — **Sprint Closed ✅**
 

@@ -4,16 +4,8 @@
 class_name StatusBar
 extends VBoxContainer
 
-## Mirrors TradingScreen.UIState to break circular class_name dependency.
-## Both enums must have identical values — if TradingScreen.UIState changes, update here too.
-enum UIState {
-	LOADING,
-	PRE_MARKET,
-	MARKET_OPEN,
-	PAUSED,
-	SETTLEMENT,
-	SEASON_RESULT,
-}
+## 공유 UIState enum 앨리어스 — 중복 정의 제거 (TD-CR-11). 원본: src/core/ui_state_types.gd
+const UIState = UIStateTypes.UIState
 
 ## Emitted when the league HUD label is clicked → TradingScreen relays to league_tab_requested.
 signal league_hud_clicked
@@ -43,7 +35,7 @@ var _lbl_league_tier: Label
 var _lbl_season_return: Label
 var _lbl_weekly_return: Label
 var _btn_sp_alert: Button
-var _ui_state: UIState = UIState.LOADING
+var _ui_state: int = UIState.LOADING
 
 
 func _ready() -> void:

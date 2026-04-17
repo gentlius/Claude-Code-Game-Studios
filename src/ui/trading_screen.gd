@@ -5,16 +5,8 @@
 class_name TradingScreen
 extends Control
 
-# ── Enums ──
-
-enum UIState {
-	LOADING,
-	PRE_MARKET,
-	MARKET_OPEN,
-	PAUSED,
-	SETTLEMENT,
-	SEASON_RESULT,
-}
+## 공유 UIState enum 앨리어스 — 중복 정의 제거 (TD-CR-11). 원본: src/core/ui_state_types.gd
+const UIState = UIStateTypes.UIState
 
 # ── Signals ──
 
@@ -35,7 +27,7 @@ signal spending_screen_requested(is_season_end: bool)
 
 # ── State ──
 
-var _ui_state: UIState = UIState.LOADING
+var _ui_state: int = UIState.LOADING
 var _selected_stock_id: String = ""
 var _stock_ids: Array[String] = []
 

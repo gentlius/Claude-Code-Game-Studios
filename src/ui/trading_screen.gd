@@ -29,6 +29,9 @@ signal growth_tab_requested()
 signal pause_toggle_requested()
 ## TD-03: relayed up to MainScreen → GameClock.set_speed().
 signal speed_change_requested(multiplier: float)
+## Emitted after all settlement reports are confirmed — GameMain shows LifestyleScreen.
+## is_season_end: true when the clock is in SEASON_END (drives button text in LifestyleScreen).
+signal spending_screen_requested(is_season_end: bool)
 
 # ── State ──
 
@@ -81,7 +84,12 @@ func _connect_signals() -> void:
 	_status_bar.speed_changed.connect(_set_speed)
 	_status_bar.market_open_pressed.connect(_on_btn_market_open_pressed)
 	_status_bar.growth_tab_requested.connect(func() -> void: growth_tab_requested.emit())
-	_settlement_reporter.settlement_confirmed.connect(func() -> void: GameClock.confirm_transition())
+	_settlement_reporter.settlement_confirmed.connect(func() -> void:
+		var is_season_end: bool = (
+			GameClock.get_market_state() == GameClock.MarketState.SEASON_END
+		)
+		spending_screen_requested.emit(is_season_end)
+	)
 	_settlement_reporter.needs_level_up.connect(_on_settlement_needs_level_up)
 	_toast_manager.news_received.connect(_on_news_received)
 	_level_up_banner.skill_tree_requested.connect(func() -> void: growth_tab_requested.emit())

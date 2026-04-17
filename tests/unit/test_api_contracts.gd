@@ -209,7 +209,7 @@ func test_lifestyle_manager_api():
 	assert_true(LifestyleManager.has_method("purchase_social_item"),    "purchase_social_item 존재")
 	assert_true(LifestyleManager.has_method("donate"),                  "donate 존재")
 	assert_true(LifestyleManager.has_method("invest_startup"),          "invest_startup 존재")
-	assert_true(LifestyleManager.has_method("process_offseason"),       "process_offseason 존재")
+	assert_true(LifestyleManager.has_method("process_market_close"),    "process_market_close 존재")
 	assert_true(LifestyleManager.has_method("reset"),                   "LifestyleManager.reset 존재")
 
 

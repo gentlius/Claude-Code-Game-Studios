@@ -6,6 +6,8 @@ extends Control
 
 ## F4 나가기 버튼/키 — game_main이 수신해 StartScreen으로 전환. GDD: start-screen.md §3-7
 signal exit_to_start_requested
+## Relayed from TradingScreen — game_main shows LifestyleScreen. GDD: lifestyle-spending.md §3-1
+signal spending_screen_requested(is_season_end: bool)
 
 # ── Constants ──
 
@@ -191,6 +193,10 @@ func _build_ui() -> void:
 	# TD-03: TradingScreen/SkillTreeOverlay → MainScreen → GameClock (단일 라우팅 경로)
 	_trading_screen.pause_toggle_requested.connect(func() -> void: GameClock.toggle_pause())
 	_trading_screen.speed_change_requested.connect(func(m: float) -> void: GameClock.set_speed(m))
+	# Relay spending screen request to GameMain (GDD: lifestyle-spending.md §3-1)
+	_trading_screen.spending_screen_requested.connect(
+		func(b: bool) -> void: spending_screen_requested.emit(b)
+	)
 
 	# F2 — LeagueScreen (S3-05)
 	var league_scene: PackedScene = load("res://src/ui/LeagueScreen.tscn")

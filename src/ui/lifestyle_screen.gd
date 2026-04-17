@@ -1,12 +1,13 @@
-## LifestyleScreen — Off-season spending UI. Shows after offseason_settled.
+## LifestyleScreen — Daily spending UI. Shows after every settlement confirmation.
 ## 5 category tabs: 거주지 | 사치품 | 네트워크 | 사회공헌 | 대안투자
-## Displays remaining cash_assets (next season seed) in real time.
-## GDD: design/gdd/lifestyle-spending.md §3-3
+## Displays remaining cash_assets in real time.
+## Call set_season_end_context(true) before add_child() on season-end days.
+## GDD: design/gdd/lifestyle-spending.md §3-1, §3-3
 extends Control
 
 # ── Signals ──
 
-## Emitted when the player presses "다음 시즌 시작 →" to close this screen.
+## Emitted when the player presses "다음 날 →" / "다음 시즌 시작 →" to close this screen.
 signal lifestyle_screen_closed
 
 # ── Constants ──
@@ -20,6 +21,12 @@ const TAB_ALTERNATIVE:   int = 4
 
 ## Free-market warning threshold (GDD §5 EC-1).
 const FREE_MARKET_THRESHOLD: int = 1_000_000
+
+# ── State ──
+
+## Set by GameMain before add_child(). True on season-end days.
+## Controls button text: "다음 날 →" vs "다음 시즌 시작 →" (GDD §3-1).
+var _is_season_end: bool = false
 
 # ── Node References ──
 
@@ -81,6 +88,14 @@ const STARTUP_MIN_SEASONS: int = 3
 const STARTUP_MAX_SEASONS: int = 6
 
 
+# ── Setup ──
+
+## Call this before add_child() to set button text context.
+## is_season_end=true → "다음 시즌 시작 →", false → "다음 날 →" (GDD §3-1, AC-14).
+func set_season_end_context(is_season_end: bool) -> void:
+	_is_season_end = is_season_end
+
+
 # ── Lifecycle ──
 
 func _ready() -> void:
@@ -132,7 +147,7 @@ func _build_header() -> Control:
 	hbox.add_child(residual_hbox)
 
 	var residual_title := Label.new()
-	residual_title.text = "소비 후 잔여 (다음 시즌 시드): "
+	residual_title.text = "소비 후 잔여 (다음 시즌 시드): " if _is_season_end else "소비 후 잔여: "
 	residual_hbox.add_child(residual_title)
 
 	_residual_label = Label.new()
@@ -151,7 +166,7 @@ func _build_header() -> Control:
 func _build_footer() -> Control:
 	var panel := PanelContainer.new()
 	_start_next_season_btn = Button.new()
-	_start_next_season_btn.text = "다음 시즌 시작 →"
+	_start_next_season_btn.text = "다음 시즌 시작 →" if _is_season_end else "다음 날 →"
 	_start_next_season_btn.pressed.connect(_on_next_season_pressed)
 	panel.add_child(_start_next_season_btn)
 	return panel

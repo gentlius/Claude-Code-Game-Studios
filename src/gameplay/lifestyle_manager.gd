@@ -1,7 +1,8 @@
 ## Autoload — Manages lifestyle spending: residence, luxury goods, alternative investments.
 ## Tracks tangible assets (real estate, luxury) for total_assets calculation (F3).
-## Beta Sprint 8 (B-12): Active spending screen, off-season auto-settlement, residence visuals.
-## See: design/gdd/lifestyle-spending.md
+## Auto-settlement runs on every market close via process_market_close(day, week).
+## Season-end items (rental income, recurring costs) self-detect the last season day.
+## See: design/gdd/lifestyle-spending.md §3-1
 extends Node
 
 # ── Signals ──
@@ -14,10 +15,6 @@ signal residence_changed(tier: int, residence_name: String)
 
 ## Emitted when a title is earned (social contribution, luxury purchase milestone).
 signal title_earned(title_id: String)
-
-## Emitted after process_offseason() completes (rental income, exits, recurring costs done).
-## GameMain connects this to show LifestyleScreen between seasons.
-signal offseason_settled
 
 # ── Constants ──
 
@@ -92,7 +89,10 @@ var _tangible_value_cache: int = 0
 # ── Lifecycle ──
 
 func _ready() -> void:
-	SeasonManager.on_season_ended.connect(_on_season_ended)
+	# Auto-settlement: runs on every market close, self-detects season-end day.
+	# SeasonManager dependency removed — GameClock is the sole timer source.
+	# GDD: lifestyle-spending.md §3-1
+	GameClock.on_market_close.connect(_on_market_close)
 
 
 # ── Public API: Queries ──
@@ -254,17 +254,23 @@ func invest_startup(amount: int, seasons_to_exit: int, rng_seed: int) -> bool:
 	return true
 
 
-# ── Off-Season Auto-Settlement ──
+# ── Daily Auto-Settlement ──
 
-## Called by SeasonManager at season end (off-season auto-settlement).
-## GDD §3-1: 부동산 임대 수익, 스타트업 엑싯, Recurring 비용 처리.
-## Emits offseason_settled when complete so GameMain can show LifestyleScreen.
-func process_offseason() -> void:
-	_process_rental_income()
-	_process_startup_exits()
-	_process_recurring_costs()
-	_tick_seasons_held()
-	offseason_settled.emit()
+## Called every market close. Processes items on their natural schedule:
+##   - Startup exits: checked every day (when seasons_remaining reaches 0).
+##   - Rental income / Recurring costs / seasons_held++: season-final day only.
+## GDD: lifestyle-spending.md §3-1
+func process_market_close(current_day: int, current_week: int) -> void:
+	var is_season_final: bool = (
+		current_day % GameClock.DAYS_PER_WEEK == GameClock.DAYS_PER_WEEK - 1 and
+		current_week >= GameClock.WEEKS_PER_SEASON - 1
+	)
+	# Startup exits: decrement counter on season-final day, resolve when it hits 0.
+	_process_startup_exits(is_season_final)
+	if is_season_final:
+		_process_rental_income()
+		_process_recurring_costs()
+		_tick_seasons_held()
 
 
 func _process_rental_income() -> void:
@@ -285,10 +291,13 @@ func _get_rental_rate(property_type: String) -> float:
 		_:           return 0.0
 
 
-func _process_startup_exits() -> void:
+## Processes startup investments. tick_season=true decrements the season counter (season-final day only).
+func _process_startup_exits(tick_season: bool) -> void:
 	var remaining: Array[Dictionary] = []
 	for startup: Dictionary in _startups:
-		var seasons_left: int = startup.get("seasons_remaining", 1) - 1
+		var seasons_left: int = startup.get("seasons_remaining", 1)
+		if tick_season:
+			seasons_left -= 1
 		if seasons_left <= 0:
 			_resolve_startup_exit(startup)
 		else:
@@ -356,8 +365,8 @@ func _grant_title(title_id: String) -> void:
 
 # ── Signal Handlers ──
 
-func _on_season_ended(_rank: int, _is_free_market: bool, _return_pct: float) -> void:
-	process_offseason()
+func _on_market_close() -> void:
+	process_market_close(GameClock.get_current_day(), GameClock.get_current_week())
 
 
 # ── Serialization ──

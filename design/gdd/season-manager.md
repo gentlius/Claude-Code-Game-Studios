@@ -62,7 +62,7 @@
   ⑦ cash_assets ≥ 100,000,000,000원 → 거장 엔딩 자동 발동
   ⑧ 그 외 → 시즌 결과 화면 표시
   ↓
-[비시즌 정산] — LifestyleManager.process_offseason() 자동 실행
+[시즌 자동 정산] — LifestyleManager.process_market_close(day, week)가 시즌 마지막 날 장 마감 시 자동 실행
   ⑨ 부동산 임대 수익 → cash_assets 입금
   ⑩ 스타트업 엑싯 이벤트 (만기 도달 시) → cash_assets 입금 또는 0원
   ⑪ Recurring 비용 차감 (골프 클럽 연회비 등)
@@ -344,7 +344,7 @@ daily_xp_granted = base_daily_xp × (FREE_MARKET_XP_RATE if is_free_market else 
 | `GameClock` | 구독 | `on_season_end` 시그널 수신 → 강제 청산 + 정산 실행 |
 | `AiCompetitor` | 쓰기 | 시즌 시작 시 티어별 AI 참가자 생성 및 초기화; 시즌 종료 시 AI 수익률 수집 |
 | `TradingScreen (UI)` | 신호 수신 | `on_season_started`, `on_season_ended`, `on_tier_assigned`, `on_leaderboard_updated` 시그널 구독 |
-| `LifestyleManager` | 쓰기 | 시즌 종료 정산 완료 후 `LifestyleManager.process_offseason()` 호출. 비시즌 정산(임대 수익, 스타트업 엑싯, Recurring 비용) 처리 위임 |
+| `LifestyleManager` | 참조 없음 | `LifestyleManager`가 `GameClock.on_market_close`에 직접 연결해 시즌 마지막 날 여부를 자체 판단. SeasonManager → LifestyleManager 직접 호출 불필요 |
 
 **이 문서가 역참조되어야 하는 GDD:**
 - `ai-competitor.md` — AI 참가자 수익률 분포 설계 시 이 문서의 티어 구조 참조

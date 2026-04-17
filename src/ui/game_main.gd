@@ -110,13 +110,12 @@ func _load_main_screen() -> void:
 	_main_screen = screen_scene.instantiate()
 	add_child(_main_screen)
 	_main_screen.exit_to_start_requested.connect(_on_exit_to_start_requested)
-	# Show lifestyle screen only AFTER the player confirms the season-end settlement dialog.
-	# offseason_settled fires immediately on SeasonManager.on_season_ended (before confirmation),
-	# which would stack the lifestyle screen behind/over the settlement dialog.
-	# Instead, watch GameClock leave SEASON_END — that happens on GameClock.confirm_transition()
-	# which TradingScreen calls when settlement_confirmed fires.
-	# process_offseason() has already run by this point (fired on on_season_ended).
-	GameClock.on_market_state_changed.connect(_on_clock_state_for_lifestyle)
+	# Show lifestyle screen after every settlement confirmation (매일 장 마감 후).
+	# TradingScreen emits spending_screen_requested once all reports for the day are confirmed.
+	# GameClock.confirm_transition() is called from _on_lifestyle_screen_closed() instead of
+	# directly in TradingScreen, so the clock only advances after the player closes the screen.
+	# GDD: lifestyle-spending.md §3-1, trading-screen.md §규칙 6
+	_main_screen.spending_screen_requested.connect(_on_spending_screen_requested)
 
 	# 새 게임: MainScreen 준비 완료 후 초기 상태 1회 저장 (GDD §3-5 Step 6)
 	if _pending_initial_save and SaveSystem.active_slot_id >= 0:
@@ -126,25 +125,24 @@ func _load_main_screen() -> void:
 
 # ── Lifestyle Screen ──
 
-## Fired on every GameClock state transition while MainScreen is alive.
-## Shows LifestyleScreen when the clock leaves SEASON_END (= player confirmed season dialog).
-func _on_clock_state_for_lifestyle(
-	_new_state: GameClock.MarketState, prev_state: GameClock.MarketState
-) -> void:
-	if prev_state == GameClock.MarketState.SEASON_END:
-		_show_lifestyle_screen()
+## Called after all settlement reports for the day are confirmed (매일 장 마감 후).
+## is_season_end: true when clock is SEASON_END — LifestyleScreen uses this for button text.
+## GDD lifestyle-spending.md §3-1, trading-screen.md §규칙 6
+func _on_spending_screen_requested(is_season_end: bool) -> void:
+	_show_lifestyle_screen(is_season_end)
 
 
-## Shows LifestyleScreen after the season settlement dialog is confirmed.
-## GDD lifestyle-spending.md §3-1. process_offseason() has already run by this point.
-func _show_lifestyle_screen() -> void:
+## Shows LifestyleScreen after settlement reports. Called every day after market close.
+## GDD lifestyle-spending.md §3-1. process_market_close() has already run before reports confirmed.
+func _show_lifestyle_screen(is_season_end: bool) -> void:
 	# Guard: don't stack screens if already showing (e.g. load-slot edge case).
 	if _lifestyle_screen != null:
 		return
 
 	_lifestyle_screen = load("res://src/ui/lifestyle_screen.gd").new()
+	_lifestyle_screen.set_season_end_context(is_season_end)
 	add_child(_lifestyle_screen)
-	# LifestyleScreen emits lifestyle_screen_closed when the player clicks "다음 시즌 시작".
+	# LifestyleScreen emits lifestyle_screen_closed when the player clicks "다음 날/시즌".
 	_lifestyle_screen.lifestyle_screen_closed.connect(_on_lifestyle_screen_closed)
 
 	# Save immediately on screen entry (GDD §5 EC: 라이프스타일 소비 화면 중 앱 종료 → 화면 진입 시 즉시 세이브)
@@ -156,12 +154,16 @@ func _on_lifestyle_screen_closed() -> void:
 	if _lifestyle_screen != null:
 		_lifestyle_screen.queue_free()
 		_lifestyle_screen = null
+	# Advance the clock now that the spending window is closed (GDD: trading-screen.md §규칙 6).
+	# This was previously called directly in TradingScreen on settlement_confirmed.
+	GameClock.confirm_transition()
 
 
 func _on_exit_to_start_requested() -> void:
 	# F4 나가기: MainScreen 제거 후 StartScreen 표시. 저장 없음(자동 저장 기반).
-	if GameClock.on_market_state_changed.is_connected(_on_clock_state_for_lifestyle):
-		GameClock.on_market_state_changed.disconnect(_on_clock_state_for_lifestyle)
+	if _lifestyle_screen != null:
+		_lifestyle_screen.queue_free()
+		_lifestyle_screen = null
 	_main_screen.queue_free()
 	_main_screen = null
 	_show_start_screen()

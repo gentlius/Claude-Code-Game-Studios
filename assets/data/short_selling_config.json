@@ -1,0 +1,7 @@
+{
+    "version": 1,
+    "margin_rate": 1.40,
+    "margin_call_threshold": 0.20,
+    "forced_liquidation_warning_ratio": 0.35,
+    "max_short_positions": 3
+}

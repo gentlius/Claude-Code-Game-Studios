@@ -80,6 +80,7 @@ func _on_new_game_confirmed(slot_id: int) -> void:
 	SkillTree.reset()
 	SeasonManager.reset()
 	PortfolioManager.reset()
+	ShortSellingSystem.reset()
 	CurrencySystem.reset()
 
 	# 모든 autoload 리셋 완료 — 가격 데이터를 DB에서 로드해 UI 생성 전에 유효 상태로 만든다.

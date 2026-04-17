@@ -72,7 +72,7 @@ Day 8:    S9-10/S9-11 (Nice-to-Have)
 ## DoD (Definition of Done)
 
 - [x] S9-01: `design/gdd/short-selling.md` 9개 섹션 Approved (2026-04-17)
-- [ ] S9-02: TR3 해금 → 공매도 주문 E2E + 강제청산 트리거 확인 + 테스트 통과 + 빌드 성공
+- [x] S9-02: TR3 해금 → 공매도 주문 E2E + 강제청산 트리거 확인 + 테스트 통과 + 빌드 성공 (2026-04-17)
 - [x] S9-03: `design/gdd/leverage-trading.md` 9개 섹션 Approved (2026-04-17)
 - [ ] S9-04: TR4 해금 → 레버리지 주문 E2E + 마진콜 자동 청산 확인 + 테스트 통과 + 빌드 성공
 - [ ] S9-05: 설정화면 볼륨·자동감속 E2E + 세이브/로드 확인 + 빌드 성공

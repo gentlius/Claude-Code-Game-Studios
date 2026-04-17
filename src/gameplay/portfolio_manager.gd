@@ -198,7 +198,10 @@ func update_valuation(sim_cash: int, reserved_cash: int) -> void:
 
 	_cached_sim_cash = sim_cash
 	_cached_reserved_cash = reserved_cash
-	_cached_total_assets = sim_cash + reserved_cash + total_stock_value
+	# TR3: include short position net value (margin_deposited + unrealized_pnl).
+	# margin_deposited was already deducted from sim_cash, so re-adding it here
+	# with the live pnl gives an undistorted total assets figure. GDD §규칙 10.
+	_cached_total_assets = sim_cash + reserved_cash + total_stock_value + ShortSellingSystem.get_short_net_value()
 
 	if _initial_seed > 0:
 		_cached_return_rate = float(_cached_total_assets - _initial_seed) / float(_initial_seed) * 100.0

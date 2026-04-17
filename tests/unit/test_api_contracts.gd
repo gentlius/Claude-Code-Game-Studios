@@ -237,5 +237,34 @@ func test_all_systems_have_reset():
 	assert_true(NewsEventSystem.has_method("reset"),    "NewsEventSystem.reset 존재")
 	assert_true(AiCompetitor.has_method("reset"),       "AiCompetitor.reset 존재")
 	assert_true(SeasonManager.has_method("reset"),      "SeasonManager.reset 존재")
-	assert_true(StopTakeSystem.has_method("reset"),     "StopTakeSystem.reset 존재")
+	assert_true(StopTakeSystem.has_method("reset"),      "StopTakeSystem.reset 존재")
 	assert_true(LifestyleManager.has_method("reset"),   "LifestyleManager.reset 존재")
+	assert_true(ShortSellingSystem.has_method("reset"), "ShortSellingSystem.reset 존재")
+
+
+# ── ShortSellingSystem (TR3) ─────────────────────────────────────────
+## Implements: design/gdd/short-selling.md §9 Implementation Checklist
+
+func test_short_selling_system_api():
+	assert_true(ShortSellingSystem.has_method("has_short"),                    "has_short 존재")
+	assert_true(ShortSellingSystem.has_method("get_short_count"),              "get_short_count 존재")
+	assert_true(ShortSellingSystem.has_method("get_max_short_positions"),      "get_max_short_positions 존재")
+	assert_true(ShortSellingSystem.has_method("get_margin_rate"),              "get_margin_rate 존재")
+	assert_true(ShortSellingSystem.has_method("get_all_short_positions"),      "get_all_short_positions 존재")
+	assert_true(ShortSellingSystem.has_method("get_short_net_value"),          "get_short_net_value 존재")
+	assert_true(ShortSellingSystem.has_method("open_position"),                "open_position 존재")
+	assert_true(ShortSellingSystem.has_method("close_position"),               "close_position 존재")
+	assert_true(ShortSellingSystem.has_method("update_and_check_margin"),      "update_and_check_margin 존재")
+	assert_true(ShortSellingSystem.has_method("liquidate_all_for_season_end"), "liquidate_all_for_season_end 존재")
+	assert_true(ShortSellingSystem.has_method("get_save_data"),                "get_save_data 존재")
+	assert_true(ShortSellingSystem.has_method("load_save_data"),               "load_save_data 존재")
+	assert_true(ShortSellingSystem.has_method("reset"),                        "reset 존재")
+
+
+func test_short_selling_signals():
+	var signal_list: Array = ShortSellingSystem.get_signal_list()
+	var signal_names: Array[String] = []
+	for s: Dictionary in signal_list:
+		signal_names.append(s["name"])
+	assert_true("on_forced_liquidation" in signal_names,    "on_forced_liquidation 시그널 존재")
+	assert_true("on_short_position_closed" in signal_names, "on_short_position_closed 시그널 존재")

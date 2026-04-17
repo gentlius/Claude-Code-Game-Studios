@@ -352,6 +352,11 @@ func _on_season_end() -> void:
 	# Step ②: Cancel all pending orders and refund reserved cash.
 	OrderEngine.cancel_all_pending_orders()
 
+	# Step ①-A: TR3 숏 포지션 전량 시즌 종료 청산 (GDD short-selling.md §규칙 9).
+	# Must run AFTER order cancellation (reserved cash refunded) and BEFORE
+	# PortfolioManager.force_liquidate() so currency math is clean.
+	ShortSellingSystem.liquidate_all_for_season_end()
+
 	# Step ②: Forced liquidation — sell all holdings at current price (GDD §3-1).
 	PortfolioManager.force_liquidate()
 

@@ -1,6 +1,7 @@
 ## Autoload — Accepts, validates, and executes buy/sell orders.
-## Core layer. Depends on: PriceEngine, CurrencySystem, PortfolioManager, GameClock, StockDatabase, MarketConfig.
-## See: design/gdd/order-engine.md, design/gdd/trading-fees.md
+## Core layer. Depends on: PriceEngine, CurrencySystem, PortfolioManager, GameClock,
+##   StockDatabase, MarketConfig, ShortSellingSystem (TR3).
+## See: design/gdd/order-engine.md, design/gdd/trading-fees.md, design/gdd/short-selling.md
 extends Node
 
 # ── Signals ──
@@ -56,8 +57,16 @@ func reset() -> void:
 # ── Public API ──
 
 ## Submit a market order. Returns the order dict (check status for result).
+## Supports side: "BUY", "SELL", "SELL_SHORT" (TR3), "BUY_TO_COVER" (TR3).
 func submit_market_order(side: String, stock_id: String, quantity: int) -> Dictionary:
 	var order: Dictionary = _create_order("MARKET", side, stock_id, quantity, 0)
+
+	# TR3 short-selling orders use a dedicated execution path (MARKET_OPEN only).
+	if side == "SELL_SHORT":
+		return _handle_sell_short_order(order)
+	if side == "BUY_TO_COVER":
+		return _handle_buy_to_cover_order(order)
+
 	var reject: String = _validate_order(order)
 	if reject != "":
 		return _reject_order(order, reject)
@@ -110,6 +119,108 @@ func _reject_order(order: Dictionary, reason: String) -> Dictionary:
 	_history_append(order)
 	on_order_rejected.emit(order)
 	return order
+
+
+## TR3: SELL_SHORT order handler. Validates and opens a short position.
+## Short orders are MARKET_OPEN only — no PRE_MARKET queuing. GDD §규칙 4.
+func _handle_sell_short_order(order: Dictionary) -> Dictionary:
+	var reject: String = _validate_sell_short(order)
+	if reject != "":
+		return _reject_order(order, reject)
+
+	var filled_price: int = ShortSellingSystem.open_position(order)
+	if filled_price <= 0:
+		return _reject_order(order, "공매도 주문 처리 실패")
+
+	order["status"] = "FILLED"
+	order["filled_price"] = filled_price
+	order["filled_tick"] = GameClock.get_current_tick()
+	_history_append(order)
+	on_order_filled.emit(order)
+	return order
+
+
+## TR3: BUY_TO_COVER order handler. Closes an existing short position.
+## Short orders are MARKET_OPEN only. GDD §규칙 7.
+func _handle_buy_to_cover_order(order: Dictionary) -> Dictionary:
+	var stock_id: String = order["stock_id"]
+
+	# Market state: MARKET_OPEN only (GDD §규칙 4-S2)
+	if GameClock.get_market_state() != GameClock.MarketState.MARKET_OPEN:
+		return _reject_order(order, "공매도는 장 중에만 가능합니다")
+
+	# Stock existence check
+	if StockDatabase.get_stock(stock_id) == null:
+		return _reject_order(order, "존재하지 않는 종목입니다")
+
+	# CB Stage 2 / VI halt
+	if PriceEngine.get_cb_stage() >= 2:
+		return _reject_order(order, "CB 2단계 발동 중 — 조기 장 마감")
+	if PriceEngine.is_vi_halted(stock_id):
+		return _reject_order(order, "변동성완화장치(VI) 발동 중입니다")
+
+	if order["quantity"] <= 0:
+		return _reject_order(order, "수량은 1 이상이어야 합니다")
+
+	# Short position must exist
+	if not ShortSellingSystem.has_short(stock_id):
+		return _reject_order(order, "청산할 숏 포지션이 없습니다")
+
+	ShortSellingSystem.close_position(order)
+	order["status"] = "FILLED"
+	order["filled_price"] = PriceEngine.get_current_price(stock_id)
+	order["filled_tick"] = GameClock.get_current_tick()
+	_history_append(order)
+	on_order_filled.emit(order)
+	return order
+
+
+## TR3: Validation for SELL_SHORT orders. GDD §규칙 4-S1 through 4-S4.
+func _validate_sell_short(order: Dictionary) -> String:
+	var stock_id: String = order["stock_id"]
+
+	# 4-S2: MARKET_OPEN only
+	if GameClock.get_market_state() != GameClock.MarketState.MARKET_OPEN:
+		return "공매도는 장 중에만 가능합니다"
+
+	# Stock existence
+	if StockDatabase.get_stock(stock_id) == null:
+		return "존재하지 않는 종목입니다"
+
+	# CB Stage 2 / VI halt
+	if PriceEngine.get_cb_stage() >= 2:
+		return "CB 2단계 발동 중 — 조기 장 마감"
+	if PriceEngine.is_vi_halted(stock_id):
+		return "변동성완화장치(VI) 발동 중입니다"
+
+	if order["quantity"] <= 0:
+		return "수량은 1 이상이어야 합니다"
+
+	# 4-S1: TR3 skill unlock
+	if not SkillTree.has_short_selling():
+		return "공매도가 해금되지 않았습니다"
+
+	# 4-S3a: No duplicate short position
+	if ShortSellingSystem.has_short(stock_id):
+		return "이미 숏 포지션이 존재합니다"
+
+	# 4-S3b: No long position in same stock (long + short simultaneous forbidden)
+	if PortfolioManager.get_holding(stock_id) != null:
+		return "해당 종목을 보유 중입니다. 먼저 매도하세요"
+
+	# Max short positions
+	if ShortSellingSystem.get_short_count() >= ShortSellingSystem.get_max_short_positions():
+		return "숏 포지션 한도 초과 (최대 %d개)" % ShortSellingSystem.get_max_short_positions()
+
+	# 4-S4: Sufficient margin
+	var current_price: int = PriceEngine.get_current_price(stock_id)
+	var required_margin: int = int(
+		ceil(float(current_price) * float(order["quantity"]) * ShortSellingSystem.get_margin_rate())
+	)
+	if CurrencySystem.get_sim_cash() < required_margin:
+		return "증거금 부족 (필요: %d원)" % required_margin
+
+	return ""
 
 
 ## Submit a limit order. Returns the order dict.
@@ -560,6 +671,9 @@ func _validate_order_quantity_and_skills(order: Dictionary) -> String:
 func _validate_order_buy_constraints(order: Dictionary) -> String:
 	if order["side"] != "BUY":
 		return ""
+	# TR3: BUY on a stock with an open short position is forbidden (GDD §규칙 3)
+	if ShortSellingSystem.has_short(order["stock_id"]):
+		return "해당 종목의 숏 포지션을 먼저 청산하세요"
 	# 5. Portfolio slot — new stock requires an open slot
 	var holding: Variant = PortfolioManager.get_holding(order["stock_id"])
 	if holding == null:

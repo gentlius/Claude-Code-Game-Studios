@@ -1,6 +1,6 @@
 # 공매도 (Short Selling)
 
-> **Status**: In Review
+> **Status**: In Review (구현 완료 2026-04-17 — 빌드 검증 대기)
 > **Author**: game-designer
 > **Last Updated**: 2026-04-17
 > **Implements Pillar**: 판단이 곧 실력 (Judgment is King), 체감있는 성장 (Feel the Growth)
@@ -572,21 +572,23 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 호출 경로
 
-- [ ] `ShortSellingSystem.open_position(order: Dictionary) -> bool` 존재
-- [ ] `ShortSellingSystem.close_position(order: Dictionary) -> bool` 존재
-- [ ] `ShortSellingSystem.update_and_check_margin(tick: int)` 존재
-- [ ] `ShortSellingSystem.liquidate_all_for_season_end(price_provider) -> void` 존재
-- [ ] `ShortSellingSystem.get_short_net_value() -> int` 존재
-- [ ] `ShortSellingSystem.get_all_short_positions() -> Array[Dictionary]` 존재
-- [ ] `ShortSellingSystem.has_short(stock_id: String) -> bool` 존재
-- [ ] `ShortSellingSystem.reset() -> void` 존재
-- [ ] `OrderEngine.submit_order()` 의 side 파라미터에 `SELL_SHORT`, `BUY_TO_COVER` 추가
-- [ ] `SkillTree.has_short_selling() -> bool` 존재
-- [ ] `PortfolioManager.update_valuation()` 내부에서 `ShortSellingSystem.get_short_net_value()` 호출
-- [ ] `SeasonManager._on_season_end()` 시퀀스에 Step ①-A 추가
-- [ ] `on_forced_liquidation(stock_id: String, price: int, pnl: int)` 시그널 존재
-- [ ] `on_short_position_closed(stock_id: String, pnl: int)` 시그널 존재
-- [ ] `assets/data/short_selling_config.json` 에 margin_rate, margin_call_threshold, max_short_positions 정의
+- [x] `ShortSellingSystem.open_position(order: Dictionary) -> int` 존재 (filled_price 반환)
+- [x] `ShortSellingSystem.close_position(order: Dictionary) -> int` 존재 (realized_pnl 반환)
+- [x] `ShortSellingSystem.update_and_check_margin(tick: int)` 존재
+- [x] `ShortSellingSystem.liquidate_all_for_season_end() -> void` 존재
+- [x] `ShortSellingSystem.get_short_net_value() -> int` 존재
+- [x] `ShortSellingSystem.get_all_short_positions() -> Array[Dictionary]` 존재
+- [x] `ShortSellingSystem.has_short(stock_id: String) -> bool` 존재
+- [x] `ShortSellingSystem.reset() -> void` 존재
+- [x] `OrderEngine.submit_market_order()` 의 side에 `SELL_SHORT`, `BUY_TO_COVER` 처리 추가
+- [x] `SkillTree.has_short_selling() -> bool` 존재
+- [x] `PortfolioManager.update_valuation()` 내부에서 `ShortSellingSystem.get_short_net_value()` 호출
+- [x] `SeasonManager._on_season_end()` 시퀀스에 Step ①-A 추가
+- [x] `on_forced_liquidation(stock_id: String, price: int, pnl: int)` 시그널 존재
+- [x] `on_short_position_closed(stock_id: String, pnl: int)` 시그널 존재
+- [x] `assets/data/short_selling_config.json` 에 margin_rate, margin_call_threshold, max_short_positions 정의
+- [x] `SaveSystem`: `get_save_data()` + `load_save_data()` 에 `short_positions` 키 추가
+- [x] `ShortSellingSystem` autoload `project.godot` 등록
 
 ### AC → 테스트 매핑
 
@@ -612,4 +614,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 빌드 검증
 
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [ ] 바이너리 실행 확인: QA Lead 서명 _______ (2026-04-17 구현 완료 — 빌드 검증 대기)

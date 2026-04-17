@@ -245,12 +245,14 @@ func _process(delta: float) -> void:
 
 func _process_tick() -> void:
 	_current_tick += 1
-	# GDD-mandated tick processing order: News → Price → Order.
+	# GDD-mandated tick processing order: News → Price → Short-margin → Order.
 	# Explicit calls guarantee deterministic ordering regardless of signal
 	# connection order. The general on_tick signal fires afterwards for any
 	# other subscribers (UI, analytics, etc.) that have no ordering requirement.
 	NewsEventSystem.process_tick(_current_tick, _current_day, _current_week)
 	PriceEngine.process_tick(_current_tick, _current_day, _current_week)
+	# TR3: margin monitoring after price update, before order matching (GDD short-selling.md §규칙 6)
+	ShortSellingSystem.update_and_check_margin(_current_tick)
 	OrderEngine.process_tick(_current_tick, _current_day, _current_week)
 	# Emit the tick number that was just completed (1-based from the subscriber's
 	# perspective). The pre-increment value is passed so that subscribers calling

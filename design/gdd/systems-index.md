@@ -53,7 +53,10 @@
 | 27 | A3 재무제표 (Financial Statements) | UI | Beta | In Review | ✅ Done | [financial-statements.md](financial-statements.md) | 스킬 트리, StockData, 가격 엔진 |
 | 28 | S3 루머 채널 (Rumor Channel) | Gameplay | Beta | In Review | ✅ Done | [rumor-channel.md](rumor-channel.md) | 스킬 트리, 뉴스/이벤트, 뉴스 피드 UI |
 | 29 | 설정 화면 (Settings Screen) | UI | Beta | In Review | — | [settings-screen.md](settings-screen.md) | AudioManager, GameClock |
-| 30 | 튜토리얼 (Tutorial) | Meta | Full | Not Started | — | — | 전체 게임플레이 시스템 |
+| 30 | 거래 수수료·세금 (Trading Fees) | Economy | Beta | In Review | — | [trading-fees.md](trading-fees.md) | 주문 엔진, 포트폴리오 관리, 재화 시스템, MarketConfig |
+| 31 | TR3 공매도 (Short Selling) | Gameplay | Full | In Review | — | [short-selling.md](short-selling.md) | 주문 엔진, 포트폴리오 관리, 재화 시스템, 가격 엔진, 스킬 트리, 시즌 관리, 세이브/로드 |
+| 32 | TR4 레버리지 거래 (Leverage Trading) | Gameplay | Beta | In Review | — | [leverage-trading.md](leverage-trading.md) | 주문 엔진, 포트폴리오 관리, 스킬 트리, 라이프스타일 |
+| 33 | 튜토리얼 (Tutorial) | Meta | Full | Not Started | — | — | 전체 게임플레이 시스템 |
 
 > **라이프스타일 소비 (Sprint 8 B-12 완료)**: `LifestyleManager` 구현 완료. 매일 장 마감 시 `process_market_close(day, week)` 호출. 시즌 마지막 날에만 임대 수익·스타트업 엑싯·Recurring 비용 처리. 소비 화면은 매일 장 마감 후 표시. 실물 자산(`get_tangible_value()`)은 Sprint 9 B-02 이월.
 

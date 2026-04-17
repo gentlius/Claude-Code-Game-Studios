@@ -560,7 +560,7 @@ fee = floor(trade_value × fee_rate)
 | 수수료 도입 시점 및 요율 | systems-designer | 확장 시점 | MVP=0%. 향후 결정 |
 | 지정가 유효기간 확장 (GTC 등) | game-designer | V-Slice | MVP=DAILY만 |
 | 손절/익절 자동 주문 구현 상세 | game-designer | TR2 구현 시 | **Resolved (2026-04-15)** — `design/gdd/stop-loss-take-profit.md` 참조. 틱 처리 4-3 단계로 구현. |
-| 공매도 로직 (마이너스 보유, 숏 스퀴즈 등) | systems-designer | TR3 구현 시 | 향후 |
+| 공매도 로직 (마이너스 보유, 숏 스퀴즈 등) | systems-designer | TR3 구현 시 | **Resolved (2026-04-17)** — `design/gdd/short-selling.md` 참조. SELL_SHORT/BUY_TO_COVER 주문 유형 추가. 틱 처리 순서: 공매도 margin_ratio 감시는 주문 체결(3단계) 직후(4단계)에 ShortSellingSystem이 수행. |
 | AI 경쟁자의 주문 처리 — 같은 엔진 사용 여부 | game-designer | AI 경쟁자 GDD 시 | 미정 |
 | 슬리피지 도입 — 대량 주문 시 평균 체결가 악화 모델. 스킬 해금(TR3+)과 연동 검토. 가격 관찰자 모델 전환 필요 | game-designer + systems-designer | Post-MVP | MVP=없음. 외부 감사 권고 (2026-04-03) |
 | 볼륨 기반 지정가 체결 우선순위 — 거래량 부족 시 미체결. 미체결 시 "가격 도달 — 대기 중" 피드백 추가 | game-designer + ux-designer | Post-MVP | MVP=가격 조건만 체크. 외부 감사 권고 (2026-04-03) |

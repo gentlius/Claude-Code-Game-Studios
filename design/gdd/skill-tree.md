@@ -69,7 +69,7 @@ T0 기본 제공 + T1~T4 최대 4단계 순차 해금 구조 (브랜치마다 T3
 | TR1 | T1 | 지정가 주문 | 목표가 설정, 조건 충족 시 자동 체결 | — |
 | TR2 | T2 | 손절/익절 | 보유 종목에 자동 매도 조건 설정 | TR1 |
 | TR3 | T3 | 공매도 | 주가 하락 시 수익. 보유 없이 매도 후 매수로 청산 | TR2 + **A2** (보조지표) |
-| TR4 | T4 | 레버리지 | 2x 배율 거래. 수익/손실 2배 | TR3 |
+| TR4 | T4 | 레버리지 | 2×/3×/5× 배율 레버리지 거래. 이자 발생, 마진콜 위험 | TR3 |
 
 ##### 브랜치 4: 포트폴리오 (Portfolio)
 
@@ -170,13 +170,17 @@ rumor_lead_time = RUMOR_LEAD_TICKS    # 뉴스 발생 60틱 (게임시간 15분,
 ### F4. 레버리지 배율
 
 ```
-leverage_multiplier = LEVERAGE_RATIO  # 2.0x
-leveraged_pnl = base_pnl × LEVERAGE_RATIO
-margin_call_threshold = -(initial_investment / LEVERAGE_RATIO)
+# 3단계 배율 — leverage_config.json에 정의
+2× : daily_interest = 0.04%,  margin_call = 30%,  forced_liquidation = 10%
+3× : daily_interest = 0.06%,  margin_call = 20%,  forced_liquidation = 7%
+5× : daily_interest = 0.10%,  margin_call = 15%,  forced_liquidation = 5%
+
+leveraged_pnl = base_pnl × multiplier
+equity_ratio  = (position_market_value - borrowed - accrued_interest) / position_market_value
 ```
 
-예시: 100만원 2x 레버리지 매수 → 실효 노출 200만원.
-+5% 상승 시 수익 = 10만원 (10% 수익률). -50% 하락 시 마진콜 → 강제 청산.
+예시: 100만원 2× 레버리지 매수 → equity=100만, borrowed=100만, 실효 노출 200만원.
++5% 상승 시 수익 = 10만원 (10% 수익률). equity_ratio < 30% 시 마진콜 경고.
 
 스킬 트리 자체에 복잡한 연산은 없다. 핵심 공식은 각 하위 시스템
 (차트 렌더러, 뉴스 시스템, 주문 엔진, 포트폴리오)에서 스킬 상태를
@@ -228,7 +232,7 @@ margin_call_threshold = -(initial_investment / LEVERAGE_RATIO)
 | NEWS_DELAY_T1 | 8틱 (게임 2분, 실시간 ~1.5초) | 4~15 | S1 해금 가치 | T0과 차이 적으면 해금 동기 부족 |
 | RUMOR_BASE_ACCURACY | 70% | 50~90% | 루머 채널 가치 | 90%+면 확실한 선행 정보 = 밸런스 파괴 |
 | RUMOR_LEAD_TICKS | 60틱 (게임 15분, 실시간 ~11.5초) | 30~120 | 루머 선행 시간 | 120+면 과도한 이점 |
-| LEVERAGE_RATIO | 2.0 | 1.5~3.0 | 레버리지 위험/보상 | 3.0+은 즉사급 손실 가능 |
+| LEVERAGE_MULTIPLIERS | 2×/3×/5× | 각 배율 ±50% | 레버리지 위험/보상 | 5×는 6% 하락 시 마진콜, 고위험 |
 | MAX_HOLDINGS_T0 | 3 | 2~5 | 초기 분산 제한 | 2이면 집중 투자 강제 |
 | MAX_HOLDINGS_T1 | 5 | 4~7 | 중간 분산 | — |
 | MAX_HOLDINGS_T2 | 10 | 8~15 | 완전 분산 | 종목 수 초과 시 UI 복잡도 증가 |

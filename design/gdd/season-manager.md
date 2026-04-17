@@ -49,6 +49,8 @@
 
 [시즌 종료 — Day 20 금요일]
   ① WEEK_END: 4주차 주간 수익률상 산정 및 지급
+  ①-A 공매도 자동청산 (TR3 구현 시): `ShortSellingSystem.liquidate_all_positions()` — 숏 포지션 전량 현재가로 BUY_TO_COVER 처리 후 sim_cash 정산
+  ①-b 레버리지 자동청산 (TR4 구현 시): `LeverageManager.liquidate_all_positions()` — 레버리지 포지션 전량 현재가 시장가 매도 후 차입금 상환
   ② SEASON_END: 보유 주식 전량 시가 청산 (종가 기준)
        → 청산 완료 후 sim_cash += 청산대금. account_total_value = sim_cash (보유 주식 없음)
   ③ 시즌 순위 확정 (return_pct 기준)

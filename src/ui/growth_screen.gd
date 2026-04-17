@@ -195,13 +195,20 @@ func _refresh_bg() -> void:
 # ── UI Construction ──
 
 func _build_ui() -> void:
-	# Background residence image layer — drawn first so UI panels appear on top.
-	# Alpha 0.25: atmospheric presence without obscuring text.
+	# Solid dark base — project clear color is near-white (#F5F5F8) so GrowthScreen
+	# (a plain Control = transparent) would show through as white without this rect.
+	var bg_base: ColorRect = ColorRect.new()
+	bg_base.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg_base.color = Color(0.08, 0.08, 0.09)   # matches ThemeSetup.LAYOUT_BG
+	bg_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(bg_base)
+
+	# Residence image overlay — drawn on dark base so 25% alpha creates atmosphere.
 	_bg_texture = TextureRect.new()
 	_bg_texture.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_bg_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_bg_texture.stretch_mode = TextureRect.STRETCH_COVER
-	_bg_texture.modulate = Color(1.0, 1.0, 1.0, 0.25)
+	_bg_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_bg_texture.modulate = Color(1.0, 1.0, 1.0, 0.45)
 	_bg_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_bg_texture)
 

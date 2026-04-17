@@ -1,6 +1,6 @@
 ## Autoload — Accepts, validates, and executes buy/sell orders.
-## Core layer. Depends on: PriceEngine, CurrencySystem, PortfolioManager, GameClock, StockDatabase.
-## See: design/gdd/order-engine.md
+## Core layer. Depends on: PriceEngine, CurrencySystem, PortfolioManager, GameClock, StockDatabase, MarketConfig.
+## See: design/gdd/order-engine.md, design/gdd/trading-fees.md
 extends Node
 
 # ── Signals ──
@@ -73,7 +73,8 @@ func submit_market_order(side: String, stock_id: String, quantity: int) -> Dicti
 func _handle_pre_market_market_order(order: Dictionary) -> Dictionary:
 	if order["side"] == "BUY":
 		var current_price: int = PriceEngine.get_current_price(order["stock_id"])
-		var reserved: int = int(ceil(float(current_price) * (1.0 + PRE_MARKET_BUFFER_PCT))) * order["quantity"]
+		var gross_reserved: int = int(ceil(float(current_price) * (1.0 + PRE_MARKET_BUFFER_PCT))) * order["quantity"]
+		var reserved: int = MarketConfig.get_buy_cost(gross_reserved)
 		if not CurrencySystem.sim_deduct(reserved):
 			return _reject_order(order, "잔액 부족")
 		order["reserved_cash"] = reserved
@@ -88,7 +89,7 @@ func _handle_pre_market_market_order(order: Dictionary) -> Dictionary:
 func _handle_open_market_order(order: Dictionary) -> Dictionary:
 	if order["side"] == "BUY":
 		var current_price: int = PriceEngine.get_current_price(order["stock_id"])
-		var cost: int = current_price * order["quantity"]
+		var cost: int = MarketConfig.get_buy_cost(current_price * order["quantity"])
 		if not CurrencySystem.sim_deduct(cost):
 			return _reject_order(order, "잔액 부족")
 		order["reserved_cash"] = cost
@@ -125,9 +126,9 @@ func submit_limit_order(
 		on_order_rejected.emit(order)
 		return order
 
-	# Reserve resources
+	# Reserve resources (includes commission via MarketConfig.get_buy_cost)
 	if side == "BUY":
-		var reserved: int = limit_price * quantity
+		var reserved: int = MarketConfig.get_buy_cost(limit_price * quantity)
 		if not CurrencySystem.sim_deduct(reserved):
 			order["status"] = "REJECTED"
 			order["reject_reason"] = "잔액 부족"
@@ -325,25 +326,38 @@ func _process_pre_market_queue() -> void:
 				_history_append(order)
 				on_order_rejected.emit(order)
 			else:
-				# Fill and refund difference
+				# Fill and refund difference (reserved includes fee via get_buy_cost)
+				var actual_cost: int = MarketConfig.get_buy_cost(filled_price * order["quantity"])
 				var refund: int = reserved - actual_cost
 				if refund > 0:
 					CurrencySystem.sim_add(refund)
+				elif refund < 0:
+					CurrencySystem.sim_deduct(-refund)
 				PortfolioManager.add_holding(order["stock_id"], order["quantity"], filled_price)
+				var buy_breakdown: Dictionary = MarketConfig.get_fee_breakdown(
+					"BUY", filled_price * order["quantity"], 0, 0
+				)
 				order["status"] = "FILLED"
 				order["filled_price"] = filled_price
 				order["filled_tick"] = GameClock.get_current_tick()
+				order["fee_breakdown"] = buy_breakdown
 				_history_append(order)
 				on_order_filled.emit(order)
 
 		elif order["side"] == "SELL":
 			_unlock_sell_quantity(order["stock_id"], order["quantity"])
-			var proceeds: int = filled_price * order["quantity"]
-			CurrencySystem.sim_add(proceeds)
-			PortfolioManager.remove_holding(order["stock_id"], order["quantity"], filled_price)
+			var gross: int = filled_price * order["quantity"]
+			var realized_pnl: int = PortfolioManager.remove_holding(
+				order["stock_id"], order["quantity"], filled_price
+			)
+			var sell_breakdown: Dictionary = MarketConfig.get_fee_breakdown(
+				"SELL", gross, 0, realized_pnl
+			)
+			CurrencySystem.sim_add(sell_breakdown["net"])
 			order["status"] = "FILLED"
 			order["filled_price"] = filled_price
 			order["filled_tick"] = GameClock.get_current_tick()
+			order["fee_breakdown"] = sell_breakdown
 			_history_append(order)
 			on_order_filled.emit(order)
 
@@ -366,7 +380,8 @@ func _fill_market_order(order: Dictionary) -> void:
 	var filled_price: int = result["avg_price"]
 
 	if order["side"] == "BUY":
-		var actual_cost: int = filled_price * result["filled_qty"]
+		var gross_filled: int = filled_price * result["filled_qty"]
+		var actual_cost: int = MarketConfig.get_buy_cost(gross_filled)
 		var reserved: int = order.get("reserved_cash", 0)
 		# reserved covers the original quantity; refund the unconsumed portion proportionally
 		var proportional_reserved: int = int(
@@ -384,12 +399,19 @@ func _fill_market_order(order: Dictionary) -> void:
 				on_order_rejected.emit(order)
 				return
 		PortfolioManager.add_holding(order["stock_id"], result["filled_qty"], filled_price)
+		order["fee_breakdown"] = MarketConfig.get_fee_breakdown("BUY", gross_filled, 0, 0)
 
 	elif order["side"] == "SELL":
 		_unlock_sell_quantity(order["stock_id"], result["filled_qty"])
-		var proceeds: int = filled_price * result["filled_qty"]
-		CurrencySystem.sim_add(proceeds)
-		PortfolioManager.remove_holding(order["stock_id"], result["filled_qty"], filled_price)
+		var gross: int = filled_price * result["filled_qty"]
+		var realized_pnl: int = PortfolioManager.remove_holding(
+			order["stock_id"], result["filled_qty"], filled_price
+		)
+		var sell_breakdown: Dictionary = MarketConfig.get_fee_breakdown(
+			"SELL", gross, 0, realized_pnl
+		)
+		CurrencySystem.sim_add(sell_breakdown["net"])
+		order["fee_breakdown"] = sell_breakdown
 
 	order["status"] = "FILLED"
 	order["filled_price"] = filled_price
@@ -426,7 +448,8 @@ func _fill_limit_order(order: Dictionary, _current_price: int) -> void:
 	var filled_price: int = result["avg_price"]
 
 	if order["side"] == "BUY":
-		var actual_cost: int = filled_price * result["filled_qty"]
+		var gross_filled: int = filled_price * result["filled_qty"]
+		var actual_cost: int = MarketConfig.get_buy_cost(gross_filled)
 		var reserved: int = order.get("reserved_cash", 0)
 		var proportional_reserved: int = int(
 			float(reserved) * float(result["filled_qty"]) / float(order["quantity"])
@@ -434,13 +457,22 @@ func _fill_limit_order(order: Dictionary, _current_price: int) -> void:
 		var refund: int = proportional_reserved - actual_cost
 		if refund > 0:
 			CurrencySystem.sim_add(refund)
+		elif refund < 0:
+			CurrencySystem.sim_deduct(-refund)
 		PortfolioManager.add_holding(order["stock_id"], result["filled_qty"], filled_price)
+		order["fee_breakdown"] = MarketConfig.get_fee_breakdown("BUY", gross_filled, 0, 0)
 
 	elif order["side"] == "SELL":
 		_unlock_sell_quantity(order["stock_id"], result["filled_qty"])
-		var proceeds: int = filled_price * result["filled_qty"]
-		CurrencySystem.sim_add(proceeds)
-		PortfolioManager.remove_holding(order["stock_id"], result["filled_qty"], filled_price)
+		var gross: int = filled_price * result["filled_qty"]
+		var realized_pnl: int = PortfolioManager.remove_holding(
+			order["stock_id"], result["filled_qty"], filled_price
+		)
+		var sell_breakdown: Dictionary = MarketConfig.get_fee_breakdown(
+			"SELL", gross, 0, realized_pnl
+		)
+		CurrencySystem.sim_add(sell_breakdown["net"])
+		order["fee_breakdown"] = sell_breakdown
 
 	order["status"] = "FILLED"
 	order["filled_price"] = filled_price

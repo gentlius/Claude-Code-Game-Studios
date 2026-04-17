@@ -182,6 +182,15 @@ func test_news_event_system_rumor_signal():
 	assert_eq(sig["args"].size(), 1, "on_rumor_hint 파라미터 1개 (rumor: Dictionary)")
 
 
+# ── MarketConfig ─────────────────────────────────────────────────────
+## Implements: design/gdd/trading-fees.md §4
+
+func test_market_config_api():
+	assert_true(MarketConfig.has_method("get_fee_breakdown"), "get_fee_breakdown 존재")
+	assert_true(MarketConfig.has_method("get_buy_cost"),      "get_buy_cost 존재")
+	assert_true(MarketConfig.has_method("get_active_market"), "get_active_market 존재")
+
+
 # ── CurrencySystem (S8-06 dual-economy 확장) ─────────────────────────
 
 func test_currency_system_cash_assets_api():

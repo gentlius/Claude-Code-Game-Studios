@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "active_market": "KR",
+  "markets": {
+    "KR": {
+      "buy_tax": 0.0,
+      "sell_tax": 0.002,
+      "commission": 0.00015,
+      "capital_gains": {
+        "short_term_rate": 0.0,
+        "long_term_rate": 0.0,
+        "threshold_days": 365
+      }
+    },
+    "US": {
+      "buy_tax": 0.0,
+      "sell_tax": 0.0,
+      "commission": 0.0005,
+      "capital_gains": {
+        "short_term_rate": 0.22,
+        "long_term_rate": 0.15,
+        "threshold_days": 365
+      }
+    },
+    "JP": {
+      "buy_tax": 0.0,
+      "sell_tax": 0.0015,
+      "commission": 0.00055,
+      "capital_gains": {
+        "short_term_rate": 0.2021,
+        "long_term_rate": 0.2021,
+        "threshold_days": 0
+      }
+    },
+    "HK": {
+      "buy_tax": 0.0013,
+      "sell_tax": 0.0013,
+      "commission": 0.00025,
+      "capital_gains": {
+        "short_term_rate": 0.0,
+        "long_term_rate": 0.0,
+        "threshold_days": 365
+      }
+    },
+    "CN": {
+      "buy_tax": 0.0,
+      "sell_tax": 0.001,
+      "commission": 0.0003,
+      "capital_gains": {
+        "short_term_rate": 0.2,
+        "long_term_rate": 0.2,
+        "threshold_days": 0
+      }
+    }
+  }
+}

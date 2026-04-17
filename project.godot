@@ -39,6 +39,7 @@ SeasonManager="*res://src/gameplay/season_manager.gd"
 LifestyleManager="*res://src/gameplay/lifestyle_manager.gd"
 SaveSystem="*res://src/core/save_system.gd"
 AudioManager="*res://src/core/audio_manager.gd"
+MarketConfig="*res://src/core/market_config.gd"
 
 [display]
 

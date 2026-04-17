@@ -315,10 +315,10 @@ func _process_pre_market_queue() -> void:
 		var filled_price: int = PriceEngine.get_current_price(order["stock_id"])
 
 		if order["side"] == "BUY":
-			var actual_cost: int = filled_price * order["quantity"]
+			var gross: int = filled_price * order["quantity"]
 			var reserved: int = order["reserved_cash"]
 
-			if actual_cost > reserved:
+			if gross > reserved:
 				# Price exceeded buffer — reject
 				CurrencySystem.sim_add(reserved)
 				order["status"] = "REJECTED"
@@ -327,20 +327,17 @@ func _process_pre_market_queue() -> void:
 				on_order_rejected.emit(order)
 			else:
 				# Fill and refund difference (reserved includes fee via get_buy_cost)
-				var actual_cost: int = MarketConfig.get_buy_cost(filled_price * order["quantity"])
+				var actual_cost: int = MarketConfig.get_buy_cost(gross)
 				var refund: int = reserved - actual_cost
 				if refund > 0:
 					CurrencySystem.sim_add(refund)
 				elif refund < 0:
 					CurrencySystem.sim_deduct(-refund)
 				PortfolioManager.add_holding(order["stock_id"], order["quantity"], filled_price)
-				var buy_breakdown: Dictionary = MarketConfig.get_fee_breakdown(
-					"BUY", filled_price * order["quantity"], 0, 0
-				)
 				order["status"] = "FILLED"
 				order["filled_price"] = filled_price
 				order["filled_tick"] = GameClock.get_current_tick()
-				order["fee_breakdown"] = buy_breakdown
+				order["fee_breakdown"] = MarketConfig.get_fee_breakdown("BUY", gross, 0, 0)
 				_history_append(order)
 				on_order_filled.emit(order)
 

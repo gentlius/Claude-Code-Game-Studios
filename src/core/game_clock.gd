@@ -47,11 +47,12 @@ const BASE_TICK_INTERVAL: float = 0.192  ## real seconds per tick at 1x speed (~
 const SECONDS_PER_TICK: int = 15  ## game-world seconds each tick represents (4 ticks = 1 minute)
 ## Max ticks fired per frame — prevents death spiral when a slow frame causes tick backlog.
 const MAX_TICKS_PER_FRAME: int = 3
-## Auto-slow to 1x when a news event fires at 4x (GDD — "판단이 곧 실력"). VI/CB는 속도 유지.
-## TODO(Beta/Settings): UserSettings.auto_slow_on_news 옵션으로 대체. design/gdd/settings.md 참조.
-const AUTO_SLOW_ON_EVENT: bool = true
 
 # ── State ──
+
+## Auto-slow to 1× when a news event fires above 1×. Configurable via SettingsScreen.
+## GDD: design/gdd/settings-screen.md §3-2
+var _auto_slow_on_event: bool = true
 
 var _market_state: MarketState = MarketState.PRE_MARKET
 var _current_tick: int = 0
@@ -107,6 +108,16 @@ func get_day_progress() -> float:
 ## Returns the current game speed multiplier (1.0 to 4.0).
 func get_speed_multiplier() -> float:
 	return _speed_multiplier
+
+
+## Returns true if news events automatically slow the clock to 1×.
+func get_auto_slow_on_event() -> bool:
+	return _auto_slow_on_event
+
+
+## Sets whether news events auto-slow the clock to 1×. Called by SettingsScreen.
+func set_auto_slow_on_event(value: bool) -> void:
+	_auto_slow_on_event = value
 
 
 ## Sets game speed multiplier. Valid values are the discrete set {1, 2, 4}.
@@ -226,6 +237,7 @@ func reset() -> void:
 	_tick_accumulator = 0.0
 	_season_active = false
 	_pause_sources.clear()
+	_auto_slow_on_event = true
 
 # ── Processing ──
 

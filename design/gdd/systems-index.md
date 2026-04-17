@@ -52,7 +52,7 @@
 | 26 | 크레딧 화면 (Credits Screen) | UI | Full | Draft | — | [credits-screen.md](credits-screen.md) | — |
 | 27 | A3 재무제표 (Financial Statements) | UI | Beta | In Review | ✅ Done | [financial-statements.md](financial-statements.md) | 스킬 트리, StockData, 가격 엔진 |
 | 28 | S3 루머 채널 (Rumor Channel) | Gameplay | Beta | In Review | ✅ Done | [rumor-channel.md](rumor-channel.md) | 스킬 트리, 뉴스/이벤트, 뉴스 피드 UI |
-| 29 | 설정 화면 (Settings Screen) | UI | Beta | In Review | — | [settings-screen.md](settings-screen.md) | AudioManager, GameClock |
+| 29 | 설정 화면 (Settings Screen) | UI | Beta | Approved | ✅ Done | [settings-screen.md](settings-screen.md) | AudioManager, GameClock |
 | 30 | 거래 수수료·세금 (Trading Fees) | Economy | Beta | In Review | ✅ Done | [trading-fees.md](trading-fees.md) | 주문 엔진, 포트폴리오 관리, 재화 시스템, MarketConfig |
 | 31 | TR3 공매도 (Short Selling) | Gameplay | Full | In Review | ✅ Done | [short-selling.md](short-selling.md) | 주문 엔진, 포트폴리오 관리, 재화 시스템, 가격 엔진, 스킬 트리, 시즌 관리, 세이브/로드 |
 | 32 | TR4 레버리지 거래 (Leverage Trading) | Gameplay | Beta | In Review | ✅ Done | [leverage-trading.md](leverage-trading.md) | 주문 엔진, 포트폴리오 관리, 스킬 트리, 라이프스타일 |

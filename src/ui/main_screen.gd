@@ -28,11 +28,13 @@ var _tab_bar: HBoxContainer
 var _btn_f1: Button
 var _btn_f2: Button
 var _btn_f3: Button
+var _btn_settings: Button
 var _btn_f4_exit: Button
 
 var _trading_screen: Control   ## F1
 var _league_screen: Control    ## F2
 var _growth_screen: Control    ## F3 (placeholder)
+var _settings_screen: SettingsScreen  ## 오버레이 (탭 아님)
 
 var _tab_pause_banner: Panel   ## "장 중 일시정지" 배너 — ADR-006 §씬구조
 
@@ -78,6 +80,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_F4:
 			_request_exit_to_start()
 			get_viewport().set_input_as_handled()
+
+
+# ── 설정 오버레이 ──
+
+func _toggle_settings() -> void:
+	_settings_screen.visible = not _settings_screen.visible
 
 
 # ── F4 나가기 ──
@@ -151,6 +159,27 @@ func _build_ui() -> void:
 	_tab_bar.add_child(_btn_f2)
 	_tab_bar.add_child(_btn_f3)
 
+	# ⚙ 설정 버튼 — 탭이 아닌 오버레이 토글 버튼
+	_btn_settings = Button.new()
+	_btn_settings.text = tr("⚙")
+	_btn_settings.focus_mode = Control.FOCUS_NONE
+	_btn_settings.add_theme_font_size_override("font_size", 14)
+	_btn_settings.custom_minimum_size = Vector2(44, 32)
+	_btn_settings.tooltip_text = tr("설정")
+	var settings_normal: StyleBoxFlat = StyleBoxFlat.new()
+	settings_normal.bg_color = ThemeSetup.LAYOUT_PANEL
+	settings_normal.set_border_width_all(0)
+	var settings_hover: StyleBoxFlat = StyleBoxFlat.new()
+	settings_hover.bg_color = ThemeSetup.LAYOUT_TAB_ACTIVE_BG
+	settings_hover.set_border_width_all(0)
+	_btn_settings.add_theme_stylebox_override("normal", settings_normal)
+	_btn_settings.add_theme_stylebox_override("hover", settings_hover)
+	_btn_settings.add_theme_stylebox_override("pressed", settings_hover)
+	_btn_settings.add_theme_color_override("font_color", ThemeSetup.LAYOUT_TAB_TEXT)
+	_btn_settings.add_theme_color_override("font_hover_color", Color.WHITE)
+	_btn_settings.pressed.connect(_toggle_settings)
+	_tab_bar.add_child(_btn_settings)
+
 	# F4 나가기 — 우측 정렬, 탭이 아닌 씬 전환 버튼
 	var spacer: Control = Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -208,6 +237,12 @@ func _build_ui() -> void:
 	_growth_screen = GrowthScreen.new()
 	_growth_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	content.add_child(_growth_screen)
+
+	# ── Settings Overlay (GDD: settings-screen.md) ──
+	_settings_screen = SettingsScreen.new()
+	_settings_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_settings_screen.visible = false
+	content.add_child(_settings_screen)
 
 	# ── Tab Pause Banner (ADR-006) ──
 	_tab_pause_banner = Panel.new()

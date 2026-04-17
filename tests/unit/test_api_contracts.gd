@@ -55,7 +55,9 @@ func test_game_clock_api():
 	assert_true(GameClock.has_method("get_current_tick"),     "get_current_tick 존재")
 	assert_true(GameClock.has_method("get_current_day"),      "get_current_day 존재")
 	assert_true(GameClock.has_method("get_current_week"),     "get_current_week 존재")
-	assert_true(GameClock.has_method("set_speed"),            "set_speed 존재")
+	assert_true(GameClock.has_method("set_speed"),                  "set_speed 존재")
+	assert_true(GameClock.has_method("get_auto_slow_on_event"),     "get_auto_slow_on_event 존재")
+	assert_true(GameClock.has_method("set_auto_slow_on_event"),     "set_auto_slow_on_event 존재")
 
 
 # ── XpSystem ────────────────────────────────────────────────────────

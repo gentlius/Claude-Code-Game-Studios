@@ -245,7 +245,7 @@ func _on_settlement_needs_level_up(data: Dictionary) -> void:
 
 
 func _on_news_received() -> void:
-	if GameClock.AUTO_SLOW_ON_EVENT and GameClock.get_speed_multiplier() > 1.0:
+	if GameClock.get_auto_slow_on_event() and GameClock.get_speed_multiplier() > 1.0:
 		_set_speed(1.0)
 	if _active_tab != 0:
 		_news_unread += 1

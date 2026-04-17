@@ -94,11 +94,16 @@
 
 ## 잔여 오픈 항목
 
-### TD-AUDIT-01. settlement_reporter.gd 레이스 컨디션
+### ~~TD-AUDIT-01. settlement_reporter.gd 레이스 컨디션~~ (종결 2026-04-17)
 
 - **현황**: 팝업 닫힘 중 타이머가 발화할 경우 다음 시즌 공개 순서 혼란 가능성.
 - **우선순위**: Medium
 - **목표 스프린트**: Sprint 6 S6-04
+- **재현 결과**: 재현 불가 확인 (S9-11, 2026-04-17). GDScript 단일 스레드 모델에서
+  `_confirm()` 내 `stop()` → `_season_reveal_step = -1` 순서는 원자적.
+  타이머가 같은 프레임에 이미 발화했더라도 sentinel 체크(`step == -1`)가 즉시 차단.
+  추가 안전망: `tree_exiting` 연결이 노드 제거 시 타이머 강제 중지.
+  코드 위치: `settlement_reporter.gd` lines 46-50, 321-328.
 
 ### TD-AUDIT-02. xp_bar.gd C-01 시그니처 불일치
 

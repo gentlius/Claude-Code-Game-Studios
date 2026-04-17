@@ -200,4 +200,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | AC-08 | `tests/unit/test_trading_fees.gd` | `test_insufficient_balance_rejected()` |
 
 ### 빌드 검증
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 — 내부 감사 2026-04-17 (GUT 전체 통과, test_trading_fees.gd 11/11, SCRIPT ERROR 없음)

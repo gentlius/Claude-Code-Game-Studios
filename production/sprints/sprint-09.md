@@ -77,7 +77,7 @@ Day 8:    S9-10/S9-11 (Nice-to-Have)
 - [ ] S9-04: TR4 해금 → 레버리지 주문 E2E + 마진콜 자동 청산 확인 + 테스트 통과 + 빌드 성공
 - [ ] S9-05: 설정화면 볼륨·자동감속 E2E + 세이브/로드 확인 + 빌드 성공
 - [x] S9-06 GDD: `design/gdd/trading-fees.md` 9개 섹션 Approved (2026-04-17)
-- [x] S9-06 구현: MarketConfig autoload + JSON + OrderEngine 수수료 적용 + 테스트 작성 완료 (2026-04-17) — 빌드 검증 필요
+- [x] S9-06 구현: MarketConfig autoload + JSON + OrderEngine 수수료 적용 + 테스트 통과 + 빌드 성공 (2026-04-17)
 - [ ] S9-07 (Should Have): 5시즌 누적 데이터 세이브/로드 + 용량 검증 + 테스트 통과
 - [ ] S9-08 (Should Have): `active_slot_id` private 전환 + 기존 테스트 전부 통과
 - [ ] S9-09 (Should Have): UIState 공유 enum 전환 + 기존 테스트 전부 통과

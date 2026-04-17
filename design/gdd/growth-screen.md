@@ -242,5 +242,14 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | AC-06 | 수동 플레이테스트 | — |
 | AC-12 | 수동 플레이테스트 | — |
 
+### S8-07 거주지 배경 시각화 (Residence Background — Sprint 8)
+- [x] `growth_screen.gd`: `RESIDENCE_ART` 상수 배열 (tier 0~10, `res://assets/art/housing/*.png`)
+- [x] `growth_screen.gd`: `_bg_texture` TextureRect — `STRETCH_KEEP_ASPECT_COVERED` + 45% alpha
+- [x] `growth_screen.gd`: `ColorRect` 어두운 베이스 레이어 — 프로젝트 clear color(#F5F5F8) 투과 방지
+- [x] `growth_screen.gd`: `_refresh_bg()` — `LifestyleManager.get_residence_tier()` + `get_residence_name()` 호출
+- [x] `growth_screen.gd`: `LifestyleManager.residence_changed` 시그널 → `_refresh_bg()` 즉시 갱신
+- [x] `growth_screen.gd`: 자산 패널 하단에 `_lbl_residence` 현재 거주지명 표시
+
 ### 빌드 검증
 - [x] 바이너리 실행 확인: QA Lead 서명 — 내부 감사 2026-04-15 (Sprint 7 완료, 274/274 테스트 통과)
+- [x] S8-07 F3 거주지 배경 표시 확인: 2026-04-17 (`STRETCH_COVER` 버그픽스 후 정상 동작 확인)

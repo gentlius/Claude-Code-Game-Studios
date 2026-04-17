@@ -77,4 +77,4 @@ Day 7-8:  S8-09 start-screen 검증 (Nice-to-Have)
 - [x] S8-07 (Should Have): B-02 주거 시각화 F3 배경 전환 확인 + 빌드 성공
 - [x] S8-08 (Should Have): QA 시나리오 문서 업데이트
 - [x] S8-09 (Should Have): ADR-019 작성 + `technical-preferences.md` 링크 추가
-- [ ] `sprint-08.md` DoD 전 항목 `[x]` — Producer 확인
+- [x] `sprint-08.md` DoD 전 항목 `[x]` — Producer 확인 (2026-04-17)

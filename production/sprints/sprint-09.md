@@ -31,7 +31,7 @@ TR3 공매도·TR4 레버리지로 고급 거래 브랜치를 완성하고, B-09
 
 | ID | Task | Agent/Owner | Est. Sessions | Dependencies | Acceptance Criteria |
 |----|------|-------------|---------------|-------------|---------------------|
-| S9-07 | TD-HIST-01 OHLCV 시즌 간 영구 누적 (주봉/월봉 선행 조건) | gameplay-programmer | 1.5 | — | **(1)** `PriceEngine.ohlcv_daily`를 시즌 시작 시 초기화하지 않고 `season_id` 필드와 함께 누적. **(2)** `StockData.get_save_data()` / `load_save_data()`에 시즌 간 OHLCV 배열 직렬화 추가. **(3)** 세이브 파일 용량 검증 (10시즌 ≈ 2MB 이내). **(4)** 5시즌 이상 플레이 후 주봉/월봉 집계 데이터 로그 확인. **(5)** 테스트 추가. |
+| S9-07 | TD-HIST-01 OHLCV 시즌 간 영구 누적 (주봉/월봉 선행 조건) | gameplay-programmer | 1.5 | — | **(1)** `PriceEngine.ohlcv_daily`를 시즌 시작 시 초기화하지 않고 `season_id` 필드와 함께 누적. **(2)** `StockData.get_save_data()` / `load_save_data()`에 시즌 간 OHLCV 배열 직렬화 추가. **(3)** 세이브 파일 용량 검증 (10시즌 ≈ 2MB 이내). **(4)** `get_weekly_candles()` (5거래일 단위) / `get_monthly_candles()` (20거래일 = 1시즌 단위) 집계 함수 추가 — 완성된 캔들 N개 + 현재 진행 중 캔들 1개(매틱 갱신, `current_price` 반영). **(5)** 5시즌 이상 플레이 후 주봉/월봉 집계 데이터 로그 확인. **(6)** 테스트 추가. |
 | S9-08 | TD-CR-03 SaveSystem.active_slot_id private 전환 | lead-programmer | 0.5 | — | `active_slot_id` → `_active_slot_id` (private). `get_active_slot_id()` getter 추가. 외부 직접 쓰기 6개 테스트 파일 `before_each` 패턴 수정. 기존 테스트 전부 통과. |
 | S9-09 | TD-CR-11 UIState enum 중복 통합 | lead-programmer | 0.5 | — | `ui_state_types.gd` (autoload 또는 `src/core/`) 공유 enum 파일 생성. `StatusBar.UIState` / `TradingScreen.UIState` 양쪽 참조를 공유 enum으로 교체. 기존 테스트 전부 통과. |
 

@@ -39,22 +39,14 @@ func _build_ui() -> void:
 	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	center.add_child(vbox)
 
-	# TODO: assets/ui/spinner_ring.png 준비 후 TextureRect로 교체
-	_spinner = Control.new()
+	_spinner = TextureRect.new()
+	_spinner.texture = load("res://assets/ui/ui_spinner_ring_default.svg")
 	_spinner.custom_minimum_size = Vector2(48.0, 48.0)
+	_spinner.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_spinner.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_spinner.pivot_offset = Vector2(24.0, 24.0)
 	_spinner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(_spinner)
-
-	var ring: ColorRect = ColorRect.new()
-	ring.color = Color(0.918, 0.918, 0.918)
-	ring.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	ring.offset_left = 16.0
-	ring.offset_right = -16.0
-	ring.offset_top = 20.0
-	ring.offset_bottom = -20.0
-	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_spinner.add_child(ring)
 
 	var lbl: Label = Label.new()
 	lbl.text = tr("저장 중...")

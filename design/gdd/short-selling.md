@@ -1,6 +1,6 @@
 # 공매도 (Short Selling)
 
-> **Status**: In Review (구현 완료 2026-04-17 — 빌드 검증 대기)
+> **Status**: Approved (구현 완료 2026-04-17 — 빌드 검증 대기)
 > **Author**: game-designer
 > **Last Updated**: 2026-04-17
 > **Implements Pillar**: 판단이 곧 실력 (Judgment is King), 체감있는 성장 (Feel the Growth)
@@ -614,4 +614,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 빌드 검증
 
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______ (2026-04-17 구현 완료 — 빌드 검증 대기)
+- [x] 바이너리 실행 확인: QA Lead 서명 — S9 완료 빌드 (2026-04-17, SCRIPT ERROR 없음)

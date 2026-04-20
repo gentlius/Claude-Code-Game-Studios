@@ -213,13 +213,15 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 ### 호출 경로
 
 **데이터 레이어**
-- [ ] `src/data/stock_data.gd`: `pbr: float = 0.0`, `roe: float = 0.0`, `total_shares: int = 0`, `major_shareholder_pct: float = 0.0` 필드 추가
-- [ ] `src/core/stock_database.gd`: `_load_stock()` 에서 `pbr`, `roe`, `total_shares`, `major_shareholder_pct` JSON 파싱 추가
-- [ ] `assets/data/stocks.json`: 46개 종목 `pbr`, `roe`, `total_shares`, `major_shareholder_pct` 값 추가 (§3-4 섹터 범위 기준)
+- [x] `src/data/stock_data.gd`: `pbr: float = 0.0`, `roe: float = 0.0` 필드 추가 (S8-02)
+- [ ] `src/data/stock_data.gd`: `total_shares: int = 0`, `major_shareholder_pct: float = 0.0` 필드 추가 (**ADR-019 연동 필수, 미구현 블로커**)
+- [ ] `src/core/stock_database.gd`: `_load_stock()` 에서 `total_shares`, `major_shareholder_pct` JSON 파싱 추가
+- [ ] `assets/data/stocks.json`: 46개 종목 `total_shares`, `major_shareholder_pct` 값 추가 (§3-4 섹터 범위 기준)
 - [ ] `src/gameplay/price_engine.gd`: `DAILY_VOLUME_BY_PROFILE` → `total_shares * turnover_rate_by_profile` 파생값으로 교체 ([ADR-019](../../docs/architecture/019-player-market-impact.md) §이연된 개선)
 
 **표시 로직**
-- [ ] `PriceEngine` 또는 종목 정보 패널: `get_per_display()`, `get_pbr_display()` 계산 메서드 추가
+- [x] `PriceEngine.get_per_display(stock_id) -> String` 구현 완료 (`price_engine.gd:474`, S8-02)
+- [x] `PriceEngine.get_pbr_display(stock_id) -> String` 구현 완료 (`price_engine.gd:489`, S8-02)
 - [ ] 종목 정보 패널 UI: A3 섹션 노드 추가 (PER·PBR·ROE·배당 레이블 4개)
 - [ ] `SkillTree.is_skill_unlocked("A3")` 체크 → 섹션 visible 제어
 
@@ -231,7 +233,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 ### AC → 테스트 매핑
 | AC | 테스트 파일 | 테스트 함수 |
 |----|------------|------------|
-| AC-01 | `tests/unit/test_api_contracts.gd` | A3 패널 표시 조건 |
+| AC-01 | `tests/unit/test_financial_statements.gd` | `test_a3_panel_hidden_when_not_unlocked()` |
 | AC-03 | `tests/unit/test_financial_statements.gd` | `test_per_null_display()` |
 | AC-04 | `tests/unit/test_financial_statements.gd` | `test_per_scales_with_price()` |
 | AC-05 | `tests/unit/test_financial_statements.gd` | `test_roe_is_fixed()` |

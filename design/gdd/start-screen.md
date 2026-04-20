@@ -1,6 +1,6 @@
 # Start Screen — GDD
 
-> **Status**: In Review
+> **Status**: Approved
 > **Sprint**: S5
 > **Owner**: ui-programmer / gameplay-programmer
 
@@ -113,7 +113,7 @@ Start Screen에서 기존 슬롯을 클릭해 이어하거나, 새 슬롯을 생
 | 트리거 | F4 키 또는 `MainScreen` 탭바 `[나가기]` 버튼 (F1/F2/F3 우측) |
 | 동작 | MainScreen → StartScreen 전환 (저장 없음) |
 | 블로킹 조건 | `SavingOverlay` 표시 중 → F4 무반응 |
-| 현재 슬롯 ID | StartScreen에서 선택한 슬롯 ID를 `SaveSystem.active_slot_id`로 유지 |
+| 현재 슬롯 ID | StartScreen에서 선택한 슬롯 ID를 `SaveSystem.get_active_slot_id()`로 조회 (내부 `_active_slot_id` private, S9-08) |
 
 ---
 
@@ -211,14 +211,14 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - `trading_screen.gd._input(event)` F4 감지 → StartScreen 표시
 
 ### 호출 경로
-- [ ] `SplashScreen`: Timer(`SPLASH_DURATION`) + 입력 처리 → `splash_finished` 시그널
-- [ ] `StartScreen`: `SaveSystem.get_slot_list()` → 슬롯 카드 동적 생성
-- [ ] `SaveSystem.get_slot_list()`: `save_index.json` 읽기 → `Array[Dictionary]` 반환
-- [ ] `SaveSystem.load_slot(id)`: `save_slot_{id}.json` 읽기 → 각 시스템 `load_save_data()`
-- [ ] `SaveSystem.delete_slot(id)`: `save_slot_{id}.json` 삭제 + `save_index.json` 갱신
-- [ ] `SaveSystem.active_slot_id`: 현재 활성 슬롯 ID 보관 (로드 또는 새 게임 시 세팅)
-- [ ] `IntroSequence.play()`: 씬 인스턴스화 → `add_child()` → `intro_finished` → 씬 제거
-- [ ] F4 핸들러: `trading_screen.gd` — `SavingOverlay` 미표시 시에만 StartScreen 전환
+- [x] `SplashScreen`: Timer(`SPLASH_DURATION`) + 입력 처리 → `splash_finished` 시그널
+- [x] `StartScreen`: `SaveSystem.get_slot_list()` → 슬롯 카드 동적 생성
+- [x] `SaveSystem.get_slot_list()`: `save_index.json` 읽기 → `Array[Dictionary]` 반환
+- [x] `SaveSystem.load_slot(id)`: `save_slot_{id}.json` 읽기 → 각 시스템 `load_save_data()`
+- [x] `SaveSystem.delete_slot(id)`: `save_slot_{id}.json` 삭제 + `save_index.json` 갱신
+- [x] `SaveSystem.get_active_slot_id()`: 현재 활성 슬롯 ID 반환 (S9-08: `_active_slot_id` private 전환, getter 공개)
+- [x] `IntroSequence.play()`: 씬 인스턴스화 → `add_child()` → `intro_finished` → 씬 제거
+- [x] F4 핸들러: `trading_screen.gd` — `SavingOverlay` 미표시 시에만 StartScreen 전환
 
 ### AC → 테스트 매핑
 | AC | 테스트 파일 | 테스트 함수 |
@@ -229,4 +229,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | AC-13 | `tests/unit/test_save_system.gd` | `test_corrupted_slot_detected()` |
 
 ### 빌드 검증
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 — S5 완료 빌드 (2026-04-07, SCRIPT ERROR 없음)

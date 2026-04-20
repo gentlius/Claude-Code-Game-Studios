@@ -366,7 +366,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [ ] `process_offseason()`: 임대 수익 입금, 스타트업 엑싯, Recurring 비용 순차 처리
 - [ ] `signal offseason_settled` 선언 + emit
 - [ ] 보유 부동산, 스타트업 투자, 구매 품목, 칭호, 거주지 상태 관리
-- [ ] `season_manager.gd`: `_on_season_end()` 후 `LifestyleManager.process_offseason()` 호출 연결
+- [ ] `game_clock.gd`: `on_market_close` 시그널 → `LifestyleManager.process_market_close(day, week)` 연결 (내부에서 시즌 마지막 날 판단)
 
 **LifestyleScreen (신규)**
 - [ ] `src/ui/lifestyle_screen.gd`: 신규 작성. 5개 카테고리 탭 + 잔여 자산 실시간 표시

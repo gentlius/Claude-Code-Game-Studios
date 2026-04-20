@@ -1,6 +1,6 @@
 # TR4 레버리지 거래 (Leverage Trading)
 
-> **Status**: In Review (게임플레이 시스템 구현 완료 2026-04-17 — UI 기능 및 빌드 검증 대기)
+> **Status**: In Review (게임플레이 시스템 구현 완료 2026-04-17 — UI 기능 미구현: UI 스프린트 예정, 빌드 검증 대기)
 > **Author**: user + game-designer
 > **Last Updated**: 2026-04-17
 > **Implements Pillar**: 판단이 곧 실력 (Judgment is King), 체감있는 성장 (Feel the Growth)

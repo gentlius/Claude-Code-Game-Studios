@@ -1,6 +1,6 @@
 # Order Book (호가창) — Design Document
 
-> **Status**: In Review
+> **Status**: Approved
 
 ## 1. Overview
 
@@ -401,13 +401,13 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - UI 갱신: `GameClock.on_tick` → `OrderPanel._on_tick()` → `PriceEngine.get_order_book()`
 
 ### 호출 경로
-- [ ] `PriceEngine._stock_states[stock_id]["order_book"]` 키 추가 (`ask`, `bid` 배열)
-- [ ] `PriceEngine.initialize_order_books()` — `confirm_market_open()` 시 전 종목 초기화
-- [ ] `PriceEngine._update_order_books(old_prices)` — `process_tick()` 내 가격 확정 직후 호출
-- [ ] `PriceEngine.get_order_book(stock_id) → Dictionary` — UI·OrderEngine 조회용
-- [ ] `PriceEngine.consume_order_book(stock_id, side, qty, limit_price) → Dictionary` — 반환: `{filled_qty, avg_price, remaining_qty}`
-- [ ] `OrderEngine.process_tick()` — 체결 로직에서 `consume_order_book()` 사용
-- [ ] `GameClock.confirm_market_open()` 또는 그 호출 체인에서 `initialize_order_books()` 연결
+- [x] `PriceEngine._stock_states[stock_id]["order_book"]` 키 추가 (`ask`, `bid` 배열)
+- [x] `PriceEngine.initialize_order_books()` — `confirm_market_open()` 시 전 종목 초기화
+- [x] `PriceEngine._update_order_books(old_prices)` — `process_tick()` 내 가격 확정 직후 호출
+- [x] `PriceEngine.get_order_book(stock_id) → Dictionary` — UI·OrderEngine 조회용
+- [x] `PriceEngine.consume_order_book(stock_id, side, qty, limit_price) → Dictionary` — 반환: `{filled_qty, avg_price, remaining_qty}`
+- [x] `OrderEngine.process_tick()` — 체결 로직에서 `consume_order_book()` 사용
+- [x] `GameClock.confirm_market_open()` 또는 그 호출 체인에서 `initialize_order_books()` 연결
 - [x] `OrderPanel._build_order_book_section()` — §3-5 레이아웃 구현:
   - [x] TR1 스킬 게이팅: `_order_book_section.visible = SkillTree.is_skill_unlocked("TR1")`
   - [x] OHLCV 행 (블록 1): 시/고/저/거래량, 매 틱 `_refresh_ohlcv()` 갱신
@@ -448,4 +448,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | AC-20 | E2E 시각 검증 (Sprint 9) | — |
 
 ### 빌드 검증
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 — S8 완료 빌드 (2026-04-17, SCRIPT ERROR 없음)

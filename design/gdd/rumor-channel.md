@@ -1,6 +1,6 @@
 # 루머 채널 (Rumor Channel) — S3 스킬
 
-> **Status**: In Review
+> **Status**: Approved
 > **Sprint**: Sprint 8 (S8-04/05)
 > **Skill ID**: S3
 > **Prerequisite**: S2 (실시간 뉴스) 해금
@@ -181,27 +181,30 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 ### 호출 경로
 
 **시그널 추가**
-- [ ] `news_event_system.gd`: `signal on_rumor_hint(rumor: Dictionary)` 선언
+- [x] `news_event_system.gd`: `signal on_rumor_hint(rumor: Dictionary)` 선언
   - `rumor` 구조: `{ "stock_id": String, "direction": String, "is_accurate": bool, "text": String }`
   - `is_accurate`는 발화 시점에 결정. **UI에 노출하지 않음**
 
 **루머 발화 로직**
-- [ ] `news_event_system.gd`: `_schedule_event()` 또는 이벤트 생성 직후 시점에 루머 분기 추가
-- [ ] `SkillTree.has_rumor_channel()` 체크
-- [ ] `rng.randf() < RUMOR_BASE_ACCURACY` 정확도 롤
-- [ ] 방향 반전 처리: `is_accurate == false` 시 방향 텍스트 반전
-- [ ] 장 마감 이전 `RUMOR_LEAD_TICKS` 이내인지 확인 → 장 마감 후 이벤트면 루머 생략
+- [x] `news_event_system.gd`: `_emit_rumor_if_eligible()` 메서드로 루머 분기 구현 (이벤트 스케줄 직후 호출)
+- [x] `SkillTree.has_rumor_channel()` 체크
+- [x] `rng.randf() < RUMOR_BASE_ACCURACY` 정확도 롤
+- [x] 방향 반전 처리: `is_accurate == false` 시 방향 텍스트 반전
+- [x] 장 마감 이전 `RUMOR_LEAD_TICKS` 이내인지 확인 → 장 마감 후 이벤트면 루머 생략
 
 **뉴스 피드 UI**
-- [ ] `news_feed.gd` 또는 `trading_screen.gd`: `on_rumor_hint` 시그널 연결
-- [ ] 루머 카드 생성: 회색 배경, `[루머]` 태그, 모호한 방향 텍스트
-- [ ] 고정 문구 상수화: `"※ 정확도 %d%% — 교차 확인 권장" % int(RUMOR_BASE_ACCURACY * 100)`
+- [x] `news_feed.gd` 또는 `trading_screen.gd`: `on_rumor_hint` 시그널 연결
+- [x] 루머 카드 생성: 회색 배경, `[루머]` 태그, 모호한 방향 텍스트
+- [x] 고정 문구 상수화: `"※ 정확도 %d%% — 교차 확인 권장" % int(RUMOR_BASE_ACCURACY * 100)`
 
 ### AC → 테스트 매핑
 | AC | 테스트 파일 | 테스트 함수 |
 |----|------------|------------|
 | AC-01 | `tests/unit/test_rumor_channel.gd` | `test_no_rumor_without_s3()` |
+| AC-02 | E2E 시각 검증 | 루머 카드 표시 시점 (scheduled_tick - RUMOR_LEAD_TICKS) |
+| AC-03 | E2E 시각 검증 | 루머 카드 점선 테두리 + 기울임체 구분 |
 | AC-04 | `tests/unit/test_rumor_channel.gd` | `test_accuracy_converges_to_70pct()` |
+| AC-05 | `tests/unit/test_rumor_channel.gd` | `test_no_rumor_when_event_after_market_close()` |
 
 ### 빌드 검증
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 — S8 완료 빌드 (2026-04-17, SCRIPT ERROR 없음)

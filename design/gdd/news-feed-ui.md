@@ -1,6 +1,6 @@
 # 뉴스 피드 UI (News Feed UI)
 
-> **Status**: In Review
+> **Status**: Approved
 > **Author**: user + game-designer
 > **Last Updated**: 2026-04-02
 > **Implements Pillar**: 읽는 재미 (Read the Market), 짧고 굵게 (Quick & Punchy)
@@ -338,7 +338,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 | 기능 | 진입점 |
 |------|--------|
-| 뉴스 카드 추가 | `NewsEventSystem.on_news_published` 시그널 → `news_feed_panel.gd._on_news_published(event)` |
+| 뉴스 카드 추가 | `NewsEventSystem.on_news_published` 시그널 → `news_feed.gd._on_news_published(event)` |
 | 체결 알림 토스트 | `OrderEngine.on_order_filled` 시그널 → `trading_screen.gd` 토스트 표시 |
 
 ### 호출 경로
@@ -354,4 +354,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 빌드 검증
 
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 — S9 완료 빌드 (2026-04-17, SCRIPT ERROR 없음)

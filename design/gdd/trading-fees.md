@@ -1,6 +1,6 @@
 # Trading Fees & Tax System
 
-**Status**: In Review  
+**Status**: In Review (holding_days 계산 · UI 수수료 표시 미구현 — 향후 스프린트 예정)  
 **Sprint**: S9-06  
 **Owner**: game-designer + gameplay-programmer  
 **Last Updated**: 2026-04-17

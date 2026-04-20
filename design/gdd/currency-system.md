@@ -1,6 +1,6 @@
 # 재화 시스템 (Currency System)
 
-> **Status**: In Review
+> **Status**: Approved
 > **Author**: user + game-designer
 > **Last Updated**: 2026-04-14
 > **Implements Pillar**: 체감있는 성장 (Feel the Growth)
@@ -265,12 +265,12 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `CurrencySystem.init_first_season()` 존재
 - [x] `CurrencySystem.reset()` 존재
 - [x] `CurrencySystem.get_cash_assets() -> int` — 구현 완료 (`src/core/currency_system.gd:37`)
-- [ ] `CurrencySystem.cash_add(amount: int)` — Beta Sprint 9 (라이프스타일 소비 시스템)
-- [ ] `CurrencySystem.cash_deduct(amount: int) -> bool` — Beta Sprint 9 (라이프스타일 소비 시스템)
+- [x] `CurrencySystem.cash_add(amount: int)` — 구현 완료 (`src/core/currency_system.gd:85`, S9-05)
+- [x] `CurrencySystem.cash_deduct(amount: int) -> bool` — 구현 완료 (`src/core/currency_system.gd:94`, S9-05)
 - [x] `CurrencySystem.settle_to_cash(prize_amount: int)` — 구현 완료 (`src/core/currency_system.gd:78`)
-- [ ] `CurrencySystem.auto_deposit_to_sim(amount: int)` — Beta Sprint 9 (시즌 시작 전 예수금 자동입금, 현재 `init_first_season()`이 처리)
-- [ ] `CurrencySystem.get_total_prize_earned() -> int` — Beta Sprint 9 (누적 상금 카운터, 현재 `award_prize()`로 대체)
-- [ ] `CurrencySystem.prize_earned(amount: int, new_total: int)` 시그널 — Beta Sprint 9
+- [x] `CurrencySystem.auto_deposit_to_sim(amount: int)` — 구현 완료 (`src/core/currency_system.gd:123`, S9-05)
+- [x] `CurrencySystem.get_total_prize_earned() -> int` — 구현 완료 (`src/core/currency_system.gd:49`, S9-05)
+- [x] `CurrencySystem.prize_earned(amount: int, new_total: int)` 시그널 — 구현 완료 (`src/core/currency_system.gd:16`, S9-05)
 
 ### AC → 테스트 매핑
 
@@ -281,4 +281,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 빌드 검증
 
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 — S9 완료 빌드 (2026-04-17, SCRIPT ERROR 없음)

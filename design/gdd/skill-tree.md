@@ -1,6 +1,6 @@
 # 스킬 트리 시스템 (Skill Tree)
 
-> **Status**: In Review
+> **Status**: Approved
 > **Author**: user + agents
 > **Last Updated**: 2026-04-03
 > **Implements Pillar**: 체감있는 성장 (Feel the Growth)
@@ -277,7 +277,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 - [x] `SkillTree.unlock_skill(skill_id: String) -> bool` 존재
 - [x] `SkillTree.is_skill_unlocked(skill_id: String) -> bool` 존재
-- [x] `SkillTree.can_unlock(skill_id: String) -> bool` 존재
+- [x] `SkillTree.get_skill_state(skill_id: String) -> String` 존재 (반환값: "LOCKED"/"AVAILABLE"/"UNLOCKED"; 해금 가능 여부는 `unlock_skill()` 내부 검증)
 - [x] `SkillTree.on_skill_unlocked(skill_id)` 시그널 존재
 - [x] `SkillTree.reset()` 존재
 

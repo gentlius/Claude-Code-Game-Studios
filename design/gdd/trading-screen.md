@@ -1,6 +1,6 @@
 # 트레이딩 스크린 (Main HUD)
 
-> **Status**: In Review
+> **Status**: Approved
 > **Author**: user + game-designer
 > **Last Updated**: 2026-04-03
 > **Implements Pillar**: 읽는 재미 (Read the Market), 짧고 굵게 (Quick & Punchy)
@@ -536,12 +536,12 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `TradingScreen.league_tab_requested` 시그널 존재 (S3-06)
 - [x] `TradingScreen.pause_toggle_requested` 시그널 존재 (S3-13)
 - [x] `TradingScreen.speed_change_requested` 시그널 존재 (S3-13)
-- [ ] `MainScreen` 탭바에 `[나가기]` 버튼 추가 (F1/F2/F3 우측)
-- [ ] `MainScreen._input(event)`: F4 감지 → `SavingOverlay.visible` 체크 → StartScreen 전환
-- [ ] `SavingOverlay`: `SaveSystem.save_started` / `save_completed` 구독, `CanvasLayer layer=10`
-- [ ] `StockListPanel._row_nodes` — `_ready()`에서 1회 빌드, `get_children()` 런타임 호출 없음
-- [ ] `StockListPanel._last_prices` — dirty flag skip 동작
-- [ ] `StockListPanel._sel_style` / `_desel_style` — `_ready()` 1회 캐시, 런타임 `StyleBoxFlat.new()` 없음
+- [x] `MainScreen` 탭바에 `[나가기]` 버튼 추가 (F1/F2/F3 우측)
+- [x] `MainScreen._input(event)`: F4 감지 → `SavingOverlay.visible` 체크 → StartScreen 전환
+- [x] `SavingOverlay`: `SaveSystem.save_started` / `save_completed` 구독, `CanvasLayer layer=10`
+- [x] `StockListPanel._row_nodes` — `_ready()`에서 1회 빌드, `get_children()` 런타임 호출 없음
+- [x] `StockListPanel._last_prices` — dirty flag skip 동작
+- [x] `StockListPanel._sel_style` / `_desel_style` — `_ready()` 1회 캐시, 런타임 `StyleBoxFlat.new()` 없음
 
 ### AC → 테스트 매핑
 

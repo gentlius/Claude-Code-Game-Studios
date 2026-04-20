@@ -1,6 +1,6 @@
 # 차트 렌더러 (Chart Renderer)
 
-> **Status**: In Review
+> **Status**: Approved
 > **Author**: user + game-designer
 > **Last Updated**: 2026-04-02
 > **Implements Pillar**: 읽는 재미 (Read the Market), 판단이 곧 실력 (Judgment is King)
@@ -64,6 +64,13 @@ CandleData {
 | 5분 (M5) | 20틱 | 78개 | 단기 패턴 분석 |
 | 15분 (M15) | 60틱 | 26개 | 중기 추세 분석 |
 | 1일 (D1) | 1560틱 | 1개 | 장기 추세. 시즌 전체 조망 |
+| 1주 (W1) | 5거래일 집계 | — | 시즌 간 중기 추세. OhlcvHistory 일봉 집계 (5일 단위) |
+| 1개월 (MN) | 20거래일(1시즌) 집계 | — | 시즌 간 장기 추세. OhlcvHistory 일봉 집계 (20일 단위) |
+
+> **W1/MN 데이터 소스**: M1/M5/M15/D1은 현재 시즌 `PriceEngine.get_price_history()` 사용.
+> W1/MN은 `OhlcvHistory.get_candles(stock_id, "W1"/"MN")` — 시드 기반 프리히스토리(200시즌) +
+> 완료된 실플레이 시즌 일봉 집계. 진행 중인 현재 시즌 캔들은 `current_price` 매틱 갱신.
+> 구현 상수: `ChartRenderer.Timeframe.W1 = 9000`, `MN = 9001` (sentinel enum).
 
 기본 타임프레임: **1분(M1)**. 플레이어가 탭으로 전환 가능.
 
@@ -422,6 +429,7 @@ candle_end_tick = candle_start_tick + timeframe_ticks - 1
 | 트레이딩 스크린 | 트레이딩 스크린이 차트를 호스팅 | 영역 배치, 종목 선택 전달. **Hard** |
 | 스킬 트리 | 차트가 참조 | `is_skill_unlocked("A1"/"A2")` 해금 여부. **Soft** (미구현 시 기본 차트) |
 | 게임 시계 | 차트가 의존 | 시장 상태, 배속 정보. **Hard** |
+| OhlcvHistory | 차트가 의존 | W1/MN 타임프레임 캔들 집계. `get_candles(stock_id, "W1"/"MN")`. **Hard** (W1/MN 타임프레임 한정) |
 
 ## Tuning Knobs
 
@@ -443,6 +451,9 @@ candle_end_tick = candle_start_tick + timeframe_ticks - 1
 | # | 기준 | 검증 방법 |
 |---|------|----------|
 | 1 | 1분/5분/15분/1일 타임프레임이 정확히 집계되어 표시됨 | 유닛 테스트: 집계 결과 OHLCV 검증 |
+| 15 | W1 타임프레임이 5거래일 일봉을 집계하여 표시됨 (OhlcvHistory) | 유닛 테스트: 5일 집계 OHLCV 검증 |
+| 16 | MN 타임프레임이 20거래일(1시즌) 일봉을 집계하여 표시됨 | 유닛 테스트: 20일 집계 OHLCV 검증 |
+| 17 | W1/MN 진행 중 캔들이 매 틱 `current_price`로 갱신됨 | 통합 테스트 |
 | 2 | 캔들 색상이 한국식 (상승=빨강, 하락=파랑)으로 정확히 표시됨 | 시각 검증 |
 | 3 | 거래량 바 차트가 캔들과 동기화되어 표시됨 | 시각 검증 |
 | 4 | A1 해금 시 MA5/20/60이 정확히 계산되어 오버레이됨 | 유닛 테스트: SMA 계산값 검증 |
@@ -484,6 +495,9 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `PriceEngine.get_price_history(stock_id) -> Array[int]` 존재
 - [x] `SkillTree.is_skill_unlocked("A1")` — MA 표시 여부 확인
 - [x] `SkillTree.is_skill_unlocked("A2")` — RSI 표시 여부 확인
+- [x] `OhlcvHistory.get_candles(stock_id, "W1") -> Array[Dictionary]` 존재 (S9-07)
+- [x] `OhlcvHistory.get_candles(stock_id, "MN") -> Array[Dictionary]` 존재 (S9-07)
+- [x] `ChartRenderer.Timeframe.W1 = 9000`, `MN = 9001` sentinel enum 값 정의
 
 ### AC → 테스트 매핑
 

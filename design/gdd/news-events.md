@@ -1,6 +1,6 @@
 # 뉴스/이벤트 시스템 (News & Events)
 
-> **Status**: In Review
+> **Status**: Approved
 > **Author**: user + game-designer
 > **Last Updated**: 2026-04-03
 > **Implements Pillar**: 읽는 재미 (Read the Market), 판단이 곧 실력 (Judgment is King)
@@ -962,8 +962,8 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 | 기능 | 진입점 |
 |------|--------|
-| 매 틱 이벤트 처리 | `game_clock.gd._process_tick()` → `NewsEventSystem._on_tick(tick, day, week)` (틱 순서 1번째) |
-| 뉴스 카드 UI 갱신 | `NewsEventSystem.on_news_published` 시그널 → `news_feed_panel.gd._on_news_published()` |
+| 매 틱 이벤트 처리 | `game_clock.gd._process_tick()` → `NewsEventSystem.process_tick(tick, day, week)` (틱 순서 1번째) |
+| 뉴스 카드 UI 갱신 | `NewsEventSystem.on_news_published` 시그널 → `news_feed.gd._on_news_published()` |
 
 ### 호출 경로
 
@@ -982,4 +982,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 빌드 검증
 
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 — S9 완료 빌드 (2026-04-17, SCRIPT ERROR 없음)

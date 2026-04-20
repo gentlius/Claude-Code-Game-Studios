@@ -1,6 +1,6 @@
 # 가격 엔진 (Price Engine)
 
-> **Status**: In Review
+> **Status**: Approved
 > **Author**: user + game-designer
 > **Last Updated**: 2026-04-03
 > **Implements Pillar**: 판단이 곧 실력 (Judgment is King), 읽는 재미 (Read the Market)
@@ -1135,7 +1135,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 | 기능 | 진입점 |
 |------|--------|
-| 매 틱 가격 갱신 | `game_clock.gd._process_tick()` → `PriceEngine._on_tick(tick, day, week)` (직접 호출, 틱 순서 2번째) |
+| 매 틱 가격 갱신 | `game_clock.gd._process_tick()` → `PriceEngine.process_tick(tick, day, week)` (직접 호출, 틱 순서 2번째) |
 | 현재가 조회 | 각 시스템 → `PriceEngine.get_current_price(stock_id)` |
 | VI/서킷브레이커 | 자동 — `_on_tick()` 내부에서 가격 변동 감지 후 발동 |
 
@@ -1161,4 +1161,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 빌드 검증
 
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 — S9 완료 빌드 (2026-04-17, SCRIPT ERROR 없음)

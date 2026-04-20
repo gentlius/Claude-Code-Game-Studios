@@ -39,6 +39,11 @@ const TIER_LEGEND: int               = 9
 const TIER_MASTER_OF_INVESTMENT: int = 10
 
 const TIER_COUNT: int = 11
+## 티어별 참가자 비율 (GDD §3-3). 합 ≈ 1.0. league_screen.gd가 단일 소스로 참조.
+const TIER_RATIOS: Array[float] = [
+	0.38, 0.20, 0.13, 0.09, 0.06,
+	0.045, 0.035, 0.025, 0.015, 0.01, 0.005,
+]
 
 ## Fiction date — each season maps to one quarter. Seasons cycle Q1→Q2→Q3→Q4→Q1…
 ## Used to generate realistic-looking news dates without hardcoding a real calendar year.
@@ -477,11 +482,6 @@ func _grant_season_prize(final_rank: int) -> void:
 ## Build tier → participant count dictionary for AiCompetitor.init_season().
 ## Ratios from GDD §3-3 — player is excluded (AI count = total - 1).
 func _build_participant_counts() -> Dictionary:
-	## Tier participant ratios (GDD §3-3). Index = tier constant.
-	var TIER_RATIOS: Array[float] = [
-		0.38, 0.20, 0.13, 0.09, 0.06,
-		0.045, 0.035, 0.025, 0.015, 0.01, 0.005,
-	]
 	var counts: Dictionary = {}
 	var ai_total: int = TOTAL_PARTICIPANTS - 1
 	var assigned: int = 0

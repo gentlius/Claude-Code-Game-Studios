@@ -38,8 +38,13 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	visible = false
+	_build_flash_overlay()
+	_build_dim_overlay()
+	_build_banner_panel()
 
-	# Full-screen flash (golden burst on level up)
+
+## Full-screen golden flash ColorRect (hidden by default, fades in on level-up).
+func _build_flash_overlay() -> void:
 	_flash_rect = ColorRect.new()
 	_flash_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_flash_rect.color = FLASH_COLOR
@@ -47,7 +52,9 @@ func _ready() -> void:
 	_flash_rect.modulate.a = 0.0
 	add_child(_flash_rect)
 
-	# Dim overlay (click to close)
+
+## Full-screen dim ColorRect that blocks input and closes the banner on click.
+func _build_dim_overlay() -> void:
 	_dim_overlay = ColorRect.new()
 	_dim_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_dim_overlay.color = Color(0.0, 0.0, 0.0, DIM_ALPHA)
@@ -56,7 +63,9 @@ func _ready() -> void:
 	_dim_overlay.gui_input.connect(_on_dim_clicked)
 	add_child(_dim_overlay)
 
-	# Banner panel (top, full width)
+
+## Top banner panel (starts off-screen, slides in). Contains top row and bottom row.
+func _build_banner_panel() -> void:
 	_banner_panel = PanelContainer.new()
 	_banner_panel.anchor_right = 1.0
 	_banner_panel.offset_bottom = BANNER_HEIGHT
@@ -76,7 +85,12 @@ func _ready() -> void:
 	main_vbox.add_theme_constant_override("separation", 8)
 	_banner_panel.add_child(main_vbox)
 
-	# Top row: star + LEVEL UP + level number
+	_build_banner_top_row(main_vbox)
+	_build_banner_bottom_row(main_vbox)
+
+
+## Top row: ★ LEVEL UP [level number] ★
+func _build_banner_top_row(main_vbox: VBoxContainer) -> void:
 	var top_row: HBoxContainer = HBoxContainer.new()
 	top_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	top_row.add_theme_constant_override("separation", 12)
@@ -105,7 +119,9 @@ func _ready() -> void:
 	star2.add_theme_color_override("font_color", GOLD_COLOR)
 	top_row.add_child(star2)
 
-	# Bottom row: detail + buttons
+
+## Bottom row: SP detail label + [해금하러 가기] + [닫기 Esc]
+func _build_banner_bottom_row(main_vbox: VBoxContainer) -> void:
 	var bottom_row: HBoxContainer = HBoxContainer.new()
 	bottom_row.add_theme_constant_override("separation", 12)
 	bottom_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -164,7 +180,7 @@ func show_level_up(old_level: int, new_level: int, skill_points: int) -> void:
 	_is_showing = true
 
 	# TD-07: reduced_motion — show immediately without animation
-	if ProjectSettings.get_setting("accessibility/reduced_motion", false):
+	if ThemeSetup.is_reduced_motion():
 		_flash_rect.modulate.a = 0.0
 		_dim_overlay.modulate.a = 1.0
 		_banner_panel.offset_top = 0.0
@@ -209,7 +225,7 @@ func hide_banner() -> void:
 		return
 	_is_showing = false
 
-	if ProjectSettings.get_setting("accessibility/reduced_motion", false):
+	if ThemeSetup.is_reduced_motion():
 		visible = false
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		banner_closed.emit()

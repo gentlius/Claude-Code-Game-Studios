@@ -213,3 +213,11 @@ static func apply_spinbox_theme(spin: SpinBox) -> void:
 	line_edit.add_theme_stylebox_override("focus", _make_input_style(Color.WHITE, BORDER_BRIGHT))
 	line_edit.add_theme_color_override("font_color", TEXT_PRIMARY)
 	line_edit.add_theme_color_override("caret_color", TEXT_PRIMARY)
+
+
+
+## Accessibility: returns true if the "reduce motion" setting is enabled.
+## Single source for all UI animations. Callers skip Tween/animation when true.
+## See: ProjectSettings > accessibility/reduced_motion (TD-07).
+static func is_reduced_motion() -> bool:
+	return ProjectSettings.get_setting("accessibility/reduced_motion", false)

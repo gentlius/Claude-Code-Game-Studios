@@ -31,8 +31,12 @@ var _ui_state: int = UIState.LOADING
 var _selected_stock_id: String = ""
 var _stock_ids: Array[String] = []
 
-# Bottom tab
-var _active_tab: int = 0
+# Bottom tab indices
+const TAB_NEWS: int = 0
+const TAB_ALERTS: int = 1
+const TAB_PORTFOLIO: int = 2
+
+var _active_tab: int = TAB_NEWS
 var _news_unread: int = 0
 var _portfolio_unread: int = 0
 var _btn_tab_news: Button
@@ -227,7 +231,7 @@ func _on_market_state_changed(
 
 func _on_order_filled(_order: Dictionary) -> void:
 	## OrderPanel handles flash + pending list. TradingScreen tracks portfolio badge.
-	if _active_tab != 2:
+	if _active_tab != TAB_PORTFOLIO:
 		_portfolio_unread += 1
 		_btn_tab_portfolio.text = tr("포트폴리오 (%d)") % _portfolio_unread
 
@@ -239,7 +243,7 @@ func _on_settlement_needs_level_up(data: Dictionary) -> void:
 func _on_news_received() -> void:
 	if GameClock.get_auto_slow_on_event() and GameClock.get_speed_multiplier() > 1.0:
 		_set_speed(1.0)
-	if _active_tab != 0:
+	if _active_tab != TAB_NEWS:
 		_news_unread += 1
 		_btn_tab_news.text = tr("뉴스 (%d)") % _news_unread
 
@@ -316,24 +320,24 @@ func _handle_escape() -> void:
 
 func _toggle_bottom_tab() -> void:
 	if _news_panel.visible:
-		_switch_bottom_tab(1)
+		_switch_bottom_tab(TAB_ALERTS)
 	elif _alerts_panel.visible:
-		_switch_bottom_tab(2)
+		_switch_bottom_tab(TAB_PORTFOLIO)
 	else:
-		_switch_bottom_tab(0)
+		_switch_bottom_tab(TAB_NEWS)
 
 
 func _switch_bottom_tab(index: int) -> void:
 	_active_tab = index
-	_news_panel.visible = (index == 0)
-	_alerts_panel.visible = (index == 1)
-	_portfolio_panel.visible = (index == 2)
-	if index == 0:
+	_news_panel.visible = (index == TAB_NEWS)
+	_alerts_panel.visible = (index == TAB_ALERTS)
+	_portfolio_panel.visible = (index == TAB_PORTFOLIO)
+	if index == TAB_NEWS:
 		_news_unread = 0
 		_btn_tab_news.text = tr("뉴스")
-	elif index == 1:
+	elif index == TAB_ALERTS:
 		_btn_tab_alerts.text = tr("VI/CB")
-	elif index == 2:
+	elif index == TAB_PORTFOLIO:
 		_portfolio_unread = 0
 		_btn_tab_portfolio.text = tr("포트폴리오")
 	var tabs: Array[Button] = [_btn_tab_news, _btn_tab_alerts, _btn_tab_portfolio]
@@ -504,15 +508,15 @@ func _build_bottom_panel(parent: VBoxContainer) -> void:
 	bottom.add_child(tab_bar)
 	_btn_tab_news = Button.new(); _btn_tab_news.text = tr("뉴스")
 	ThemeSetup.apply_tab_active(_btn_tab_news)
-	_btn_tab_news.pressed.connect(func() -> void: _switch_bottom_tab(0))
+	_btn_tab_news.pressed.connect(func() -> void: _switch_bottom_tab(TAB_NEWS))
 	tab_bar.add_child(_btn_tab_news)
 	_btn_tab_alerts = Button.new(); _btn_tab_alerts.text = tr("VI/CB")
 	ThemeSetup.apply_tab_inactive(_btn_tab_alerts)
-	_btn_tab_alerts.pressed.connect(func() -> void: _switch_bottom_tab(1))
+	_btn_tab_alerts.pressed.connect(func() -> void: _switch_bottom_tab(TAB_ALERTS))
 	tab_bar.add_child(_btn_tab_alerts)
 	_btn_tab_portfolio = Button.new(); _btn_tab_portfolio.text = tr("포트폴리오")
 	ThemeSetup.apply_tab_inactive(_btn_tab_portfolio)
-	_btn_tab_portfolio.pressed.connect(func() -> void: _switch_bottom_tab(2))
+	_btn_tab_portfolio.pressed.connect(func() -> void: _switch_bottom_tab(TAB_PORTFOLIO))
 	tab_bar.add_child(_btn_tab_portfolio)
 	var news_script: GDScript = load("res://src/ui/news_feed.gd") as GDScript
 	_news_panel = news_script.new() as Control

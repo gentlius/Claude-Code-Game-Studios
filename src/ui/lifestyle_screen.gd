@@ -636,17 +636,4 @@ func _on_next_season_pressed() -> void:
 # ── Utilities ──
 
 func _format_amount(amount: int) -> String:
-	return "₩%s" % _comma_sep(amount)
-
-
-## Returns amount with Korean comma separators (e.g. 1,000,000).
-func _comma_sep(n: int) -> String:
-	var s: String = str(abs(n))
-	var result: String = ""
-	var count: int = 0
-	for i: int in range(s.length() - 1, -1, -1):
-		if count > 0 and count % 3 == 0:
-			result = "," + result
-		result = s[i] + result
-		count += 1
-	return ("-" if n < 0 else "") + result
+	return FormatUtils.currency(amount)

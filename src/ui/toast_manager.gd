@@ -43,7 +43,7 @@ func _show_toast(text: String) -> void:
 	var toast: PanelContainer = _make_toast_node(text)
 	add_child(toast)
 
-	if _reduced_motion():
+	if ThemeSetup.is_reduced_motion():
 		await get_tree().process_frame
 		toast.queue_free()
 		return
@@ -78,5 +78,4 @@ func _make_toast_node(text: String) -> PanelContainer:
 	return toast
 
 
-func _reduced_motion() -> bool:
-	return ProjectSettings.get_setting("accessibility/reduced_motion", false)
+## Removed: use ThemeSetup.is_reduced_motion() — single source (TD-07).

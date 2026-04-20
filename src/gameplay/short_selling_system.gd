@@ -142,7 +142,9 @@ func close_position(order: Dictionary) -> int:
 	var cover_cost: int = cover_price * pos["quantity"]
 	var pnl: int = (pos["open_price"] - cover_price) * pos["quantity"]
 
-	CurrencySystem.sim_deduct(cover_cost)
+	if not CurrencySystem.sim_deduct(cover_cost):
+		push_error("ShortSellingSystem.close_position: sim_deduct failed for %s (cost=%d, balance=%d)" \
+			% [stock_id, cover_cost, CurrencySystem.get_sim_cash()])
 	CurrencySystem.sim_add(maxi(0, pos["margin_deposited"] + pnl))
 
 	_positions.erase(stock_id)
@@ -194,7 +196,9 @@ func liquidate_all_for_season_end() -> void:
 		var pnl: int = (pos["open_price"] - cover_price) * pos["quantity"]
 		var remaining: int = maxi(0, pos["margin_deposited"] + pnl)
 
-		CurrencySystem.sim_deduct(cover_cost)
+		if not CurrencySystem.sim_deduct(cover_cost):
+			push_error("ShortSellingSystem.liquidate_all_for_season_end: sim_deduct failed (stock=%s, cost=%d)" \
+				% [stock_id, cover_cost])
 		CurrencySystem.sim_add(remaining)
 		on_short_position_closed.emit(stock_id, pnl)
 
@@ -257,7 +261,9 @@ func _trigger_forced_liquidation(stock_id: String) -> void:
 	var pnl: int = (pos["open_price"] - current_price) * pos["quantity"]
 	var remaining: int = maxi(0, pos["margin_deposited"] + pnl)
 
-	CurrencySystem.sim_deduct(cover_cost)
+	if not CurrencySystem.sim_deduct(cover_cost):
+		push_error("ShortSellingSystem._trigger_forced_liquidation: sim_deduct failed (stock=%s, cost=%d)" \
+			% [stock_id, cover_cost])
 	CurrencySystem.sim_add(remaining)
 	_positions.erase(stock_id)
 

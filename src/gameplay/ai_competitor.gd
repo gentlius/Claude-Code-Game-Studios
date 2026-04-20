@@ -28,11 +28,11 @@ const TIER_COUNT: int = 11
 
 # ── Global Parameters ──
 
-## 시즌 총 거래일 수. game-clock.md SEASON_WEEKS(4) × DAYS_PER_WEEK(5) 와 동기화 필수.
-## Safe range: 10 ~ 40
-const SEASON_DAYS: int = 20
+## 시즌 총 거래일 수 — GameClock 상수에서 파생. 수동 동기화 불필요.
+const SEASON_DAYS: int = GameClock.DAYS_PER_WEEK * GameClock.WEEKS_PER_SEASON
 
-## 전체 AI 참가자 수. SeasonManager.TOTAL_PARTICIPANTS - 1 (플레이어 제외).
+## 전체 AI 참가자 수. SeasonManager.TOTAL_PARTICIPANTS(@export var) − 1 (플레이어 제외).
+## SeasonManager.TOTAL_PARTICIPANTS가 var이므로 const 파생 불가 — _ready()에서 단언 검증.
 const TOTAL_PARTICIPANTS: int = 19999
 
 ## 틱당 처리 참가자 수. GDD §7-1 PARTICIPANTS_PER_TICK.
@@ -117,6 +117,11 @@ var _actual_total: int = 0
 func _ready() -> void:
 	GameClock.on_tick.connect(_on_tick)
 	GameClock.on_market_close.connect(_on_market_close)
+	## TOTAL_PARTICIPANTS는 SeasonManager.TOTAL_PARTICIPANTS(@export var) - 1 과 일치해야 함.
+	## @export var이므로 const 파생 불가 — 런타임 단언으로 동기화 검증.
+	assert(TOTAL_PARTICIPANTS == SeasonManager.TOTAL_PARTICIPANTS - 1,
+		"AiCompetitor.TOTAL_PARTICIPANTS(%d) != SeasonManager.TOTAL_PARTICIPANTS-1(%d). Sync required!" \
+		% [TOTAL_PARTICIPANTS, SeasonManager.TOTAL_PARTICIPANTS - 1])
 
 
 # ── Public API ──

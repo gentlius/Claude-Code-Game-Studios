@@ -10,6 +10,13 @@ extends VBoxContainer
 ## Emitted when the user clicks a stock row.
 signal stock_selected(stock_id: String)
 
+## Row child indices — _create_row() 빌드 순서와 동기화. 변경 시 양쪽 모두 수정.
+const _COL_MARKER: int = 0  ## ▶ selection marker
+const _COL_TICKER: int = 1  ## name(ticker) label
+const _COL_PRICE: int  = 2  ## price label
+const _COL_CHANGE: int = 3  ## change % label
+const _COL_HELD: int   = 4  ## ★ held marker
+
 var _stock_ids: Array[String] = []
 var _row_nodes: Array[HBoxContainer] = []   ## 인덱스 == _stock_ids 인덱스
 var _last_prices: Dictionary = {}           ## stock_id -> int (dirty flag)
@@ -104,9 +111,9 @@ func _update_row(idx: int, stock_id: String, price: int) -> void:
 	var change_pct: float = 0.0
 	if prev_close > 0:
 		change_pct = float(price - prev_close) / float(prev_close) * 100.0
-	(row.get_child(2) as Label).text = FormatUtils.currency(price)
-	_apply_change_label(row.get_child(3) as Label, change_pct)
-	(row.get_child(4) as Label).text = "★" if _held_stocks.has(stock_id) else ""
+	(row.get_child(_COL_PRICE) as Label).text = FormatUtils.currency(price)
+	_apply_change_label(row.get_child(_COL_CHANGE) as Label, change_pct)
+	(row.get_child(_COL_HELD) as Label).text = "★" if _held_stocks.has(stock_id) else ""
 
 
 func _apply_change_label(lbl: Label, change_pct: float) -> void:

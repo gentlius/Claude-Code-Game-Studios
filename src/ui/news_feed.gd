@@ -241,12 +241,56 @@ func _add_news_card(entry: Dictionary, insert_top: bool) -> void:
 
 
 func _create_card(entry: Dictionary) -> PanelContainer:
+	var is_read: bool = entry.get("is_read", false)
+	var is_rumor: bool = entry.get("is_rumor", false)
+
+	var card: PanelContainer = _build_card_container(is_read, is_rumor)
+	var vbox: VBoxContainer = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 2)
+	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(vbox)
+
+	var marker: Label = _build_card_header_row(vbox, entry, is_read, is_rumor)
+	_build_card_meta_row(vbox, entry)
+
+	var body_margin: MarginContainer = _build_card_body(entry)
+	var stocks_margin: MarginContainer
+	var stock_ids: Array[String] = []
+	stocks_margin = _build_card_stocks_section(entry, stock_ids)
+
+	# Click to mark as read + toggle body (add/remove from tree).
+	# _cycle_box[0]: 이 카드 전용 순회 커서.
+	# 관련 종목 없음(0개) → toggle 동작. 1개 이상 → 순회 선택 + 마지막 이후 닫기.
+	# (GDScript 클로저에서 int 값 타입은 변이가 보장되지 않으므로 Array[int] 사용)
+	var _body_ref: MarginContainer = body_margin
+	var _stocks_ref: MarginContainer = stocks_margin
+	var _vbox_ref: VBoxContainer = vbox
+	var _stock_ids: Array[String] = stock_ids
+	var _cycle_box: Array[int] = [0]
+	card.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton:
+			var mb: InputEventMouseButton = event as InputEventMouseButton
+			if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+				card.accept_event()
+				_mark_read(entry, card, marker)
+				if _cycle_box[0] >= max(_stock_ids.size(), 1):
+					_collapse_body(_vbox_ref, _body_ref, _stocks_ref)
+					_cycle_box[0] = 0
+				else:
+					_expand_body(_vbox_ref, _body_ref, _stocks_ref)
+					if _cycle_box[0] < _stock_ids.size():
+						stock_clicked.emit(_stock_ids[_cycle_box[0]])
+					_cycle_box[0] += 1
+	)
+
+	return card
+
+
+## Builds the styled PanelContainer shell for a news card.
+func _build_card_container(is_read: bool, is_rumor: bool) -> PanelContainer:
 	var card: PanelContainer = PanelContainer.new()
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
 	var style: StyleBoxFlat = StyleBoxFlat.new()
-
-	var is_read: bool = entry.get("is_read", false)
-	var is_rumor: bool = entry.get("is_rumor", false)
 	if is_rumor:
 		style.bg_color = RUMOR_BG_COLOR
 	elif is_read:
@@ -258,19 +302,18 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 	style.set_border_width_all(1)
 	style.set_content_margin_all(6)
 	card.add_theme_stylebox_override("panel", style)
+	return card
 
-	var vbox: VBoxContainer = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 2)
-	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card.add_child(vbox)
 
-	# Row 1: [unread marker] [scope badge] [headline]
+## Builds row 1: [unread marker] [scope badge] [headline]. Returns the marker label.
+func _build_card_header_row(
+	vbox: VBoxContainer, entry: Dictionary, is_read: bool, is_rumor: bool
+) -> Label:
 	var row1: HBoxContainer = HBoxContainer.new()
 	row1.add_theme_constant_override("separation", 6)
 	row1.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(row1)
 
-	# Unread marker
 	var marker: Label = Label.new()
 	marker.text = "●" if not is_read else ""
 	marker.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
@@ -278,11 +321,9 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row1.add_child(marker)
 
-	# Scope badge
 	var scope: String = str(entry.get("scope", "MACRO"))
 	var badge: Label = Label.new()
 	var scope_label: String = SCOPE_LABELS.get(scope, scope)
-	# For SECTOR, include sector name if available
 	var target_sector: Variant = entry.get("target_sector")
 	if scope == "SECTOR" and target_sector != null and str(target_sector) != "" and str(target_sector) != "null":
 		scope_label = str(target_sector)
@@ -295,7 +336,6 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row1.add_child(badge)
 
-	# Headline
 	var headline: Label = Label.new()
 	headline.text = str(entry.get("headline", ""))
 	headline.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -304,7 +344,11 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 	ThemeSetup.style_label_primary(headline)
 	row1.add_child(headline)
 
-	# Row 2: [impact hint] | [timestamp]
+	return marker
+
+
+## Builds row 2: [impact hint] [timestamp].
+func _build_card_meta_row(vbox: VBoxContainer, entry: Dictionary) -> void:
 	var row2: HBoxContainer = HBoxContainer.new()
 	row2.add_theme_constant_override("separation", 8)
 	row2.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -341,75 +385,51 @@ func _create_card(entry: Dictionary) -> PanelContainer:
 	ThemeSetup.style_label_dim(tick_lbl)
 	row2.add_child(tick_lbl)
 
-	# Body (expandable — NOT added to tree until clicked)
+
+## Builds the expandable body MarginContainer (NOT added to tree). Returns null if empty.
+func _build_card_body(entry: Dictionary) -> MarginContainer:
 	var body_text: String = str(entry.get("body", ""))
-	var body_margin: MarginContainer = null
-	if not body_text.is_empty():
-		var body_lbl: Label = Label.new()
-		body_lbl.text = "▸ " + body_text
-		body_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
-		body_lbl.add_theme_font_size_override("font_size", 17)
-		body_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		ThemeSetup.style_label_secondary(body_lbl)
-		body_margin = MarginContainer.new()
-		body_margin.add_theme_constant_override("margin_left", 20)
-		body_margin.add_theme_constant_override("margin_top", 4)
-		body_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		body_margin.add_child(body_lbl)
+	if body_text.is_empty():
+		return null
+	var body_lbl: Label = Label.new()
+	body_lbl.text = "▸ " + body_text
+	body_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+	body_lbl.add_theme_font_size_override("font_size", 17)
+	body_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ThemeSetup.style_label_secondary(body_lbl)
+	var body_margin: MarginContainer = MarginContainer.new()
+	body_margin.add_theme_constant_override("margin_left", 20)
+	body_margin.add_theme_constant_override("margin_top", 4)
+	body_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body_margin.add_child(body_lbl)
+	return body_margin
 
-	# Affected stocks (expandable — NOT added to tree until clicked)
+
+## Builds the expandable related-stocks MarginContainer (NOT added to tree).
+## Populates out_stock_ids with the IDs for click-cycling. Returns null if no stocks.
+func _build_card_stocks_section(
+	entry: Dictionary, out_stock_ids: Array[String]
+) -> MarginContainer:
 	var target_stocks: Variant = entry.get("target_stock_ids")
-	var stocks_margin: MarginContainer = null
-	# stock_ids는 클릭 시 순회 선택에 사용 (관련 종목 수 >= 1일 때).
-	var _stock_ids: Array[String] = []
-	if target_stocks is Array and (target_stocks as Array).size() > 0:
-		var names: PackedStringArray = PackedStringArray()
-		for sid: Variant in (target_stocks as Array):
-			var s_id: String = str(sid)
-			_stock_ids.append(s_id)
-			var stock: StockData = StockDatabase.get_stock(s_id)
-			if stock:
-				names.append(stock.get_display_name())
-			else:
-				names.append(s_id)
-		var stocks_lbl: Label = Label.new()
-		stocks_lbl.text = "관련 종목: %s" % ", ".join(names)
-		stocks_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
-		stocks_lbl.add_theme_font_size_override("font_size", 15)
-		stocks_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		ThemeSetup.style_label_dim(stocks_lbl)
-		stocks_margin = MarginContainer.new()
-		stocks_margin.add_theme_constant_override("margin_left", 20)
-		stocks_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		stocks_margin.add_child(stocks_lbl)
-
-	# Click to mark as read + toggle body (add/remove from tree)
-	# 관련 종목 >= 1이면 클릭마다 종목을 순회하여 stock_clicked emit.
-	# _cycle_box는 이 카드 전용 Array 박스 — int를 Array로 감싸 클로저 캡처 보장.
-	# (GDScript 클로저에서 int 값 타입은 변이가 보장되지 않으므로 Array[int] 사용)
-	var _body_ref: MarginContainer = body_margin
-	var _stocks_ref: MarginContainer = stocks_margin
-	var _vbox_ref: VBoxContainer = vbox
-	# _cycle_box[0]: 이 카드 전용 순회 커서.
-	# 관련 종목 없음(0개) → toggle 동작. 1개 이상 → 순회 선택 + 마지막 이후 닫기.
-	var _cycle_box: Array[int] = [0]
-	card.gui_input.connect(func(event: InputEvent) -> void:
-		if event is InputEventMouseButton:
-			var mb: InputEventMouseButton = event as InputEventMouseButton
-			if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
-				card.accept_event()
-				_mark_read(entry, card, marker)
-				if _cycle_box[0] >= max(_stock_ids.size(), 1):
-					_collapse_body(_vbox_ref, _body_ref, _stocks_ref)
-					_cycle_box[0] = 0
-				else:
-					_expand_body(_vbox_ref, _body_ref, _stocks_ref)
-					if _cycle_box[0] < _stock_ids.size():
-						stock_clicked.emit(_stock_ids[_cycle_box[0]])
-					_cycle_box[0] += 1
-	)
-
-	return card
+	if not (target_stocks is Array) or (target_stocks as Array).size() == 0:
+		return null
+	var names: PackedStringArray = PackedStringArray()
+	for sid: Variant in (target_stocks as Array):
+		var s_id: String = str(sid)
+		out_stock_ids.append(s_id)
+		var stock: StockData = StockDatabase.get_stock(s_id)
+		names.append(stock.get_display_name() if stock else s_id)
+	var stocks_lbl: Label = Label.new()
+	stocks_lbl.text = "관련 종목: %s" % ", ".join(names)
+	stocks_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+	stocks_lbl.add_theme_font_size_override("font_size", 15)
+	stocks_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ThemeSetup.style_label_dim(stocks_lbl)
+	var stocks_margin: MarginContainer = MarginContainer.new()
+	stocks_margin.add_theme_constant_override("margin_left", 20)
+	stocks_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stocks_margin.add_child(stocks_lbl)
+	return stocks_margin
 
 
 func _expand_body(vbox: VBoxContainer, body_ctrl: MarginContainer, stocks_ctrl: MarginContainer) -> void:
@@ -425,15 +445,6 @@ func _collapse_body(vbox: VBoxContainer, body_ctrl: MarginContainer, stocks_ctrl
 	if stocks_ctrl != null and stocks_ctrl.get_parent() != null:
 		vbox.remove_child(stocks_ctrl)
 
-
-func _toggle_body(vbox: VBoxContainer, body_ctrl: MarginContainer, stocks_ctrl: MarginContainer) -> void:
-	if body_ctrl == null and stocks_ctrl == null:
-		return
-	var is_expanded: bool = body_ctrl != null and body_ctrl.get_parent() != null
-	if is_expanded:
-		_collapse_body(vbox, body_ctrl, stocks_ctrl)
-	else:
-		_expand_body(vbox, body_ctrl, stocks_ctrl)
 
 
 func _mark_read(entry: Dictionary, card: PanelContainer, marker: Label) -> void:

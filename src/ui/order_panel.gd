@@ -128,7 +128,17 @@ func _build_order_book_section(vbox: VBoxContainer) -> void:
 	ThemeSetup.style_label_secondary(ob_title)
 	_order_book_section.add_child(ob_title)
 
-	# ── 블록 1: OHLCV 행 ──────────────────────────────────────────────
+	_build_ob_ohlcv_block()
+	_build_ob_price_rows()
+	_build_ob_fill_strength_block()
+
+	var sep_end: HSeparator = HSeparator.new()
+	sep_end.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
+	_order_book_section.add_child(sep_end)
+
+
+## 블록 1: OHLCV 행 + 거래량 행. GDD §3-5 블록1.
+func _build_ob_ohlcv_block() -> void:
 	var ohlcv_vbox: VBoxContainer = VBoxContainer.new()
 	ohlcv_vbox.add_theme_constant_override("separation", 1)
 	_order_book_section.add_child(ohlcv_vbox)
@@ -159,10 +169,12 @@ func _build_order_book_section(vbox: VBoxContainer) -> void:
 	sep0.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
 	_order_book_section.add_child(sep0)
 
-	# ── 블록 2: 매도 총잔량 합계 ──────────────────────────────────────
+
+## 블록 2~4: 매도 총잔량 → ask5~ask1 rows → 현재가 구분행 → bid1~bid5 rows → 매수 총잔량.
+## GDD §3-5 블록2~4.
+func _build_ob_price_rows() -> void:
 	_lbl_ask_total = _make_total_label(_order_book_section, true)
 
-	# ── 블록 3: ask5 → ask1 ───────────────────────────────────────────
 	_order_book_rows.clear()
 	for display_rank: int in range(5):
 		var row: HBoxContainer = _make_order_book_row(true, display_rank)
@@ -191,16 +203,17 @@ func _build_order_book_section(vbox: VBoxContainer) -> void:
 	ThemeSetup.style_label_secondary(_lbl_ob_cur_change)
 	cur_row.add_child(_lbl_ob_cur_change)
 
-	# bid1 → bid5
 	for display_rank: int in range(5):
 		var row: HBoxContainer = _make_order_book_row(false, display_rank)
 		_order_book_section.add_child(row)
 		_order_book_rows.append(row)
 
-	# ── 블록 4: 매수 총잔량 합계 ──────────────────────────────────────
 	_lbl_bid_total = _make_total_label(_order_book_section, false)
 
-	# ── 블록 5: 체결강도 ──────────────────────────────────────────────
+
+## 블록 5: 체결강도 행 레이아웃 (키 레이블 + 바 컨테이너 + pct + side 레이블).
+## GDD §3-5 블록5. 바 내부 위젯은 _build_ob_fill_strength_bar()에서 생성.
+func _build_ob_fill_strength_block() -> void:
 	var fs_row: HBoxContainer = HBoxContainer.new()
 	fs_row.add_theme_constant_override("separation", 3)
 	_order_book_section.add_child(fs_row)
@@ -215,7 +228,28 @@ func _build_order_book_section(vbox: VBoxContainer) -> void:
 	_fill_strength_container.custom_minimum_size = Vector2(0, 12)
 	_fill_strength_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	fs_row.add_child(_fill_strength_container)
+	_build_ob_fill_strength_bar()
 
+	_lbl_fill_pct = Label.new()
+	_lbl_fill_pct.text = "-"
+	_lbl_fill_pct.add_theme_font_size_override("font_size", 11)
+	_lbl_fill_pct.custom_minimum_size.x = 42
+	_lbl_fill_pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	ThemeSetup.style_label_primary(_lbl_fill_pct)
+	fs_row.add_child(_lbl_fill_pct)
+
+	_lbl_fill_side = Label.new()
+	_lbl_fill_side.text = ""
+	_lbl_fill_side.add_theme_font_size_override("font_size", 11)
+	_lbl_fill_side.custom_minimum_size.x = 40
+	ThemeSetup.style_label_secondary(_lbl_fill_side)
+	fs_row.add_child(_lbl_fill_side)
+	# 블록 6: 52주 — Sprint 9 (숨김)
+	# 생략: StockData.week52_high/low 미구현
+
+
+## 체결강도 바 내부: 회색 배경 Panel + 채움 Panel. _fill_strength_container에 추가.
+func _build_ob_fill_strength_bar() -> void:
 	var fs_bg: Panel = Panel.new()
 	fs_bg.anchor_right = 1.0
 	fs_bg.anchor_bottom = 1.0
@@ -235,28 +269,6 @@ func _build_order_book_section(vbox: VBoxContainer) -> void:
 	fs_fill_style.bg_color = ThemeSetup.LOSS_BLUE.darkened(0.3)
 	_fill_strength_fill.add_theme_stylebox_override("panel", fs_fill_style)
 	_fill_strength_container.add_child(_fill_strength_fill)
-
-	_lbl_fill_pct = Label.new()
-	_lbl_fill_pct.text = "-"
-	_lbl_fill_pct.add_theme_font_size_override("font_size", 11)
-	_lbl_fill_pct.custom_minimum_size.x = 42
-	_lbl_fill_pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	ThemeSetup.style_label_primary(_lbl_fill_pct)
-	fs_row.add_child(_lbl_fill_pct)
-
-	_lbl_fill_side = Label.new()
-	_lbl_fill_side.text = ""
-	_lbl_fill_side.add_theme_font_size_override("font_size", 11)
-	_lbl_fill_side.custom_minimum_size.x = 40
-	ThemeSetup.style_label_secondary(_lbl_fill_side)
-	fs_row.add_child(_lbl_fill_side)
-
-	# 블록 6: 52주 — Sprint 9 (숨김)
-	# 생략: StockData.week52_high/low 미구현
-
-	var sep_end: HSeparator = HSeparator.new()
-	sep_end.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
-	_order_book_section.add_child(sep_end)
 
 
 func _make_ohlcv_label(parent: HBoxContainer, key: String) -> Label:
@@ -730,61 +742,46 @@ func _build_st_section(vbox: VBoxContainer) -> void:
 	ThemeSetup.style_label_secondary(title)
 	_st_section.add_child(title)
 
-	# 손절가 row
-	var sl_row: HBoxContainer = HBoxContainer.new()
-	sl_row.add_theme_constant_override("separation", 2)
-	_st_section.add_child(sl_row)
-	var sl_lbl: Label = Label.new()
-	sl_lbl.text = tr("손절")
-	sl_lbl.add_theme_font_size_override("font_size", 11)
-	sl_lbl.custom_minimum_size.x = 28
-	ThemeSetup.style_label_secondary(sl_lbl)
-	sl_row.add_child(sl_lbl)
-	_spin_stop_loss = SpinBox.new()
-	_spin_stop_loss.min_value = 0
-	_spin_stop_loss.max_value = 99999999
-	_spin_stop_loss.step = 100
-	_spin_stop_loss.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ThemeSetup.apply_spinbox_theme(_spin_stop_loss)
-	sl_row.add_child(_spin_stop_loss)
+	_build_st_spinbox_rows()
+	_build_st_button_row()
 
-	# 익절가 row
-	var tp_row: HBoxContainer = HBoxContainer.new()
-	tp_row.add_theme_constant_override("separation", 2)
-	_st_section.add_child(tp_row)
-	var tp_lbl: Label = Label.new()
-	tp_lbl.text = tr("익절")
-	tp_lbl.add_theme_font_size_override("font_size", 11)
-	tp_lbl.custom_minimum_size.x = 28
-	ThemeSetup.style_label_secondary(tp_lbl)
-	tp_row.add_child(tp_lbl)
-	_spin_take_profit = SpinBox.new()
-	_spin_take_profit.min_value = 0
-	_spin_take_profit.max_value = 99999999
-	_spin_take_profit.step = 100
-	_spin_take_profit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ThemeSetup.apply_spinbox_theme(_spin_take_profit)
-	tp_row.add_child(_spin_take_profit)
+	var sep: HSeparator = HSeparator.new()
+	sep.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
+	_st_section.add_child(sep)
 
-	# 수량 row
-	var qty_row: HBoxContainer = HBoxContainer.new()
-	qty_row.add_theme_constant_override("separation", 2)
-	_st_section.add_child(qty_row)
-	var qty_lbl: Label = Label.new()
-	qty_lbl.text = tr("수량")
-	qty_lbl.add_theme_font_size_override("font_size", 11)
-	qty_lbl.custom_minimum_size.x = 28
-	ThemeSetup.style_label_secondary(qty_lbl)
-	qty_row.add_child(qty_lbl)
-	_spin_st_qty = SpinBox.new()
-	_spin_st_qty.min_value = 1
-	_spin_st_qty.max_value = 99999
-	_spin_st_qty.step = 1
-	_spin_st_qty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ThemeSetup.apply_spinbox_theme(_spin_st_qty)
-	qty_row.add_child(_spin_st_qty)
 
-	# 설정/해제 버튼 row
+## 손절가 / 익절가 / 수량 SpinBox 행 3개. GDD stop-loss-take-profit.md.
+func _build_st_spinbox_rows() -> void:
+	_spin_stop_loss  = _make_st_spinbox_row(tr("손절"), 0,  99999999, 100)
+	_spin_take_profit = _make_st_spinbox_row(tr("익절"), 0,  99999999, 100)
+	_spin_st_qty     = _make_st_spinbox_row(tr("수량"), 1,  99999,    1)
+
+
+## Creates a labeled SpinBox row, adds it to _st_section, and returns the SpinBox.
+func _make_st_spinbox_row(
+	label_text: String, min_val: float, max_val: float, step_val: float
+) -> SpinBox:
+	var row: HBoxContainer = HBoxContainer.new()
+	row.add_theme_constant_override("separation", 2)
+	_st_section.add_child(row)
+	var lbl: Label = Label.new()
+	lbl.text = label_text
+	lbl.add_theme_font_size_override("font_size", 11)
+	lbl.custom_minimum_size.x = 28
+	ThemeSetup.style_label_secondary(lbl)
+	row.add_child(lbl)
+	var spin: SpinBox = SpinBox.new()
+	spin.min_value = min_val
+	spin.max_value = max_val
+	spin.step = step_val
+	spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ThemeSetup.apply_spinbox_theme(spin)
+	row.add_child(spin)
+	return spin
+
+
+## 설정/해제 버튼 행 + 에러 레이블. GDD stop-loss-take-profit.md.
+func _build_st_button_row() -> void:
 	var btn_row: HBoxContainer = HBoxContainer.new()
 	btn_row.add_theme_constant_override("separation", 2)
 	_st_section.add_child(btn_row)
@@ -809,10 +806,6 @@ func _build_st_section(vbox: VBoxContainer) -> void:
 	_lbl_st_error.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
 	_lbl_st_error.autowrap_mode = TextServer.AUTOWRAP_WORD
 	_st_section.add_child(_lbl_st_error)
-
-	var sep: HSeparator = HSeparator.new()
-	sep.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
-	_st_section.add_child(sep)
 
 
 ## Refreshes S/T section visibility and SpinBox values for the current stock.
@@ -999,7 +992,7 @@ func _update_order_panel_price() -> void:
 	if _selected_stock_id == "":
 		return
 	var price: int = PriceEngine.get_current_price(_selected_stock_id)
-	_lbl_order_current_price.text = "현재가 ₩%s" % FormatUtils.number(price)
+	_lbl_order_current_price.text = tr("현재가 ₩%s") % FormatUtils.number(price)
 	_update_estimated_amount()
 
 
@@ -1007,7 +1000,7 @@ func _update_estimated_amount() -> void:
 	var qty: int = int(_spin_quantity.value)
 	var ref_price: int = int(_spin_limit_price.value) if _order_type == "LIMIT" \
 		else PriceEngine.get_current_price(_selected_stock_id)
-	_lbl_estimated_amount.text = "예상 금액: ₩%s" % FormatUtils.number(qty * ref_price)
+	_lbl_estimated_amount.text = tr("예상 금액: ₩%s") % FormatUtils.number(qty * ref_price)
 
 
 func _calculate_max_quantity() -> void:
@@ -1077,7 +1070,7 @@ func _update_pending_orders() -> void:
 	var pending: Array[Dictionary] = OrderEngine.get_pending_orders()
 	if pending.size() == 0:
 		var lbl: Label = Label.new()
-		lbl.text = "미체결 주문 없음"
+		lbl.text = tr("미체결 주문 없음")
 		lbl.add_theme_color_override("font_color", ThemeSetup.TEXT_DIM)
 		_pending_orders_container.add_child(lbl)
 		return

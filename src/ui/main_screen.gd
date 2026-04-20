@@ -140,7 +140,15 @@ func _build_ui() -> void:
 	vbox.add_theme_constant_override("separation", 0)
 	add_child(vbox)
 
-	# ── Tab Bar ──
+	_build_tab_bar(vbox)
+
+	var content: Control = _build_content_area(vbox)
+	_build_tab_scenes(content)
+	_build_tab_pause_banner()
+
+
+## Builds the top tab bar (F1/F2/F3 tabs, settings button, F4 exit button).
+func _build_tab_bar(vbox: VBoxContainer) -> void:
 	var tab_bar_panel: PanelContainer = PanelContainer.new()
 	var tab_bar_style: StyleBoxFlat = StyleBoxFlat.new()
 	tab_bar_style.bg_color = ThemeSetup.LAYOUT_PANEL
@@ -159,7 +167,12 @@ func _build_ui() -> void:
 	_tab_bar.add_child(_btn_f2)
 	_tab_bar.add_child(_btn_f3)
 
-	# ⚙ 설정 버튼 — 탭이 아닌 오버레이 토글 버튼
+	_build_settings_button()
+	_build_f4_exit_button()
+
+
+## Builds and adds the settings (⚙) overlay toggle button to _tab_bar.
+func _build_settings_button() -> void:
 	_btn_settings = Button.new()
 	_btn_settings.text = tr("⚙")
 	_btn_settings.focus_mode = Control.FOCUS_NONE
@@ -180,7 +193,9 @@ func _build_ui() -> void:
 	_btn_settings.pressed.connect(_toggle_settings)
 	_tab_bar.add_child(_btn_settings)
 
-	# F4 나가기 — 우측 정렬, 탭이 아닌 씬 전환 버튼
+
+## Builds and adds the F4 exit button (right-aligned) to _tab_bar.
+func _build_f4_exit_button() -> void:
 	var spacer: Control = Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_tab_bar.add_child(spacer)
@@ -204,12 +219,18 @@ func _build_ui() -> void:
 	_btn_f4_exit.pressed.connect(_request_exit_to_start)
 	_tab_bar.add_child(_btn_f4_exit)
 
-	# ── Tab Content Container ──
+
+## Creates and adds the full-screen content container to vbox. Returns it.
+func _build_content_area(vbox: VBoxContainer) -> Control:
 	var content: Control = Control.new()
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_child(content)
+	return content
 
+
+## Instantiates F1/F2/F3 tab scenes and the settings overlay into content.
+func _build_tab_scenes(content: Control) -> void:
 	# F1 — TradingScreen
 	var trading_scene: PackedScene = load("res://src/ui/TradingScreen.tscn")
 	_trading_screen = trading_scene.instantiate()
@@ -238,13 +259,15 @@ func _build_ui() -> void:
 	_growth_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	content.add_child(_growth_screen)
 
-	# ── Settings Overlay (GDD: settings-screen.md) ──
+	# Settings Overlay (GDD: settings-screen.md)
 	_settings_screen = SettingsScreen.new()
 	_settings_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_settings_screen.visible = false
 	content.add_child(_settings_screen)
 
-	# ── Tab Pause Banner (ADR-006) ──
+
+## Builds the transparent pause banner overlay (ADR-006). Added directly to self.
+func _build_tab_pause_banner() -> void:
 	_tab_pause_banner = Panel.new()
 	_tab_pause_banner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_tab_pause_banner.visible = false

@@ -33,8 +33,13 @@ var _fill_ratio: float = 0.0
 
 func _ready() -> void:
 	add_theme_constant_override("separation", 6)
+	_build_ui()
+	_connect_signals()
+	update_display()
 
-	# Separator before XP section
+
+## Builds all child nodes: separator, level badge, XP bar, SP badge, float container.
+func _build_ui() -> void:
 	var sep: VSeparator = VSeparator.new()
 	sep.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
 	add_child(sep)
@@ -45,7 +50,25 @@ func _ready() -> void:
 	_lbl_level.add_theme_color_override("font_color", GOLD_COLOR)
 	add_child(_lbl_level)
 
-	# Custom progress bar (Panel background + ColorRect fill) for precise control
+	_build_progress_bar()
+
+	# XP text — current/max inside the bar
+	_lbl_xp_text = Label.new()
+	_lbl_xp_text.add_theme_font_size_override("font_size", 10)
+	_lbl_xp_text.add_theme_color_override("font_color", GOLD_DIM)
+	add_child(_lbl_xp_text)
+
+	_build_sp_badge()
+
+	# Floating text container (positioned above this widget)
+	_float_container = Control.new()
+	_float_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_float_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(_float_container)
+
+
+## Builds the custom progress bar (Panel bg + ColorRect fill).
+func _build_progress_bar() -> void:
 	var bar_container: Control = Control.new()
 	bar_container.custom_minimum_size = Vector2(120, 12)
 	bar_container.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -71,13 +94,9 @@ func _ready() -> void:
 	# Round corners via clip (visual only — the bg panel provides the rounded border)
 	bar_container.add_child(_progress_fill)
 
-	# XP text — current/max inside the bar
-	_lbl_xp_text = Label.new()
-	_lbl_xp_text.add_theme_font_size_override("font_size", 10)
-	_lbl_xp_text.add_theme_color_override("font_color", GOLD_DIM)
-	add_child(_lbl_xp_text)
 
-	# SP badge (clickable) — gold accent with pulse animation
+## Builds the SP skill-point badge button.
+func _build_sp_badge() -> void:
 	_btn_sp_badge = Button.new()
 	_btn_sp_badge.add_theme_font_size_override("font_size", 12)
 	_btn_sp_badge.visible = false
@@ -93,18 +112,12 @@ func _ready() -> void:
 	_btn_sp_badge.add_theme_color_override("font_hover_color", GOLD_BRIGHT)
 	add_child(_btn_sp_badge)
 
-	# Floating text container (positioned above this widget)
-	_float_container = Control.new()
-	_float_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_float_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(_float_container)
 
-	# Connect signals
+## Connects XpSystem signals and tree_exiting cleanup.
+func _connect_signals() -> void:
 	XpSystem.on_xp_gained.connect(_on_xp_gained)
 	XpSystem.on_level_up.connect(_on_level_up)
 	tree_exiting.connect(_disconnect_signals)
-
-	update_display()
 
 
 # ── Public API ──
@@ -134,7 +147,7 @@ func update_display() -> void:
 
 ## Animate XP bar fill from previous value to current (after settlement popup).
 func animate_xp_gain() -> void:
-	if _reduced_motion():
+	if ThemeSetup.is_reduced_motion():
 		update_display()
 		return
 	var target: float = XpSystem.get_xp_progress()
@@ -149,7 +162,7 @@ func animate_xp_gain() -> void:
 
 func _on_xp_gained(amount: int, _new_total: int, _source: String) -> void:
 	_spawn_float_text("+%d XP" % amount)
-	if _reduced_motion():
+	if ThemeSetup.is_reduced_motion():
 		update_display()
 		return
 	# Animate bar fill
@@ -165,7 +178,7 @@ func _on_xp_gained(amount: int, _new_total: int, _source: String) -> void:
 func _on_level_up(new_level: int, _skill_points: int) -> void:
 	_lbl_level.text = "Lv.%d" % new_level
 	update_display()
-	if _reduced_motion():
+	if ThemeSetup.is_reduced_motion():
 		return
 	# Level badge bounce animation
 	var tween: Tween = create_tween()
@@ -207,7 +220,7 @@ func _update_sp_badge(sp: int) -> void:
 		if not _sp_visible:
 			_sp_visible = true
 			_btn_sp_badge.visible = true
-			if _reduced_motion():
+			if ThemeSetup.is_reduced_motion():
 				return
 			# Pulse animation on first appear
 			_btn_sp_badge.modulate.a = 0.0
@@ -220,10 +233,6 @@ func _update_sp_badge(sp: int) -> void:
 	else:
 		_btn_sp_badge.visible = false
 		_sp_visible = false
-
-
-func _reduced_motion() -> bool:
-	return ProjectSettings.get_setting("accessibility/reduced_motion", false)
 
 
 func _disconnect_signals() -> void:
@@ -242,7 +251,7 @@ func _spawn_float_text(text: String) -> void:
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_float_container.add_child(lbl)
 
-	if _reduced_motion():
+	if ThemeSetup.is_reduced_motion():
 		lbl.queue_free()
 		return
 

@@ -1240,7 +1240,10 @@ func _update_order_books(old_prices: Dictionary) -> void:
 			ORDER_BOOK_VOLUME_FACTOR_MIN, ORDER_BOOK_VOLUME_FACTOR_MAX
 		)
 		var base_qty: float = _order_book_base_qty(vol)
-		for rank: int in range(ask_levels.size()):
+		## while loop — remove_at(rank) shifts later elements down; don't increment rank
+		## so the element that slid into this position is processed next (fix: for-range skip bug).
+		var rank: int = 0
+		while rank < ask_levels.size():
 			var level: Dictionary = ask_levels[rank]
 			var base_q: float = base_qty * LEVEL_WEIGHT[mini(rank, ORDER_BOOK_LEVELS - 1)]
 			var inflow: int = int(base_q * ORDER_BOOK_INFLOW_RATE * volume_factor * _rng.randf_range(0.5, 1.5))
@@ -1249,7 +1252,10 @@ func _update_order_books(old_prices: Dictionary) -> void:
 			if level["qty"] == 0:
 				ask_levels.remove_at(rank)
 				_add_far_level(ask_levels, "buy", book, vol, prev_close)
-		for rank: int in range(bid_levels.size()):
+			else:
+				rank += 1
+		rank = 0
+		while rank < bid_levels.size():
 			var level: Dictionary = bid_levels[rank]
 			var base_q: float = base_qty * LEVEL_WEIGHT[mini(rank, ORDER_BOOK_LEVELS - 1)]
 			var inflow: int = int(base_q * ORDER_BOOK_INFLOW_RATE * volume_factor * _rng.randf_range(0.5, 1.5))
@@ -1258,6 +1264,8 @@ func _update_order_books(old_prices: Dictionary) -> void:
 			if level["qty"] == 0:
 				bid_levels.remove_at(rank)
 				_add_far_level(bid_levels, "sell", book, vol, prev_close)
+			else:
+				rank += 1
 
 
 ## Compute base qty per level from daily volume profile (GDD §4-1).

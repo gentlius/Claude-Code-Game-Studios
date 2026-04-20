@@ -578,8 +578,11 @@ func _fire_event_from_slot(scope: String, impact: String, tick: int) -> void:
 
 # ── S3 Rumor Channel (GDD Rule 5-4, F6) ──
 
-## Number of ticks a rumor leads the real event. GDD F6: 15분 × 4TPM = 60틱.
-const RUMOR_ADVANCE_TICKS: int = 60
+## Number of ticks a rumor leads the real event.
+## Derived at runtime: SkillTree.RUMOR_LEAD_MINUTES × GameClock.TICKS_PER_MINUTE.
+## (SkillTree.RUMOR_LEAD_MINUTES is @export var — cannot be used in a GDScript const.)
+func _get_rumor_advance_ticks() -> int:
+	return SkillTree.RUMOR_LEAD_MINUTES * GameClock.TICKS_PER_MINUTE
 
 ## Direction accuracy: 70% chance rumor direction matches real event (GDD F6).
 const RUMOR_ACCURACY: float = 0.70
@@ -598,7 +601,7 @@ func _schedule_fake_rumors() -> void:
 
 ## Emits on_rumor_hint if S3 is unlocked and the event's impact tier qualifies.
 ## Called at the end of _fire_event_from_slot() for each real intra-day event.
-## GDD F6: rumor_tick = event_tick - RUMOR_ADVANCE_TICKS (clamped to 0).
+## GDD F6: rumor_tick = event_tick - _get_rumor_advance_ticks() (clamped to 0).
 func _emit_rumor_if_eligible(
 	news_entry: Dictionary, template: Dictionary, real_direction: int, event_tick: int
 ) -> void:
@@ -625,13 +628,13 @@ func _emit_rumor_if_eligible(
 
 	var rumor_entry: Dictionary = {
 		"headline": rumor_headline,
-		"body": "S3 루머 채널: 이벤트 발생 약 %d틱 전 힌트. 방향 및 규모 불확실." % RUMOR_ADVANCE_TICKS,
+		"body": "S3 루머 채널: 이벤트 발생 약 %d틱 전 힌트. 방향 및 규모 불확실." % _get_rumor_advance_ticks(),
 		"scope": scope,
 		"impact_tier": impact_tier,
 		"direction": rumor_direction,
 		"is_rumor": true,
 		"is_fake": false,
-		"display_tick": maxi(0, event_tick - RUMOR_ADVANCE_TICKS),
+		"display_tick": maxi(0, event_tick - _get_rumor_advance_ticks()),
 		"day": GameClock.get_current_day(),
 	}
 	on_rumor_hint.emit(rumor_entry)
@@ -1160,11 +1163,13 @@ func _on_circuit_breaker(stage: int, halt_ticks: int) -> void:
 	var cb_body: String
 	if stage == 1:
 		var halt_min: int = halt_ticks / GameClock.TICKS_PER_MINUTE
-		headline = "🚨 [CB 1단계] 시장 지수 -8%% — %d분 전종목 거래정지" % halt_min
-		cb_body = "시장 지수가 전일 대비 8% 이상 하락해 서킷브레이커 1단계가 발동됐다. 전 종목 " + str(halt_min) + "분간 거래가 정지된다."
+		var cb1_pct: int = int(absf(PriceEngine.CB_STAGE1_PCT) * 100)
+		headline = "🚨 [CB 1단계] 시장 지수 -%d%% — %d분 전종목 거래정지" % [cb1_pct, halt_min]
+		cb_body = "시장 지수가 전일 대비 %d%% 이상 하락해 서킷브레이커 1단계가 발동됐다. 전 종목 %d분간 거래가 정지된다." % [cb1_pct, halt_min]
 	else:
-		headline = "🚨 [CB 2단계] 시장 지수 -15% — 당일 장 조기 마감"
-		cb_body = "시장 지수가 전일 대비 15% 이상 하락해 서킷브레이커 2단계가 발동됐다. 당일 장이 즉시 마감된다."
+		var cb2_pct: int = int(absf(PriceEngine.CB_STAGE2_PCT) * 100)
+		headline = "🚨 [CB 2단계] 시장 지수 -%d%% — 당일 장 조기 마감" % cb2_pct
+		cb_body = "시장 지수가 전일 대비 %d%% 이상 하락해 서킷브레이커 2단계가 발동됐다. 당일 장이 즉시 마감된다." % cb2_pct
 	var entry: Dictionary = {
 		"headline": headline,
 		"body": cb_body,

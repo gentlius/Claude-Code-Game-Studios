@@ -69,8 +69,8 @@ func test_new_game_deposit_is_zero_after_reset() -> void:
 	# 새 게임 리셋
 	CurrencySystem.reset()
 
-	assert_eq(CurrencySystem.get_deposit(), 0,
-		"reset() 후 deposit = 0 (이전 게임 예수금 잔존 없음)")
+	assert_eq(CurrencySystem.get_sim_cash(), 0,
+		"reset() 후 sim_cash = 0 (이전 게임 예수금 잔존 없음)")
 
 
 # ── 시즌 시작 후 자산 상태 ───────────────────────────────────────────

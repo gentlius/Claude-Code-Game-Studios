@@ -9,7 +9,6 @@ extends GutTest
 func test_currency_system_api():
 	assert_true(CurrencySystem.has_method("init_first_season"), "init_first_season 존재")
 	assert_true(CurrencySystem.has_method("get_sim_cash"),      "get_sim_cash 존재")
-	assert_true(CurrencySystem.has_method("get_deposit"),       "get_deposit 존재")
 	assert_true(CurrencySystem.has_method("sim_deduct"),        "sim_deduct 존재")
 	assert_true(CurrencySystem.has_method("sim_add"),           "sim_add 존재")
 	assert_true(CurrencySystem.has_method("settle_to_cash"),    "settle_to_cash 존재")
@@ -314,6 +313,14 @@ func test_leverage_manager_signals():
 	assert_true("on_margin_call" in signal_names,                "on_margin_call 시그널 존재")
 	assert_true("on_leverage_forced_liquidation" in signal_names, "on_leverage_forced_liquidation 시그널 존재")
 	assert_true("on_leverage_position_closed" in signal_names,   "on_leverage_position_closed 시그널 존재")
+
+
+# ── AudioManager ─────────────────────────────────────────────────────
+## TD-CR-22: BGM/SFX 독립 버스 볼륨 제어 API
+
+func test_audio_manager_bus_volume_api():
+	assert_true(AudioManager.has_method("set_bgm_volume"), "set_bgm_volume 존재")
+	assert_true(AudioManager.has_method("set_sfx_volume"), "set_sfx_volume 존재")
 
 
 # ── SaveSystem ───────────────────────────────────────────────────────

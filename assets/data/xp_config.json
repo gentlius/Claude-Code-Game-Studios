@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "baseDailyXp": 30,
+  "baseSeasonXp": 200,
+  "returnXpScale": 10,
+  "baseLevelXp": 100,
+  "levelExponent": 1.5,
+  "completionBonusXp": 20,
+  "completionMinTrades": 5,
+  "rankXpTable": [500, 350, 250, 150, 150, 50],
+  "dailyReturnMultipliers": [
+    [3.0,  3.0],
+    [1.0,  2.0],
+    [0.0,  1.5],
+    [-1.0, 1.0],
+    ["-Inf", 0.5]
+  ]
+}

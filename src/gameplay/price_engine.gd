@@ -221,6 +221,7 @@ var _vi_states: Dictionary = {}  ## stock_id -> {halt_remaining: int, count_toda
 var _cb_stage: int = 0  ## 0=none, 1=stage1 active, 2=stage2 (early close)
 var _cb_halt_remaining: int = 0  ## Stage 1 remaining halt ticks
 var _player_pressure: Dictionary = {}  ## stock_id -> float; pending price delta from player fills (ADR-019)
+var _old_prices: Dictionary = {}       ## pre-allocated: stock_id -> int. Reused each tick (TD-CR-07)
 
 # ── Lifecycle ──
 
@@ -657,9 +658,9 @@ func process_tick(tick_number: int, _day: int, _week: int) -> void:
 		return
 
 	# Capture old prices before price updates for order book re-anchoring (GDD order-book.md §3-2)
-	var old_prices: Dictionary = {}
+	_old_prices.clear()
 	for stock_id: String in _stock_states:
-		old_prices[stock_id] = _stock_states[stock_id].get("current_price", 0)
+		_old_prices[stock_id] = _stock_states[stock_id].get("current_price", 0)
 
 	for stock_id: String in _stock_states:
 		# VI halt check (GDD Rule 2-4)
@@ -684,7 +685,7 @@ func process_tick(tick_number: int, _day: int, _week: int) -> void:
 			_check_vi(stock_id)
 
 	# Update order books after all prices are confirmed (GDD order-book.md §3-2)
-	_update_order_books(old_prices)
+	_update_order_books(_old_prices)
 
 	_update_index()
 	_check_circuit_breaker()
@@ -822,14 +823,19 @@ func _drift_intensity(deviation_ratio: float) -> float:
 func _compute_event_delta(
 	s: Dictionary, tick_events: Array
 ) -> Dictionary:
-	var event_delta: float = 0.0
-	var forced_breakout: int = -1
+	var result: Dictionary = {"delta": 0.0, "forced_breakout": -1}
+	_apply_new_events(s, tick_events, result)
+	_apply_ongoing_gradual_events(s, result)
+	return result
+
+
+## Apply newly arriving events this tick; mutates result["delta"] and result["forced_breakout"].
+func _apply_new_events(s: Dictionary, tick_events: Array, result: Dictionary) -> void:
 	var vol: int = s["volatility_profile"]
 	var macro_sens: float = s["macro_sensitivity"]
 	var sector_sens: float = s["sector_sensitivity"]
 	var gradual_events: Array = s["gradual_events"]
 
-	# Process new events
 	for event: MarketEvent in tick_events:
 		var sensitivity: float
 		match event.scope:
@@ -844,12 +850,9 @@ func _compute_event_delta(
 		var actual: float = clampf(raw, -max_single_impact, max_single_impact)
 
 		if event.event_type == MarketEvent.EventType.INSTANT_SHOCK:
-			event_delta += actual
+			result["delta"] += actual
 			if absf(actual) >= breakout_force_threshold:
-				if actual > 0:
-					forced_breakout = MarkovState.BREAKOUT_UP
-				else:
-					forced_breakout = MarkovState.BREAKOUT_DOWN
+				result["forced_breakout"] = MarkovState.BREAKOUT_UP if actual > 0 else MarkovState.BREAKOUT_DOWN
 
 		elif event.event_type == MarketEvent.EventType.GRADUAL_SHIFT:
 			var decay_rate: float = 0.0
@@ -864,22 +867,23 @@ func _compute_event_delta(
 				"decay_rate": decay_rate,
 			}
 			# First tick contribution
-			event_delta += _gradual_tick_impact(ge)
+			result["delta"] += _gradual_tick_impact(ge)
 			ge["remaining_ticks"] -= 1
 			if ge["remaining_ticks"] > 0:
 				gradual_events.append(ge)
 
-	# Process ongoing gradual events
+
+## Advance ongoing gradual events; mutates result["delta"] and prunes exhausted entries.
+func _apply_ongoing_gradual_events(s: Dictionary, result: Dictionary) -> void:
+	var gradual_events: Array = s["gradual_events"]
 	var still_active: Array = []
 	for ge: Dictionary in gradual_events:
 		if ge["remaining_ticks"] > 0:
-			event_delta += _gradual_tick_impact(ge)
+			result["delta"] += _gradual_tick_impact(ge)
 			ge["remaining_ticks"] -= 1
 			if ge["remaining_ticks"] > 0:
 				still_active.append(ge)
 	s["gradual_events"] = still_active
-
-	return {"delta": event_delta, "forced_breakout": forced_breakout}
 
 
 ## Calculate per-tick contribution of a gradual event.
@@ -1003,7 +1007,14 @@ func get_cb_stage() -> int:
 
 func _end_trading_day() -> void:
 	_engine_state = EngineState.END_OF_DAY
+	_generate_daily_ohlcv()
+	_reset_order_books()
+	_reset_vi_and_circuit_breaker()
+	_prev_day_index = _current_index
 
+
+## Build OHLCV candle from today's tick arrays and append to each stock's history.
+func _generate_daily_ohlcv() -> void:
 	for stock_id: String in _stock_states:
 		var s: Dictionary = _stock_states[stock_id]
 		var prices: Array[int] = s["tick_prices"]
@@ -1032,14 +1043,13 @@ func _end_trading_day() -> void:
 			total_vol += v
 
 		var close_price: int = day_prices[day_prices.size() - 1]
-		var ohlcv: Dictionary = {
+		s["ohlcv_daily"].append({
 			"open": day_prices[0],
 			"high": high,
 			"low": low,
 			"close": close_price,
 			"volume": total_vol,
-		}
-		s["ohlcv_daily"].append(ohlcv)
+		})
 
 		# Update prev_day_close for next day's daily limit calculation
 		s["prev_day_close"] = close_price
@@ -1050,10 +1060,15 @@ func _end_trading_day() -> void:
 		# chart_renderer는 MARKET_OPEN마다 _aggregate_candles()로 전체 재집계하여
 		# 1분/5분/15분봉에서 과거 일자 스크롤을 지원한다.
 
-	# Clear order books at market close — KRX 미체결 잔량 장 마감 시 전량 초기화 (GDD order-book.md §3-1)
+
+## Clear order books at market close — KRX 미체결 잔량 장 마감 시 전량 초기화 (GDD order-book.md §3-1)
+func _reset_order_books() -> void:
 	for stock_id: String in _stock_states:
 		_stock_states[stock_id]["order_book"] = {"ask": [], "bid": []}
 
+
+## Reset VI daily counters and circuit breaker state for the next trading day.
+func _reset_vi_and_circuit_breaker() -> void:
 	# Reset VI daily counters (GDD Rule 2-4: max 1 per day resets each day)
 	for stock_id: String in _vi_states:
 		_vi_states[stock_id]["count_today"] = 0
@@ -1063,9 +1078,6 @@ func _end_trading_day() -> void:
 	# Reset circuit breaker for next day (GDD Rule 2-5)
 	_cb_stage = 0
 	_cb_halt_remaining = 0
-
-	# Save end-of-day index
-	_prev_day_index = _current_index
 
 # ── Order Book (GDD order-book.md) ──
 
@@ -1383,68 +1395,85 @@ func _build_transition_matrix(
 
 	var matrix: Array = []
 	for i: int in range(7):
-		var row: Array[float] = []
-		for j: int in range(7):
-			row.append(TRANSITION_MATRIX[i][j])
-
-		# Step 1: Scale self-transition
-		var adjusted_self: float = minf(row[i] * self_scale, 0.98)
-
-		# Step 2: Scale breakout transitions
-		var breakout_indices: Array[int] = []
-		for bi: int in [5, 6]:
-			if bi != i:
-				breakout_indices.append(bi)
-
-		var breakout_original: float = 0.0
-		for bi: int in breakout_indices:
-			breakout_original += row[bi]
-
-		var remaining: float = 1.0 - adjusted_self
-		var breakout_adjusted: float = minf(breakout_original * breakout_scale, remaining * 0.5)
-
-		if breakout_indices.size() == 2 and breakout_original > 0.0:
-			var ratio: float = row[5] / breakout_original
-			row[5] = breakout_adjusted * ratio
-			row[6] = breakout_adjusted * (1.0 - ratio)
-		elif breakout_indices.size() == 1:
-			row[breakout_indices[0]] = breakout_adjusted
-
-		# Step 3: Distribute remaining to non-self, non-breakout
-		var non_self_non_breakout: float = remaining - breakout_adjusted
-		var others: Array[int] = []
-		var others_sum: float = 0.0
-		for j: int in range(7):
-			if j != i and j != 5 and j != 6:
-				others.append(j)
-				others_sum += row[j]
-		if others_sum > 0.0:
-			for j: int in others:
-				row[j] = row[j] / others_sum * non_self_non_breakout
-
-		row[i] = adjusted_self
-
-		# Step 4: Season bias
-		for j: int in range(7):
-			if j == i:
-				continue
-			if j in up_states:
-				row[j] += up_bonus / float(up_states.size())
-			elif j in down_states:
-				row[j] += down_penalty / float(down_states.size())
-
-		# Clamp negatives and renormalize
-		var total: float = 0.0
-		for j: int in range(7):
-			row[j] = maxf(0.0, row[j])
-			total += row[j]
-		if total > 0.0:
-			for j: int in range(7):
-				row[j] = row[j] / total
-
+		var row: Array[float] = _build_matrix_row(i, self_scale, breakout_scale)
+		_apply_season_bias_to_row(row, i, up_states, down_states, up_bonus, down_penalty)
+		_renormalize_row(row)
 		matrix.append(row)
 
 	return matrix
+
+
+## Build and scale a single transition matrix row for state i (Steps 1-3).
+func _build_matrix_row(
+	i: int, self_scale: float, breakout_scale: float
+) -> Array[float]:
+	var row: Array[float] = []
+	for j: int in range(7):
+		row.append(TRANSITION_MATRIX[i][j])
+
+	# Step 1: Scale self-transition
+	var adjusted_self: float = minf(row[i] * self_scale, 0.98)
+
+	# Step 2: Scale breakout transitions
+	var breakout_indices: Array[int] = []
+	for bi: int in [5, 6]:
+		if bi != i:
+			breakout_indices.append(bi)
+
+	var breakout_original: float = 0.0
+	for bi: int in breakout_indices:
+		breakout_original += row[bi]
+
+	var remaining: float = 1.0 - adjusted_self
+	var breakout_adjusted: float = minf(breakout_original * breakout_scale, remaining * 0.5)
+
+	if breakout_indices.size() == 2 and breakout_original > 0.0:
+		var ratio: float = row[5] / breakout_original
+		row[5] = breakout_adjusted * ratio
+		row[6] = breakout_adjusted * (1.0 - ratio)
+	elif breakout_indices.size() == 1:
+		row[breakout_indices[0]] = breakout_adjusted
+
+	# Step 3: Distribute remaining to non-self, non-breakout
+	var non_self_non_breakout: float = remaining - breakout_adjusted
+	var others: Array[int] = []
+	var others_sum: float = 0.0
+	for j: int in range(7):
+		if j != i and j != 5 and j != 6:
+			others.append(j)
+			others_sum += row[j]
+	if others_sum > 0.0:
+		for j: int in others:
+			row[j] = row[j] / others_sum * non_self_non_breakout
+
+	row[i] = adjusted_self
+	return row
+
+
+## Apply season bias nudges to non-self transitions (Step 4).
+func _apply_season_bias_to_row(
+	row: Array[float], self_idx: int,
+	up_states: Array[int], down_states: Array[int],
+	up_bonus: float, down_penalty: float
+) -> void:
+	for j: int in range(7):
+		if j == self_idx:
+			continue
+		if j in up_states:
+			row[j] += up_bonus / float(up_states.size())
+		elif j in down_states:
+			row[j] += down_penalty / float(down_states.size())
+
+
+## Clamp negatives and renormalize a probability row to sum to 1.
+func _renormalize_row(row: Array[float]) -> void:
+	var total: float = 0.0
+	for j: int in range(7):
+		row[j] = maxf(0.0, row[j])
+		total += row[j]
+	if total > 0.0:
+		for j: int in range(7):
+			row[j] = row[j] / total
 
 # ── Utility ──
 

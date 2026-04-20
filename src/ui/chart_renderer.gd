@@ -156,6 +156,12 @@ func _build_header() -> void:
 	_header_bar.add_theme_stylebox_override("panel", header_style)
 	add_child(_header_bar)
 
+	_build_header_labels()
+	_build_header_tf_buttons()
+	_build_header_go_latest()
+
+
+func _build_header_labels() -> void:
 	_lbl_stock_name = Label.new()
 	_lbl_stock_name.text = tr("종목 선택")
 	_lbl_stock_name.add_theme_font_size_override("font_size", 15)
@@ -172,12 +178,12 @@ func _build_header() -> void:
 	_lbl_change.text = ""
 	_header_bar.add_child(_lbl_change)
 
-	# Spacer
 	var spacer: Control = Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_header_bar.add_child(spacer)
 
-	# Timeframe buttons
+
+func _build_header_tf_buttons() -> void:
 	_btn_tf_1t = Button.new()
 	_btn_tf_1t.text = tr("1분")
 	ThemeSetup.apply_button_theme(_btn_tf_1t)
@@ -214,7 +220,8 @@ func _build_header() -> void:
 	_btn_tf_mn.pressed.connect(func() -> void: set_timeframe(Timeframe.MN))
 	_header_bar.add_child(_btn_tf_mn)
 
-	# Go-to-latest button (hidden by default)
+
+func _build_header_go_latest() -> void:
 	_btn_go_latest = Button.new()
 	_btn_go_latest.text = tr("현재로 이동 →")
 	_btn_go_latest.visible = false
@@ -542,69 +549,81 @@ func _rebuild_indicator_caches() -> void:
 	if n == 0:
 		return
 
-	# Build close price array
 	var closes: Array[float] = []
 	closes.resize(n)
 	for i: int in range(n):
 		closes[i] = float(_candles[i]["close"])
 
-	# ── RSI (Wilder smoothing) ──
+	_rebuild_rsi_cache(closes, n)
+	_rebuild_macd_cache(closes, n)
+
+
+## Rebuilds RSI cache using Wilder smoothing. Stores _rsi_avg_gain/_rsi_avg_loss state.
+func _rebuild_rsi_cache(closes: Array[float], n: int) -> void:
 	for i: int in range(n):
 		_rsi_cache[i] = 0.0
-	if n > RSI_PERIOD:
-		var gains: Array[float] = []
-		var losses: Array[float] = []
-		gains.resize(n)
-		losses.resize(n)
-		gains[0] = 0.0
-		losses[0] = 0.0
-		for i: int in range(1, n):
-			var diff: float = closes[i] - closes[i - 1]
-			gains[i] = maxf(diff, 0.0)
-			losses[i] = maxf(-diff, 0.0)
-		_rsi_avg_gain = 0.0
-		_rsi_avg_loss = 0.0
-		for i: int in range(1, RSI_PERIOD + 1):
-			_rsi_avg_gain += gains[i]
-			_rsi_avg_loss += losses[i]
-		_rsi_avg_gain /= float(RSI_PERIOD)
-		_rsi_avg_loss /= float(RSI_PERIOD)
-		var rs: float = _rsi_avg_gain / maxf(_rsi_avg_loss, 0.0001)
-		_rsi_cache[RSI_PERIOD] = 100.0 - (100.0 / (1.0 + rs))
-		for i: int in range(RSI_PERIOD + 1, n):
-			_rsi_avg_gain = (_rsi_avg_gain * float(RSI_PERIOD - 1) + gains[i]) / float(RSI_PERIOD)
-			_rsi_avg_loss = (_rsi_avg_loss * float(RSI_PERIOD - 1) + losses[i]) / float(RSI_PERIOD)
-			rs = _rsi_avg_gain / maxf(_rsi_avg_loss, 0.0001)
-			_rsi_cache[i] = 100.0 - (100.0 / (1.0 + rs))
+	if n <= RSI_PERIOD:
+		return
 
-	# ── MACD (EMA 12/26/9) ──
+	var gains: Array[float] = []
+	var losses: Array[float] = []
+	gains.resize(n)
+	losses.resize(n)
+	gains[0] = 0.0
+	losses[0] = 0.0
+	for i: int in range(1, n):
+		var diff: float = closes[i] - closes[i - 1]
+		gains[i] = maxf(diff, 0.0)
+		losses[i] = maxf(-diff, 0.0)
+	_rsi_avg_gain = 0.0
+	_rsi_avg_loss = 0.0
+	for i: int in range(1, RSI_PERIOD + 1):
+		_rsi_avg_gain += gains[i]
+		_rsi_avg_loss += losses[i]
+	_rsi_avg_gain /= float(RSI_PERIOD)
+	_rsi_avg_loss /= float(RSI_PERIOD)
+	var rs: float = _rsi_avg_gain / maxf(_rsi_avg_loss, 0.0001)
+	_rsi_cache[RSI_PERIOD] = 100.0 - (100.0 / (1.0 + rs))
+	for i: int in range(RSI_PERIOD + 1, n):
+		_rsi_avg_gain = (_rsi_avg_gain * float(RSI_PERIOD - 1) + gains[i]) / float(RSI_PERIOD)
+		_rsi_avg_loss = (_rsi_avg_loss * float(RSI_PERIOD - 1) + losses[i]) / float(RSI_PERIOD)
+		rs = _rsi_avg_gain / maxf(_rsi_avg_loss, 0.0001)
+		_rsi_cache[i] = 100.0 - (100.0 / (1.0 + rs))
+
+
+## Rebuilds MACD line + signal caches using EMA 12/26/9. Stores EMA running state.
+func _rebuild_macd_cache(closes: Array[float], n: int) -> void:
 	for i: int in range(n):
 		_macd_line_cache[i] = 0.0
 		_signal_line_cache[i] = 0.0
-	if n >= MACD_SLOW + MACD_SIGNAL:
-		var ema_fast_arr: Array[float] = _calc_ema(closes, MACD_FAST)
-		var ema_slow_arr: Array[float] = _calc_ema(closes, MACD_SLOW)
-		for i: int in range(n):
-			if i < MACD_SLOW - 1:
-				_macd_line_cache[i] = 0.0
-			else:
-				_macd_line_cache[i] = ema_fast_arr[i] - ema_slow_arr[i]
-		var signal_start: int = MACD_SLOW - 1
-		var seed_end: int = signal_start + MACD_SIGNAL - 1
-		if seed_end < n:
-			var seed_sum: float = 0.0
-			for i: int in range(signal_start, seed_end + 1):
-				seed_sum += _macd_line_cache[i]
-			_sig_ema_state = seed_sum / float(MACD_SIGNAL)
-			_signal_line_cache[seed_end] = _sig_ema_state
-			var sig_k: float = 2.0 / float(MACD_SIGNAL + 1)
-			for i: int in range(seed_end + 1, n):
-				_sig_ema_state = _macd_line_cache[i] * sig_k + _sig_ema_state * (1.0 - sig_k)
-				_signal_line_cache[i] = _sig_ema_state
-		# Store EMA states for incremental updates
-		_ema_fast_state = ema_fast_arr[n - 1]
-		_ema_slow_state = ema_slow_arr[n - 1]
-		_indicator_seeded = true
+	if n < MACD_SLOW + MACD_SIGNAL:
+		return
+
+	var ema_fast_arr: Array[float] = _calc_ema(closes, MACD_FAST)
+	var ema_slow_arr: Array[float] = _calc_ema(closes, MACD_SLOW)
+	for i: int in range(n):
+		if i < MACD_SLOW - 1:
+			_macd_line_cache[i] = 0.0
+		else:
+			_macd_line_cache[i] = ema_fast_arr[i] - ema_slow_arr[i]
+
+	var signal_start: int = MACD_SLOW - 1
+	var seed_end: int = signal_start + MACD_SIGNAL - 1
+	if seed_end < n:
+		var seed_sum: float = 0.0
+		for i: int in range(signal_start, seed_end + 1):
+			seed_sum += _macd_line_cache[i]
+		_sig_ema_state = seed_sum / float(MACD_SIGNAL)
+		_signal_line_cache[seed_end] = _sig_ema_state
+		var sig_k: float = 2.0 / float(MACD_SIGNAL + 1)
+		for i: int in range(seed_end + 1, n):
+			_sig_ema_state = _macd_line_cache[i] * sig_k + _sig_ema_state * (1.0 - sig_k)
+			_signal_line_cache[i] = _sig_ema_state
+
+	# Store EMA states for incremental updates
+	_ema_fast_state = ema_fast_arr[n - 1]
+	_ema_slow_state = ema_slow_arr[n - 1]
+	_indicator_seeded = true
 
 
 ## Incremental update of indicator caches — only recomputes the last entry.
@@ -1139,17 +1158,12 @@ func _draw_macd() -> void:
 	var vis_end_idx: int = mini(total, vis_start_idx + _visible_count)
 
 	var valid_start: int = MACD_SLOW - 1 + MACD_SIGNAL - 1
-	var y_min: float = INF
-	var y_max: float = -INF
-	for i: int in range(vis_start_idx, vis_end_idx):
-		if i < valid_start or i >= _macd_line_cache.size():
-			continue
-		var hist: float = _macd_line_cache[i] - _signal_line_cache[i]
-		y_min = minf(y_min, minf(_macd_line_cache[i], minf(_signal_line_cache[i], hist)))
-		y_max = maxf(y_max, maxf(_macd_line_cache[i], maxf(_signal_line_cache[i], hist)))
-
-	if y_min == INF or y_max == -INF:
+	var y_range_vec: Vector2 = _compute_macd_y_range(vis_start_idx, vis_end_idx, valid_start)
+	if y_range_vec.x == INF or y_range_vec.y == -INF:
 		return
+	var y_min: float = y_range_vec.x
+	var y_max: float = y_range_vec.y
+
 	var y_range: float = maxf(y_max - y_min, 1.0)
 	var y_pad: float = y_range * 0.1
 	y_min -= y_pad
@@ -1158,23 +1172,49 @@ func _draw_macd() -> void:
 	# Inline y-mapping constants (avoids Callable allocation per frame, S5-03)
 	var macd_y_scale: float = _macd_rect.size.y / (y_max - y_min)
 	var macd_y_base: float  = _macd_rect.position.y + _macd_rect.size.y
-
 	var candle_width: float = _macd_rect.size.x / float(_visible_count)
-	var bar_width: float = maxf(candle_width * 0.6, 1.0)
 
-	# Zero line (thin gray)
+	_draw_macd_histogram(vis_start_idx, vis_end_idx, valid_start, candle_width, macd_y_scale, macd_y_base, y_min)
+	_draw_macd_lines(vis_start_idx, vis_end_idx, valid_start, candle_width, macd_y_scale, macd_y_base, y_min)
+
+	draw_string(
+		ThemeDB.fallback_font,
+		Vector2(_macd_rect.position.x + 6.0, _macd_rect.position.y + 12.0),
+		"MACD", HORIZONTAL_ALIGNMENT_LEFT,
+		-1, 10, MACD_LINE_COLOR
+	)
+
+
+## Scans the visible MACD/signal/histogram range for auto-scaling.
+## Returns Vector2(y_min, y_max); x == INF means no valid data found.
+func _compute_macd_y_range(vis_start: int, vis_end: int, valid_start: int) -> Vector2:
+	var y_min: float = INF
+	var y_max: float = -INF
+	for i: int in range(vis_start, vis_end):
+		if i < valid_start or i >= _macd_line_cache.size():
+			continue
+		var hist: float = _macd_line_cache[i] - _signal_line_cache[i]
+		y_min = minf(y_min, minf(_macd_line_cache[i], minf(_signal_line_cache[i], hist)))
+		y_max = maxf(y_max, maxf(_macd_line_cache[i], maxf(_signal_line_cache[i], hist)))
+	return Vector2(y_min, y_max)
+
+
+## Draws the MACD histogram bars and the zero line.
+func _draw_macd_histogram(
+	vis_start: int, vis_end: int, valid_start: int,
+	candle_width: float, macd_y_scale: float, macd_y_base: float, y_min: float
+) -> void:
+	var bar_width: float = maxf(candle_width * 0.6, 1.0)
 	var zero_y: float = macd_y_base - (0.0 - y_min) * macd_y_scale
 	draw_line(
 		Vector2(_macd_rect.position.x, zero_y),
 		Vector2(_macd_rect.position.x + _macd_rect.size.x, zero_y),
 		Color(0.60, 0.60, 0.62, 0.5), 1.0
 	)
-
-	# Histogram bars
-	for i: int in range(vis_start_idx, vis_end_idx):
+	for i: int in range(vis_start, vis_end):
 		if i < valid_start or i >= _macd_line_cache.size():
 			continue
-		var vis_i: int = i - vis_start_idx
+		var vis_i: int = i - vis_start
 		var hist: float = _macd_line_cache[i] - _signal_line_cache[i]
 		var x_center: float = _macd_rect.position.x + (float(vis_i) + 0.5) * candle_width
 		var hist_y: float = macd_y_base - (hist - y_min) * macd_y_scale
@@ -1184,35 +1224,31 @@ func _draw_macd() -> void:
 		var hist_color: Color = Color(0.20, 0.70, 0.30, 0.6) if hist >= 0.0 else Color(0.85, 0.25, 0.25, 0.6)
 		draw_rect(Rect2(x_center - bar_width * 0.5, bar_top, bar_width, bar_h), hist_color, true)
 
-	# MACD line — reuse pre-allocated buffer (S5-03: zero-alloc draw path)
+
+## Draws the MACD line and signal line polylines using pre-allocated buffers (S5-03).
+func _draw_macd_lines(
+	vis_start: int, vis_end: int, valid_start: int,
+	candle_width: float, macd_y_scale: float, macd_y_base: float, y_min: float
+) -> void:
 	_draw_macd_points.clear()
-	for i: int in range(vis_start_idx, vis_end_idx):
+	for i: int in range(vis_start, vis_end):
 		if i < valid_start or i >= _macd_line_cache.size():
 			continue
-		var vis_i: int = i - vis_start_idx
+		var vis_i: int = i - vis_start
 		var x: float = _macd_rect.position.x + (float(vis_i) + 0.5) * candle_width
 		_draw_macd_points.append(Vector2(x, macd_y_base - (_macd_line_cache[i] - y_min) * macd_y_scale))
 	if _draw_macd_points.size() >= 2:
 		draw_polyline(_draw_macd_points, MACD_LINE_COLOR, 1.5, true)
 
-	# Signal line — reuse pre-allocated buffer
 	_draw_sig_points.clear()
-	for i: int in range(vis_start_idx, vis_end_idx):
+	for i: int in range(vis_start, vis_end):
 		if i < valid_start or i >= _signal_line_cache.size():
 			continue
-		var vis_i: int = i - vis_start_idx
+		var vis_i: int = i - vis_start
 		var x: float = _macd_rect.position.x + (float(vis_i) + 0.5) * candle_width
 		_draw_sig_points.append(Vector2(x, macd_y_base - (_signal_line_cache[i] - y_min) * macd_y_scale))
 	if _draw_sig_points.size() >= 2:
 		draw_polyline(_draw_sig_points, MACD_SIGNAL_COLOR, 1.5, true)
-
-	# Label "MACD" in top-left
-	draw_string(
-		ThemeDB.fallback_font,
-		Vector2(_macd_rect.position.x + 6.0, _macd_rect.position.y + 12.0),
-		"MACD", HORIZONTAL_ALIGNMENT_LEFT,
-		-1, 10, MACD_LINE_COLOR
-	)
 
 
 func _draw_crosshair() -> void:

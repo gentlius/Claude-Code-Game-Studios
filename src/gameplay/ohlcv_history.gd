@@ -27,6 +27,10 @@ var history_seed: int = 0
 ## Current season's bars live in PriceEngine, not here.
 var _past_daily: Dictionary = {}
 
+## Lazy cache for _get_all_daily() results — keyed by stock_id.
+## Invalidated by reset() and _on_season_ended() (which appends real bars).
+var _daily_cache: Dictionary = {}
+
 # ── Lifecycle ──
 
 func _ready() -> void:
@@ -38,6 +42,7 @@ func _ready() -> void:
 func reset() -> void:
 	history_seed = _new_seed()
 	_past_daily.clear()
+	_daily_cache.clear()
 
 
 # ── Public API ──
@@ -81,6 +86,7 @@ func get_save_data() -> Dictionary:
 func load_save_data(data: Dictionary) -> void:
 	history_seed = data.get("history_seed", 0)
 	_past_daily.clear()
+	_daily_cache.clear()
 	var saved: Dictionary = data.get("past_daily", {})
 	for stock_id: String in saved.keys():
 		var bars_raw: Variant = saved[stock_id]
@@ -105,11 +111,16 @@ func _on_season_ended(_final_rank: int, _is_free_market: bool, _season_return_pc
 		if not _past_daily.has(sid):
 			_past_daily[sid] = []
 		(_past_daily[sid] as Array).append_array(bars)
+	# Invalidate cache — _past_daily now contains new bars.
+	_daily_cache.clear()
 
 
 # ── Private Helpers ──
 
 func _get_all_daily(stock_id: String) -> Array[Dictionary]:
+	if _daily_cache.has(stock_id):
+		return _daily_cache[stock_id] as Array[Dictionary]
+
 	var result: Array[Dictionary] = [] as Array[Dictionary]
 	# 1. Synthetic pre-history (deterministic, generated on demand).
 	if history_seed != 0:
@@ -121,6 +132,8 @@ func _get_all_daily(stock_id: String) -> Array[Dictionary]:
 			result.append(bar as Dictionary)
 	# 3. Current season from PriceEngine.
 	result.append_array(PriceEngine.get_ohlcv_history(stock_id))
+
+	_daily_cache[stock_id] = result
 	return result
 
 

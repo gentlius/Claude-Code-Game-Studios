@@ -8,18 +8,22 @@ extends Node
 signal on_level_up(new_level: int, skill_points: int)
 signal on_xp_gained(amount: int, new_total: int, source: String)
 
+## Path to the external config file (assets/data/xp_config.json).
+const CONFIG_PATH: String = "res://assets/data/xp_config.json"
+
 # ── Config (Tuning Knobs — see GDD Tuning Knobs section) ──
+## All values loaded from xp_config.json in _ready(). Hardcoded values are fallback defaults.
 
 ## Daily bonus XP base value (GDD F1)
-@export var BASE_DAILY_XP: int = 30
+var BASE_DAILY_XP: int = 30
 ## Season completion base XP (GDD F2)
-@export var BASE_SEASON_XP: int = 200
+var BASE_SEASON_XP: int = 200
 ## XP per 1% season return (GDD F2)
-@export var RETURN_XP_SCALE: int = 10
+var RETURN_XP_SCALE: int = 10
 ## Level-up base XP unit (GDD F3)
-@export var BASE_LEVEL_XP: int = 100
+var BASE_LEVEL_XP: int = 100
 ## Level curve exponent (GDD F3)
-@export var LEVEL_EXPONENT: float = 1.5
+var LEVEL_EXPONENT: float = 1.5
 
 ## Rank XP table: index 0 = 1st place (GDD F2)
 var RANK_XP_TABLE: Array[int] = [500, 350, 250, 150, 150, 50]
@@ -27,9 +31,9 @@ var RANK_XP_TABLE: Array[int] = [500, 350, 250, 150, 150, 50]
 ## Alpha multiplier thresholds (GDD F1) — alpha = player daily return − market avg return.
 ## Array of [alpha_threshold_pct, multiplier] — checked in descending order.
 ## Completion bonus: XP awarded for positive return with enough trades (GDD §3-4, §4-7)
-@export var COMPLETION_BONUS_XP: int = 20
+var COMPLETION_BONUS_XP: int = 20
 ## Completion bonus: minimum filled orders required (mirrors SeasonManager.MIN_TRADES_FOR_RANK concept)
-@export var COMPLETION_MIN_TRADES: int = 5
+var COMPLETION_MIN_TRADES: int = 5
 
 var DAILY_RETURN_MULTIPLIERS: Array[Array] = [
 	[3.0, 3.0],   # alpha ≥ +3%
@@ -55,10 +59,61 @@ var _last_season_breakdown: Dictionary = {}  ## Breakdown from last grant_season
 # ── Lifecycle ──
 
 func _ready() -> void:
+	_load_config()
 	GameClock.on_market_close.connect(_on_market_close)
 	GameClock.on_season_start.connect(_on_season_start)
 	GameClock.on_market_open.connect(_on_market_open)
 	OrderEngine.on_order_filled.connect(_on_order_filled)
+
+
+# ── Config Loading ──
+
+## Load tuning values from assets/data/xp_config.json.
+## Falls back to hardcoded defaults on any read or parse error (design/gdd/xp-system.md §7).
+func _load_config() -> void:
+	var file: FileAccess = FileAccess.open(CONFIG_PATH, FileAccess.READ)
+	if file == null:
+		push_warning("XpSystem._load_config: cannot open %s — using defaults" % CONFIG_PATH)
+		return
+	var json_text: String = file.get_as_text()
+	file.close()
+	var parsed: Variant = JSON.parse_string(json_text)
+	if not parsed is Dictionary:
+		push_warning("XpSystem._load_config: JSON parse error in %s — using defaults" % CONFIG_PATH)
+		return
+	var cfg: Dictionary = parsed as Dictionary
+
+	if cfg.has("baseDailyXp"):        BASE_DAILY_XP        = int(cfg["baseDailyXp"])
+	if cfg.has("baseSeasonXp"):       BASE_SEASON_XP       = int(cfg["baseSeasonXp"])
+	if cfg.has("returnXpScale"):      RETURN_XP_SCALE      = int(cfg["returnXpScale"])
+	if cfg.has("baseLevelXp"):        BASE_LEVEL_XP        = int(cfg["baseLevelXp"])
+	if cfg.has("levelExponent"):      LEVEL_EXPONENT       = float(cfg["levelExponent"])
+	if cfg.has("completionBonusXp"):  COMPLETION_BONUS_XP  = int(cfg["completionBonusXp"])
+	if cfg.has("completionMinTrades"): COMPLETION_MIN_TRADES = int(cfg["completionMinTrades"])
+
+	if cfg.has("rankXpTable") and cfg["rankXpTable"] is Array:
+		var arr: Array = cfg["rankXpTable"]
+		var loaded: Array[int] = []
+		for v: Variant in arr:
+			loaded.append(int(v))
+		if not loaded.is_empty():
+			RANK_XP_TABLE = loaded
+
+	# Daily return multipliers: JSON stores "-Inf" as a string sentinel.
+	if cfg.has("dailyReturnMultipliers") and cfg["dailyReturnMultipliers"] is Array:
+		var arr: Array = cfg["dailyReturnMultipliers"]
+		var loaded: Array[Array] = []
+		for entry: Variant in arr:
+			if entry is Array and (entry as Array).size() == 2:
+				var row: Array = entry as Array
+				var threshold: float
+				if row[0] is String and (row[0] as String).to_lower() == "-inf":
+					threshold = -INF
+				else:
+					threshold = float(row[0])
+				loaded.append([threshold, float(row[1])])
+		if not loaded.is_empty():
+			DAILY_RETURN_MULTIPLIERS = loaded
 
 
 # ── Public API ──
@@ -189,11 +244,16 @@ func get_season_xp_breakdown() -> Dictionary:
 
 
 ## GDD F2: season_xp = BASE_SEASON_XP + rank_bonus + return_bonus
-func _calculate_season_xp(final_rank: int, season_return_pct: float) -> int:
+## Returns { "xp": int, "rank_bonus": int, "return_bonus": int }.
+func _calculate_season_xp(final_rank: int, season_return_pct: float) -> Dictionary:
 	var rank_index: int = clampi(final_rank - 1, 0, RANK_XP_TABLE.size() - 1)
 	var rank_bonus: int = RANK_XP_TABLE[rank_index]
 	var return_bonus: int = int(floor(maxf(0.0, season_return_pct) * RETURN_XP_SCALE))
-	return BASE_SEASON_XP + rank_bonus + return_bonus
+	return {
+		"xp": BASE_SEASON_XP + rank_bonus + return_bonus,
+		"rank_bonus": rank_bonus,
+		"return_bonus": return_bonus,
+	}
 
 
 ## GDD F1: daily_xp = floor(BASE_DAILY_XP × daily_return_multiplier)
@@ -257,19 +317,16 @@ func grant_season_bonus(
 	# Free-market participants receive no rank bonus XP (no official ranking).
 	# Official league participants receive full season XP based on rank + return.
 	if not is_free_market:
-		var rank_index: int = clampi(final_rank - 1, 0, RANK_XP_TABLE.size() - 1)
-		var rank_bonus: int = RANK_XP_TABLE[rank_index]
-		var return_bonus: int = int(floor(maxf(0.0, season_return_pct) * RETURN_XP_SCALE))
-		var season_xp: int = _calculate_season_xp(final_rank, season_return_pct)
+		var breakdown: Dictionary = _calculate_season_xp(final_rank, season_return_pct)
 		_last_season_breakdown = {
 			"base_xp": BASE_SEASON_XP,
-			"rank_bonus": rank_bonus,
-			"return_bonus": return_bonus,
-			"total_xp": season_xp,
+			"rank_bonus": breakdown["rank_bonus"],
+			"return_bonus": breakdown["return_bonus"],
+			"total_xp": breakdown["xp"],
 			"final_rank": final_rank,
 			"season_return_pct": season_return_pct,
 		}
-		_grant_xp(season_xp, "season_bonus")
+		_grant_xp(breakdown["xp"], "season_bonus")
 
 	# Completion bonus: 20 XP for any participant (free-market or official)
 	# who finishes with return_pct >= 0% AND at least 5 filled orders.

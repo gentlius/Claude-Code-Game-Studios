@@ -34,35 +34,49 @@ var _sfx_cache: Dictionary = {}       ## "category/name" → AudioStream 캐시
 # ── Lifecycle ──
 
 func _ready() -> void:
+	_ensure_buses()
 	_build_players()
 	_generate_sfx()
 	_load_settings()
 	_connect_events()
 
 
+## Dynamically creates BGM and SFX audio buses if they don't exist yet.
+## Both buses route to Master. Call before _build_players().
+func _ensure_buses() -> void:
+	if AudioServer.get_bus_index("BGM") == -1:
+		AudioServer.add_bus()
+		AudioServer.set_bus_name(AudioServer.get_bus_count() - 1, "BGM")
+		AudioServer.set_bus_send(AudioServer.get_bus_index("BGM"), "Master")
+	if AudioServer.get_bus_index("SFX") == -1:
+		AudioServer.add_bus()
+		AudioServer.set_bus_name(AudioServer.get_bus_count() - 1, "SFX")
+		AudioServer.set_bus_send(AudioServer.get_bus_index("SFX"), "Master")
+
+
 func _build_players() -> void:
 	_player_order = AudioStreamPlayer.new()
-	_player_order.bus = "Master"
+	_player_order.bus = "SFX"
 	add_child(_player_order)
 
 	_player_level = AudioStreamPlayer.new()
-	_player_level.bus = "Master"
+	_player_level.bus = "SFX"
 	add_child(_player_level)
 
 	_player_vi = AudioStreamPlayer.new()
-	_player_vi.bus = "Master"
+	_player_vi.bus = "SFX"
 	add_child(_player_vi)
 
 	_player_news = AudioStreamPlayer.new()
-	_player_news.bus = "Master"
+	_player_news.bus = "SFX"
 	add_child(_player_news)
 
 	_player_bgm = AudioStreamPlayer.new()
-	_player_bgm.bus = "Master"
+	_player_bgm.bus = "BGM"
 	add_child(_player_bgm)
 
 	_player_ui = AudioStreamPlayer.new()
-	_player_ui.bus = "Master"
+	_player_ui.bus = "SFX"
 	add_child(_player_ui)
 
 
@@ -166,10 +180,10 @@ func _save_settings() -> void:
 
 
 func _apply_volume() -> void:
+	# Master volume / mute is applied via the Master bus.
+	# BGM and SFX buses are children of Master so this propagates automatically.
 	var db: float = linear_to_db(_master_volume) if not _muted else -80.0
-	for player: AudioStreamPlayer in [_player_order, _player_level, _player_vi, _player_news,
-			_player_bgm, _player_ui]:
-		player.volume_db = db
+	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), db)
 
 
 # ── Public API ──
@@ -179,6 +193,16 @@ func set_volume(volume: float) -> void:
 	_master_volume = clampf(volume, 0.0, 1.0)
 	_apply_volume()
 	_save_settings()
+
+
+## Set BGM bus volume independently [0.0, 1.0]. Does not persist — call alongside save if needed.
+func set_bgm_volume(linear: float) -> void:
+	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("BGM"), linear_to_db(linear))
+
+
+## Set SFX bus volume independently [0.0, 1.0]. Does not persist — call alongside save if needed.
+func set_sfx_volume(linear: float) -> void:
+	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("SFX"), linear_to_db(linear))
 
 
 ## Toggle or set mute and persist.

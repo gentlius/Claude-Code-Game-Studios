@@ -105,7 +105,8 @@ func _build_holdings_section(parent: VBoxContainer) -> void:
 	header.add_theme_constant_override("separation", 8)
 	parent.add_child(header)
 
-	for col: String in [tr("종목"), tr("수량"), tr("현재가"), tr("수익률"), tr("평가금액"), tr("S/T")]:
+	# S/T 컬럼은 StopTakeSystem 연동 시 복원 필요 (TD-CR-31: 헤더-행 컬럼 불일치 수정)
+	for col: String in [tr("종목"), tr("수량"), tr("현재가"), tr("수익률"), tr("평가금액")]:
 		var lbl: Label = Label.new()
 		lbl.text = col
 		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL

@@ -358,15 +358,18 @@ func _on_season_reveal_tick() -> void:
 
 
 func _season_grade_header(rate: float) -> String:
+	## 등급 임계값은 SeasonManager.GRADE_THRESHOLDS 단일 소스 (TD-CR-23).
+	## S≥[0], A≥[1], B≥[2], C≥[3], D<[3]
+	var thresholds: Array[float] = SeasonManager.GRADE_THRESHOLDS
 	var grade: String
 	var c: String
-	if rate >= 20.0:
+	if rate >= thresholds[0]:
 		grade = "S"; c = "FFD700"
-	elif rate >= 10.0:
+	elif rate >= thresholds[1]:
 		grade = "A"; c = "EB3833"
-	elif rate >= 0.0:
+	elif rate >= thresholds[2]:
 		grade = "B"; c = "5A5A66"
-	elif rate >= -10.0:
+	elif rate >= thresholds[3]:
 		grade = "C"; c = "2E6BE6"
 	else:
 		grade = "D"; c = "2E6BE6"

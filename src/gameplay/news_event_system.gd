@@ -468,10 +468,29 @@ func _fire_event_from_slot(scope: String, impact: String, tick: int) -> void:
 
 	_last_slot_scope = scope
 
-	# Resolve direction
 	var direction: int = _resolve_direction(template)
+	var slot_data: Dictionary = {
+		"scope": scope, "impact": impact, "tick": tick,
+		"template": template, "direction": direction,
+	}
 
-	# Resolve target stocks
+	var target: Dictionary = _resolve_event_target(slot_data)
+	if target.is_empty():
+		return
+
+	var entry: Dictionary = _create_event_entry(slot_data, target)
+	_queue_event(entry)
+	_maybe_emit_rumor(entry, target["template"], direction)
+
+
+## Determine target stock IDs (and selected_stock for INDIVIDUAL scope).
+## Returns a dict with "scope", "target_stock_ids", "selected_stock"; empty dict on failure.
+func _resolve_event_target(slot_data: Dictionary) -> Dictionary:
+	var scope: String = slot_data["scope"]
+	var impact: String = slot_data["impact"]
+	var tick: int = slot_data["tick"]
+	var template: Dictionary = slot_data["template"]
+
 	var target_stock_ids: Array[String] = []
 	var selected_stock: StockData = null
 
@@ -489,7 +508,7 @@ func _fire_event_from_slot(scope: String, impact: String, tick: int) -> void:
 				scope = "SECTOR"
 				template = _select_template("SECTOR", impact)
 				if template.is_empty():
-					return
+					return {}
 				var sector2: String = str(template.get("target_sector", ""))
 				if sector2 != "" and sector2 != "null":
 					target_stock_ids = StockDatabase.get_stock_ids_by_sector(sector2)
@@ -499,21 +518,39 @@ func _fire_event_from_slot(scope: String, impact: String, tick: int) -> void:
 				_recent_individual_targets[selected_stock.stock_id] = tick
 
 	if target_stock_ids.is_empty():
-		return
+		return {}
 
-	# Compute actual impact
-	var impact_min: float = template.get("impact_min", 0.01)
-	var impact_max: float = template.get("impact_max", 0.03)
-	var base_impact: float = _rng.randf_range(impact_min, impact_max)
+	return {
+		"scope": scope,
+		"template": template,
+		"target_stock_ids": target_stock_ids,
+		"selected_stock": selected_stock,
+	}
 
-	# Build MarketEvent and push to PriceEngine
+
+## Build the MarketEvent, push it to PriceEngine, track cooldown/mutex, and
+## assemble the news_entry dict. Returns the completed news entry.
+func _create_event_entry(slot_data: Dictionary, target: Dictionary) -> Dictionary:
+	var tick: int = slot_data["tick"]
+	var direction: int = slot_data["direction"]
+	var impact: String = slot_data["impact"]
+	var scope: String = target["scope"]
+	var template: Dictionary = target["template"]
+	var target_stock_ids: Array[String] = target["target_stock_ids"]
+	var selected_stock: StockData = target["selected_stock"]
+
+	# Compute actual impact magnitude
+	var base_impact: float = _rng.randf_range(
+		template.get("impact_min", 0.01),
+		template.get("impact_max", 0.03)
+	)
+
+	# Build and push MarketEvent
 	var event_type_str: String = template.get("event_type", "INSTANT_SHOCK")
 	var decay_minutes: int = int(template.get("decay_minutes", 0))
 	var decay_ticks: int = _minutes_to_ticks(decay_minutes)
-	var decay_curve_str: String = template.get("decay_curve", "LINEAR")
-
 	var decay_curve: MarketEvent.DecayCurve = MarketEvent.DecayCurve.LINEAR
-	if decay_curve_str == "EXPONENTIAL":
+	if template.get("decay_curve", "LINEAR") == "EXPONENTIAL":
 		decay_curve = MarketEvent.DecayCurve.EXPONENTIAL
 
 	var market_event: MarketEvent
@@ -528,53 +565,45 @@ func _fire_event_from_slot(scope: String, impact: String, tick: int) -> void:
 			_scope_str_to_enum(scope), target_stock_ids,
 			decay_ticks, decay_curve
 		)
-
 	PriceEngine.push_event(market_event)
 
-	# Track cooldown
+	# Track cooldown and mutex
 	var cooldown_key: String = template["template_id"]
 	if scope == "INDIVIDUAL" and selected_stock != null:
 		cooldown_key = template["template_id"] + "+" + selected_stock.stock_id
 	_cooldown_tracker[cooldown_key] = tick + GameClock.get_current_day() * GameClock.TICKS_PER_DAY
-
-	# Register mutex (GDD Rule 3-1)
 	_register_mutex(template, selected_stock)
 
-	# Build headline/body text
-	var headline: String = _resolve_text(template, direction, "headline", selected_stock)
-	var body: String = _resolve_text(template, direction, "body", selected_stock)
-	var impact_hint: String = template.get("impact_hint", "")
-
-	# Build news entry
+	# Build and return news entry dict
 	var delay_ticks: int = get_news_delay()
-	var display_tick: int = tick + delay_ticks
-
-	var news_entry: Dictionary = {
+	return {
 		"template_id": template["template_id"],
 		"scope": scope,
 		"impact_tier": template.get("impact_tier", impact),
 		"direction": direction,
-		"headline": headline,
-		"body": body,
-		"impact_hint": impact_hint,
+		"headline": _resolve_text(template, direction, "headline", selected_stock),
+		"body": _resolve_text(template, direction, "body", selected_stock),
+		"impact_hint": template.get("impact_hint", ""),
 		"target_stock_ids": target_stock_ids,
 		"created_tick": tick,
-		"display_tick": display_tick,
+		"display_tick": tick + delay_ticks,
 		"day": GameClock.get_current_day(),
 	}
 
-	_news_delay_queue.append(news_entry)
 
-	# Update stats
+## Append entry to the delay queue, update season stats, and emit on_event_generated.
+func _queue_event(entry: Dictionary) -> void:
+	_news_delay_queue.append(entry)
 	_season_stats["total_events"] += 1
-	_season_stats["by_scope"][scope] = _season_stats["by_scope"].get(scope, 0) + 1
-	var tier_key: String = template.get("impact_tier", impact)
+	_season_stats["by_scope"][entry["scope"]] = _season_stats["by_scope"].get(entry["scope"], 0) + 1
+	var tier_key: String = entry["impact_tier"]
 	_season_stats["by_impact"][tier_key] = _season_stats["by_impact"].get(tier_key, 0) + 1
+	on_event_generated.emit(entry)
 
-	on_event_generated.emit(news_entry)
 
-	# S3 루머 채널: 이벤트 발생 후 rumor_advance_ticks 전에 루머 힌트 발행 (GDD Rule 5-4, F6)
-	_emit_rumor_if_eligible(news_entry, template, direction, tick)
+## S3 루머 채널: 이벤트 발생 후 rumor_advance_ticks 전에 루머 힌트 발행 (GDD Rule 5-4, F6)
+func _maybe_emit_rumor(entry: Dictionary, template: Dictionary, direction: int) -> void:
+	_emit_rumor_if_eligible(entry, template, direction, entry["created_tick"])
 
 # ── S3 Rumor Channel (GDD Rule 5-4, F6) ──
 

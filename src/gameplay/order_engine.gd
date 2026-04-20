@@ -27,6 +27,8 @@ var _pending_limit_orders: Array[Dictionary] = []     ## Active limit orders
 var _pre_market_queue: Array[Dictionary] = []         ## PRE_MARKET orders
 var _order_history: Array[Dictionary] = []
 var _sell_locks: Dictionary = {}  ## stock_id -> locked_quantity (int)
+## order_id -> 해당 큐 참조. cancel_order()를 O(1)로 만드는 캐시. GDD tech-debt TD-CR-20.
+var _order_id_to_queue: Dictionary = {}  ## order_id (int) -> Array[Dictionary]
 
 # ── Lifecycle ──
 
@@ -43,6 +45,7 @@ func _on_season_start() -> void:
 	_pre_market_queue.clear()
 	_order_history.clear()
 	_sell_locks.clear()
+	_order_id_to_queue.clear()
 	_next_order_id = 1
 
 
@@ -54,6 +57,7 @@ func reset() -> void:
 	_pre_market_queue.clear()
 	_order_history.clear()
 	_sell_locks.clear()
+	_order_id_to_queue.clear()
 
 # ── Public API ──
 
@@ -103,6 +107,7 @@ func _handle_pre_market_market_order(order: Dictionary) -> Dictionary:
 		order["locked_quantity"] = order["quantity"]
 	order["status"] = "PENDING"
 	_pre_market_queue.append(order)
+	_order_id_to_queue[order["order_id"]] = _pre_market_queue
 	return order
 
 
@@ -119,6 +124,7 @@ func _handle_open_market_order(order: Dictionary) -> Dictionary:
 	if GameClock.get_market_state() == GameClock.MarketState.PAUSED:
 		order["status"] = "PENDING"
 		_market_order_queue.append(order)
+		_order_id_to_queue[order["order_id"]] = _market_order_queue
 	else:
 		_fill_market_order(order)
 	return order
@@ -229,7 +235,7 @@ func _validate_sell_short(order: Dictionary) -> String:
 		ceil(float(current_price) * float(order["quantity"]) * ShortSellingSystem.get_margin_rate())
 	)
 	if CurrencySystem.get_sim_cash() < required_margin:
-		return "증거금 부족 (필요: %d원)" % required_margin
+		return _margin_error(required_margin)
 
 	return ""
 
@@ -289,7 +295,7 @@ func _validate_leverage_buy(order: Dictionary) -> String:
 	var order_value: int = current_price * order["quantity"]
 	var equity_needed: int = int(ceil(float(order_value) / float(multiplier)))
 	if CurrencySystem.get_sim_cash() < equity_needed:
-		return "증거금 부족 (필요: %d원)" % equity_needed
+		return _margin_error(equity_needed)
 
 	return ""
 
@@ -355,6 +361,7 @@ func submit_limit_order(
 
 	order["status"] = "PENDING"
 	_pending_limit_orders.append(order)
+	_order_id_to_queue[order["order_id"]] = _pending_limit_orders
 	return order
 
 
@@ -585,50 +592,18 @@ func _fill_market_order(order: Dictionary) -> void:
 	if result["filled_qty"] == 0:
 		# No liquidity this tick — re-queue for next tick (market order stays live)
 		_market_order_queue.append(order)
+		_order_id_to_queue[order["order_id"]] = _market_order_queue
 		return
 
 	var filled_price: int = result["avg_price"]
 
 	if order["side"] == "BUY":
-		var gross_filled: int = filled_price * result["filled_qty"]
-		var actual_cost: int = MarketConfig.get_buy_cost(gross_filled)
-		var reserved: int = order.get("reserved_cash", 0)
-		# reserved covers the original quantity; refund the unconsumed portion proportionally
-		var proportional_reserved: int = int(
-			float(reserved) * float(result["filled_qty"]) / float(order["quantity"])
-		) if order["quantity"] > 0 else reserved
-		var refund: int = proportional_reserved - actual_cost
-		if refund > 0:
-			CurrencySystem.sim_add(refund)
-		elif refund < 0:
-			if not CurrencySystem.sim_deduct(-refund):
-				CurrencySystem.sim_add(proportional_reserved)
-				order["status"] = "REJECTED"
-				order["reject_reason"] = "잔액 부족 (가격 변동)"
-				_history_append(order)
-				on_order_rejected.emit(order)
-				return
-		PortfolioManager.add_holding(order["stock_id"], result["filled_qty"], filled_price)
-		order["fee_breakdown"] = MarketConfig.get_fee_breakdown("BUY", gross_filled, 0, 0)
-
+		if not _apply_buy_accounting(order, result, filled_price):
+			return
 	elif order["side"] == "SELL":
-		_unlock_sell_quantity(order["stock_id"], result["filled_qty"])
-		var gross: int = filled_price * result["filled_qty"]
-		var realized_pnl: int = PortfolioManager.remove_holding(
-			order["stock_id"], result["filled_qty"], filled_price
-		)
-		var sell_breakdown: Dictionary = MarketConfig.get_fee_breakdown(
-			"SELL", gross, 0, realized_pnl
-		)
-		CurrencySystem.sim_add(sell_breakdown["net"])
-		order["fee_breakdown"] = sell_breakdown
+		_apply_sell_accounting(order, result, filled_price)
 
-	order["status"] = "FILLED"
-	order["filled_price"] = filled_price
-	order["filled_qty"] = result["filled_qty"]
-	order["filled_tick"] = GameClock.get_current_tick()
-	_history_append(order)
-	on_order_filled.emit(order)
+	_notify_fill(order, result["filled_qty"], filled_price)
 
 	# Partial fill: re-queue remaining quantity for next tick (GDD order-book.md §3-4)
 	if result["remaining_qty"] > 0:
@@ -639,6 +614,55 @@ func _fill_market_order(order: Dictionary) -> void:
 		remainder["reserved_cash"] = 0  # already deducted in original order
 		remainder["status"] = "PENDING"
 		_market_order_queue.append(remainder)
+
+
+## BUY 체결 회계 처리. 잔액 부족 시 REJECTED 처리 후 false 반환.
+func _apply_buy_accounting(order: Dictionary, result: Dictionary, filled_price: int) -> bool:
+	var gross_filled: int = filled_price * result["filled_qty"]
+	var actual_cost: int = MarketConfig.get_buy_cost(gross_filled)
+	var reserved: int = order.get("reserved_cash", 0)
+	# reserved covers the original quantity; refund the unconsumed portion proportionally
+	var proportional_reserved: int = int(
+		float(reserved) * float(result["filled_qty"]) / float(order["quantity"])
+	) if order["quantity"] > 0 else reserved
+	var refund: int = proportional_reserved - actual_cost
+	if refund > 0:
+		CurrencySystem.sim_add(refund)
+	elif refund < 0:
+		if not CurrencySystem.sim_deduct(-refund):
+			CurrencySystem.sim_add(proportional_reserved)
+			order["status"] = "REJECTED"
+			order["reject_reason"] = "잔액 부족 (가격 변동)"
+			_history_append(order)
+			on_order_rejected.emit(order)
+			return false
+	PortfolioManager.add_holding(order["stock_id"], result["filled_qty"], filled_price)
+	order["fee_breakdown"] = MarketConfig.get_fee_breakdown("BUY", gross_filled, 0, 0)
+	return true
+
+
+## SELL 체결 회계 처리. 잠금 해제 + 포트폴리오 제거 + 현금 정산.
+func _apply_sell_accounting(order: Dictionary, result: Dictionary, filled_price: int) -> void:
+	_unlock_sell_quantity(order["stock_id"], result["filled_qty"])
+	var gross: int = filled_price * result["filled_qty"]
+	var realized_pnl: int = PortfolioManager.remove_holding(
+		order["stock_id"], result["filled_qty"], filled_price
+	)
+	var sell_breakdown: Dictionary = MarketConfig.get_fee_breakdown(
+		"SELL", gross, 0, realized_pnl
+	)
+	CurrencySystem.sim_add(sell_breakdown["net"])
+	order["fee_breakdown"] = sell_breakdown
+
+
+## 체결 완료 공통 처리 — status 설정, 히스토리 기록, on_order_filled emit.
+func _notify_fill(order: Dictionary, filled_qty: int, filled_price: int) -> void:
+	order["status"] = "FILLED"
+	order["filled_price"] = filled_price
+	order["filled_qty"] = filled_qty
+	order["filled_tick"] = GameClock.get_current_tick()
+	_history_append(order)
+	on_order_filled.emit(order)
 
 
 ## Limit order fill — 장중 체결. Sweeps order book for actual avg price (GDD order-book.md §3-4).
@@ -658,38 +682,13 @@ func _fill_limit_order(order: Dictionary, _current_price: int) -> void:
 	var filled_price: int = result["avg_price"]
 
 	if order["side"] == "BUY":
-		var gross_filled: int = filled_price * result["filled_qty"]
-		var actual_cost: int = MarketConfig.get_buy_cost(gross_filled)
-		var reserved: int = order.get("reserved_cash", 0)
-		var proportional_reserved: int = int(
-			float(reserved) * float(result["filled_qty"]) / float(order["quantity"])
-		) if order["quantity"] > 0 else reserved
-		var refund: int = proportional_reserved - actual_cost
-		if refund > 0:
-			CurrencySystem.sim_add(refund)
-		elif refund < 0:
-			CurrencySystem.sim_deduct(-refund)
-		PortfolioManager.add_holding(order["stock_id"], result["filled_qty"], filled_price)
-		order["fee_breakdown"] = MarketConfig.get_fee_breakdown("BUY", gross_filled, 0, 0)
-
+		# 지정가 BUY: 잔액 부족 시에도 REJECTED 처리 필요. _apply_buy_accounting 재사용.
+		if not _apply_buy_accounting(order, result, filled_price):
+			return
 	elif order["side"] == "SELL":
-		_unlock_sell_quantity(order["stock_id"], result["filled_qty"])
-		var gross: int = filled_price * result["filled_qty"]
-		var realized_pnl: int = PortfolioManager.remove_holding(
-			order["stock_id"], result["filled_qty"], filled_price
-		)
-		var sell_breakdown: Dictionary = MarketConfig.get_fee_breakdown(
-			"SELL", gross, 0, realized_pnl
-		)
-		CurrencySystem.sim_add(sell_breakdown["net"])
-		order["fee_breakdown"] = sell_breakdown
+		_apply_sell_accounting(order, result, filled_price)
 
-	order["status"] = "FILLED"
-	order["filled_price"] = filled_price
-	order["filled_qty"] = result["filled_qty"]
-	order["filled_tick"] = GameClock.get_current_tick()
-	_history_append(order)
-	on_order_filled.emit(order)
+	_notify_fill(order, result["filled_qty"], filled_price)
 
 	# Partial fill: remaining stays in pending with reduced quantity (GDD §3-4)
 	if result["remaining_qty"] > 0:
@@ -880,6 +879,11 @@ func _unlock_sell_quantity(stock_id: String, quantity: int) -> void:
 		_sell_locks.erase(stock_id)
 	else:
 		_sell_locks[stock_id] = new_val
+
+
+## 증거금 부족 에러 메시지 단일 소스. _validate_sell_short()·_validate_leverage_buy()가 참조.
+func _margin_error(required: int) -> String:
+	return "증거금 부족 (필요: %d원)" % required
 
 
 func _get_effective_holding_count(new_stock_id: String) -> int:

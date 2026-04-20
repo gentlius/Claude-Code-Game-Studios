@@ -16,11 +16,15 @@ signal residence_changed(tier: int, residence_name: String)
 ## Emitted when a title is earned (social contribution, luxury purchase milestone).
 signal title_earned(title_id: String)
 
-# ── Constants ──
+## Path to the external config file (assets/data/lifestyle_config.json).
+const CONFIG_PATH: String = "res://assets/data/lifestyle_config.json"
+
+# ── Config (Tuning Knobs) ──
+## All values loaded from lifestyle_config.json in _ready(). Hardcoded values are fallback defaults.
 
 ## Residence names indexed by SeasonManager tier constant.
 ## Index -1 (TIER_FREE_MARKET) maps to "쪽방/고시원" (BRONZE default).
-const RESIDENCE_NAMES: Array[String] = [
+var RESIDENCE_NAMES: Array[String] = [
 	"쪽방/고시원",             ## TIER_BRONZE (0) — 기본 제공
 	"변두리 원룸",             ## TIER_SILVER (1)
 	"도심 오피스텔",           ## TIER_GOLD (2)
@@ -35,7 +39,7 @@ const RESIDENCE_NAMES: Array[String] = [
 ]
 
 ## Residence purchase costs indexed by tier (0 = bronze default, no cost).
-const RESIDENCE_COSTS: Array[int] = [
+var RESIDENCE_COSTS: Array[int] = [
 	0,              ## TIER_BRONZE — 기본 제공
 	500_000,        ## TIER_SILVER
 	2_000_000,      ## TIER_GOLD
@@ -50,17 +54,29 @@ const RESIDENCE_COSTS: Array[int] = [
 ]
 
 ## Property rental rates (annual yield per season).
-const RENTAL_RATE_OFFICETEL: float = 0.025  ## 소형 오피스텔 2.5%/시즌
-const RENTAL_RATE_SANGGA: float    = 0.030  ## 강남 상가 3.0%/시즌
-const RENTAL_RATE_BUILDING: float  = 0.040  ## 빌딩 4.0%/시즌
+var RENTAL_RATE_OFFICETEL: float = 0.025  ## 소형 오피스텔 2.5%/시즌
+var RENTAL_RATE_SANGGA: float    = 0.030  ## 강남 상가 3.0%/시즌
+var RENTAL_RATE_BUILDING: float  = 0.040  ## 빌딩 4.0%/시즌
+
+## Title eligibility definitions loaded from lifestyle_config.json.
+## Each entry: { titleId: String, condition: String, itemId?: String }
+## condition "has_property" triggers on any tangible asset; "has_luxury" checks itemId.
+## Fallback defaults mirror the JSON titles array so titles work even if the file is missing.
+var _title_definitions: Array[Dictionary] = [
+	{"titleId": "건물주",      "condition": "has_property"},
+	{"titleId": "수입차 애호가", "condition": "has_luxury", "itemId": "luxury_car"},
+	{"titleId": "컬렉터",      "condition": "has_luxury", "itemId": "luxury_watch"},
+	{"titleId": "멤버스 온리", "condition": "has_luxury", "itemId": "golf_club"},
+	{"titleId": "요트클럽",    "condition": "has_luxury", "itemId": "yacht_berth"},
+]
 
 ## Startup exit probabilities (GDD §F5).
-const STARTUP_IPO_CHANCE: float    = 0.20
-const STARTUP_MA_CHANCE: float     = 0.70   ## cumulative: 0.20 + 0.50
-const STARTUP_IPO_MIN: float       = 2.0
-const STARTUP_IPO_MAX: float       = 5.0
-const STARTUP_MA_MIN: float        = 1.0
-const STARTUP_MA_MAX: float        = 1.5
+var STARTUP_IPO_CHANCE: float    = 0.20
+var STARTUP_MA_CHANCE: float     = 0.70   ## cumulative: 0.20 + 0.50
+var STARTUP_IPO_MIN: float       = 2.0
+var STARTUP_IPO_MAX: float       = 5.0
+var STARTUP_MA_MIN: float        = 1.0
+var STARTUP_MA_MAX: float        = 1.5
 
 # ── State ──
 
@@ -89,10 +105,73 @@ var _tangible_value_cache: int = 0
 # ── Lifecycle ──
 
 func _ready() -> void:
+	_load_config()
 	# Auto-settlement: runs on every market close, self-detects season-end day.
 	# SeasonManager dependency removed — GameClock is the sole timer source.
 	# GDD: lifestyle-spending.md §3-1
 	GameClock.on_market_close.connect(_on_market_close)
+
+
+# ── Config Loading ──
+
+## Load tuning values from assets/data/lifestyle_config.json.
+## Falls back to hardcoded defaults on any read or parse error (design/gdd/lifestyle-spending.md §7).
+func _load_config() -> void:
+	var file: FileAccess = FileAccess.open(CONFIG_PATH, FileAccess.READ)
+	if file == null:
+		push_warning("LifestyleManager._load_config: cannot open %s — using defaults" % CONFIG_PATH)
+		return
+	var json_text: String = file.get_as_text()
+	file.close()
+	var parsed: Variant = JSON.parse_string(json_text)
+	if not parsed is Dictionary:
+		push_warning("LifestyleManager._load_config: JSON parse error in %s — using defaults" % CONFIG_PATH)
+		return
+	var cfg: Dictionary = parsed as Dictionary
+
+	# Residence names
+	if cfg.has("residenceNames") and cfg["residenceNames"] is Array:
+		var arr: Array = cfg["residenceNames"]
+		var loaded: Array[String] = []
+		for v: Variant in arr:
+			loaded.append(str(v))
+		if not loaded.is_empty():
+			RESIDENCE_NAMES = loaded
+
+	# Residence costs
+	if cfg.has("residenceCosts") and cfg["residenceCosts"] is Array:
+		var arr: Array = cfg["residenceCosts"]
+		var loaded: Array[int] = []
+		for v: Variant in arr:
+			loaded.append(int(v))
+		if not loaded.is_empty():
+			RESIDENCE_COSTS = loaded
+
+	# Rental rates (nested dictionary)
+	if cfg.has("rentalRates") and cfg["rentalRates"] is Dictionary:
+		var rates: Dictionary = cfg["rentalRates"]
+		if rates.has("officetel"): RENTAL_RATE_OFFICETEL = float(rates["officetel"])
+		if rates.has("sangga"):    RENTAL_RATE_SANGGA    = float(rates["sangga"])
+		if rates.has("building"):  RENTAL_RATE_BUILDING  = float(rates["building"])
+
+	# Startup probabilities
+	if cfg.has("startupIpoChance"):  STARTUP_IPO_CHANCE = float(cfg["startupIpoChance"])
+	if cfg.has("startupMaChance"):   STARTUP_MA_CHANCE  = float(cfg["startupMaChance"])
+	if cfg.has("startupIpoMin"):     STARTUP_IPO_MIN    = float(cfg["startupIpoMin"])
+	if cfg.has("startupIpoMax"):     STARTUP_IPO_MAX    = float(cfg["startupIpoMax"])
+	if cfg.has("startupMaMin"):      STARTUP_MA_MIN     = float(cfg["startupMaMin"])
+	if cfg.has("startupMaMax"):      STARTUP_MA_MAX     = float(cfg["startupMaMax"])
+
+	# Donation limits
+	if cfg.has("donationMin"): DONATION_MIN = int(cfg["donationMin"])
+	if cfg.has("donationMax"): DONATION_MAX = int(cfg["donationMax"])
+
+	# Title definitions — replaces hardcoded TITLE_ITEM_ID_* consts.
+	if cfg.has("titles") and cfg["titles"] is Array:
+		_title_definitions.clear()
+		for entry: Variant in cfg["titles"]:
+			if entry is Dictionary:
+				_title_definitions.append(entry as Dictionary)
 
 
 # ── Public API: Queries ──
@@ -225,8 +304,8 @@ func purchase_social_item(item_id: String, cost: int, xp_bonus: int, is_recurrin
 
 ## Donate to public campaign (공익 캠페인 기부). GDD §3-2: XP = ₩10M당 +1, 최대 +5/회.
 ## Returns false if amount out of range or insufficient cash.
-const DONATION_MIN: int = 1_000_000
-const DONATION_MAX: int = 50_000_000
+var DONATION_MIN: int = 1_000_000
+var DONATION_MAX: int = 50_000_000
 
 func donate(amount: int) -> bool:
 	if amount < DONATION_MIN or amount > DONATION_MAX:
@@ -341,21 +420,23 @@ func _tick_seasons_held() -> void:
 # ── Title System ──
 
 func _check_and_grant_titles() -> void:
-	## 건물주: 부동산 1개 이상 보유
-	if not _titles.has("건물주") and not _tangible_assets.is_empty():
-		_grant_title("건물주")
-	## 수입차 애호가
-	if not _titles.has("수입차 애호가") and _owned_luxury.has("luxury_car"):
-		_grant_title("수입차 애호가")
-	## 컬렉터
-	if not _titles.has("컬렉터") and _owned_luxury.has("luxury_watch"):
-		_grant_title("컬렉터")
-	## 멤버스 온리
-	if not _titles.has("멤버스 온리") and _owned_luxury.has("golf_club"):
-		_grant_title("멤버스 온리")
-	## 요트클럽
-	if not _titles.has("요트클럽") and _owned_luxury.has("yacht_berth"):
-		_grant_title("요트클럽")
+	## Driven by _title_definitions loaded from lifestyle_config.json (§titles array).
+	## Each definition has: titleId (String), condition (String), optional itemId (String).
+	## condition "has_property" — granted when at least one tangible asset is owned.
+	## condition "has_luxury"   — granted when _owned_luxury contains the given itemId.
+	for def: Dictionary in _title_definitions:
+		var title_id: String = def.get("titleId", "")
+		if title_id.is_empty() or _titles.has(title_id):
+			continue
+		var condition: String = def.get("condition", "")
+		match condition:
+			"has_property":
+				if not _tangible_assets.is_empty():
+					_grant_title(title_id)
+			"has_luxury":
+				var item_id: String = def.get("itemId", "")
+				if not item_id.is_empty() and _owned_luxury.has(item_id):
+					_grant_title(title_id)
 
 
 func _grant_title(title_id: String) -> void:

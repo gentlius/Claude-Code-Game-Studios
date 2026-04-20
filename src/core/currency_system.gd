@@ -50,12 +50,6 @@ func get_total_prize_earned() -> int:
 	return _total_prize_earned
 
 
-## Returns sim trading account balance (예수금). Kept for UI/test compatibility.
-## Note: 라이프스타일 현금 자산은 get_cash_assets() 사용.
-func get_deposit() -> int:
-	return _sim_cash
-
-
 # ── Public API: Sim Cash Operations ──
 
 ## Deduct from sim cash (매수 시 예수금 차감). Returns true if successful, false if insufficient.

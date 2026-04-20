@@ -27,7 +27,7 @@ func capture() -> Dictionary:
 
 		# ── CurrencySystem ──
 		"sim_cash":       CurrencySystem.get_sim_cash(),
-		"deposit":        CurrencySystem.get_deposit(),
+		"deposit":        CurrencySystem.get_sim_cash(),
 		"season_active":  GameClock.is_season_active(),
 
 		# ── PortfolioManager (all held fields) ──

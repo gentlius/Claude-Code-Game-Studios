@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "residenceNames": [
+    "쪽방/고시원",
+    "변두리 원룸",
+    "도심 오피스텔",
+    "강남 아파트 (중형)",
+    "도심 대형 아파트",
+    "초고층 펜트하우스",
+    "교외 대저택",
+    "개인 섬/별장",
+    "스카이 레지던스",
+    "영빈관급 저택",
+    "(엔딩)"
+  ],
+  "residenceCosts": [
+    0,
+    500000,
+    2000000,
+    10000000,
+    30000000,
+    100000000,
+    300000000,
+    1000000000,
+    3000000000,
+    10000000000,
+    0
+  ],
+  "rentalRates": {
+    "officetel": 0.025,
+    "sangga":    0.030,
+    "building":  0.040
+  },
+  "startupIpoChance": 0.20,
+  "startupMaChance":  0.70,
+  "startupIpoMin": 2.0,
+  "startupIpoMax": 5.0,
+  "startupMaMin": 1.0,
+  "startupMaMax": 1.5,
+  "donationMin": 1000000,
+  "donationMax": 50000000,
+  "titles": [
+    {
+      "titleId":   "건물주",
+      "condition": "has_property"
+    },
+    {
+      "titleId":   "수입차 애호가",
+      "condition": "has_luxury",
+      "itemId":    "luxury_car"
+    },
+    {
+      "titleId":   "컬렉터",
+      "condition": "has_luxury",
+      "itemId":    "luxury_watch"
+    },
+    {
+      "titleId":   "멤버스 온리",
+      "condition": "has_luxury",
+      "itemId":    "golf_club"
+    },
+    {
+      "titleId":   "요트클럽",
+      "condition": "has_luxury",
+      "itemId":    "yacht_berth"
+    }
+  ]
+}

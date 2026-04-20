@@ -229,19 +229,25 @@ func _add_row(entry: Dictionary) -> void:
 	hbox.add_theme_constant_override("separation", 8)
 	row.add_child(hbox)
 
-	# 순위
+	_add_row_rank_label(hbox, rank, is_player)
+	_add_row_nick_label(hbox, nickname, is_player, is_gm_ai)
+	_add_row_return_label(hbox, return_pct)
+	_add_row_prize_label(hbox, rank, is_player, prize_raw)
+
+
+## Adds the rank column label to a leaderboard row hbox.
+func _add_row_rank_label(hbox: HBoxContainer, rank: int, is_player: bool) -> void:
 	var lbl_rank: Label = Label.new()
-	var rank_text: String = ("▶ %d" % rank) if is_player else ("%d" % rank)
-	lbl_rank.text = rank_text
+	lbl_rank.text = ("▶ %d" % rank) if is_player else ("%d" % rank)
 	lbl_rank.custom_minimum_size = Vector2(48, 0)
 	lbl_rank.add_theme_font_size_override("font_size", 12)
 	lbl_rank.add_theme_color_override("font_color", COLOR_NEUTRAL)
 	hbox.add_child(lbl_rank)
 
-	# 닉네임 (거장 뱃지)
-	var nick_text: String = nickname
-	if is_gm_ai:
-		nick_text = nickname + " [거장]"
+
+## Adds the nickname column label (with grandmaster badge) to a leaderboard row hbox.
+func _add_row_nick_label(hbox: HBoxContainer, nickname: String, is_player: bool, is_gm_ai: bool) -> void:
+	var nick_text: String = nickname + (" [거장]" if is_gm_ai else "")
 	var lbl_nick: Label = Label.new()
 	lbl_nick.text = nick_text
 	lbl_nick.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -250,7 +256,9 @@ func _add_row(entry: Dictionary) -> void:
 	lbl_nick.add_theme_color_override("font_color", nick_color)
 	hbox.add_child(lbl_nick)
 
-	# 수익률
+
+## Adds the return-pct column label to a leaderboard row hbox.
+func _add_row_return_label(hbox: HBoxContainer, return_pct: float) -> void:
 	var lbl_ret: Label = Label.new()
 	lbl_ret.text = _fmt_pct(return_pct)
 	lbl_ret.custom_minimum_size = Vector2(72, 0)
@@ -260,7 +268,10 @@ func _add_row(entry: Dictionary) -> void:
 		COLOR_POSITIVE if return_pct >= 0.0 else COLOR_NEGATIVE)
 	hbox.add_child(lbl_ret)
 
-	# 상금 예상 — AC-11: is_rank_eligible == false → "체결 부족"
+
+## Adds the prize-preview column label to a leaderboard row hbox.
+## AC-11: is_rank_eligible == false → "체결 부족".
+func _add_row_prize_label(hbox: HBoxContainer, rank: int, is_player: bool, prize_raw: Variant) -> void:
 	var lbl_prize: Label = Label.new()
 	lbl_prize.custom_minimum_size = Vector2(72, 0)
 	lbl_prize.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -424,7 +435,15 @@ func _build_left_panel() -> Control:
 	vbox.add_theme_constant_override("separation", 4)
 	panel.add_child(vbox)
 
-	# 내 현황 헤더
+	_build_left_panel_tier_section(vbox)
+	_build_left_panel_season_section(vbox)
+	_build_left_panel_weekly_section(vbox)
+
+	return panel
+
+
+## Builds the tier name + rank block inside the left panel vbox.
+func _build_left_panel_tier_section(vbox: VBoxContainer) -> void:
 	var header: Label = Label.new()
 	header.text = tr("내 현황")
 	header.add_theme_font_size_override("font_size", 15)
@@ -433,20 +452,21 @@ func _build_left_panel() -> Control:
 
 	vbox.add_child(_make_spacer(8))
 
-	# 티어명
 	_lbl_tier_name = Label.new()
 	_lbl_tier_name.text = "—"
 	_lbl_tier_name.add_theme_font_size_override("font_size", 22)
 	_lbl_tier_name.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3, 1.0))
 	vbox.add_child(_lbl_tier_name)
 
-	# 순위
 	_lbl_tier_rank = Label.new()
 	_lbl_tier_rank.text = "—"
 	_lbl_tier_rank.add_theme_font_size_override("font_size", 13)
 	_lbl_tier_rank.add_theme_color_override("font_color", COLOR_NEUTRAL)
 	vbox.add_child(_lbl_tier_rank)
 
+
+## Builds the season return + asset value block inside the left panel vbox.
+func _build_left_panel_season_section(vbox: VBoxContainer) -> void:
 	vbox.add_child(_make_spacer(12))
 	vbox.add_child(_make_section_label(tr("시즌 수익률")))
 
@@ -461,6 +481,9 @@ func _build_left_panel() -> Control:
 	_lbl_season_value.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5, 1.0))
 	vbox.add_child(_lbl_season_value)
 
+
+## Builds the weekly return + prize eligibility block inside the left panel vbox.
+func _build_left_panel_weekly_section(vbox: VBoxContainer) -> void:
 	vbox.add_child(_make_spacer(12))
 	vbox.add_child(_make_section_label(tr("주간 수익률")))
 
@@ -484,8 +507,6 @@ func _build_left_panel() -> Control:
 	_lbl_weekly_prize_status.add_theme_color_override("font_color", COLOR_NEUTRAL)
 	_lbl_weekly_prize_status.autowrap_mode = TextServer.AUTOWRAP_WORD
 	vbox.add_child(_lbl_weekly_prize_status)
-
-	return panel
 
 
 # ── Right Panel: 리더보드 ──

@@ -41,7 +41,13 @@ func _build_ui() -> void:
 	root_vbox.add_theme_constant_override("separation", 0)
 	add_child(root_vbox)
 
-	# ── Header ──
+	_build_header_bar(root_vbox)
+	_build_slot_scroll(root_vbox)
+	_build_popups()
+
+
+## Builds the top header panel with the title and [새 게임 +] button.
+func _build_header_bar(root_vbox: VBoxContainer) -> void:
 	var header_panel: PanelContainer = PanelContainer.new()
 	var header_style: StyleBoxFlat = StyleBoxFlat.new()
 	header_style.bg_color = Color(0.08, 0.08, 0.09)
@@ -66,7 +72,9 @@ func _build_ui() -> void:
 	ThemeSetup.apply_accent_button(btn_new)
 	header.add_child(btn_new)
 
-	# ── Slot Scroll ──
+
+## Builds the scrollable slot list area and assigns _slot_list.
+func _build_slot_scroll(root_vbox: VBoxContainer) -> void:
 	var scroll: ScrollContainer = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -85,7 +93,9 @@ func _build_ui() -> void:
 	_slot_list.add_theme_constant_override("separation", 8)
 	margin.add_child(_slot_list)
 
-	# ── New Game Popup ──
+
+## Builds and registers the new-game and delete confirmation popups.
+func _build_popups() -> void:
 	_new_game_popup = AcceptDialog.new()
 	_new_game_popup.title = tr("새 게임")
 	_new_game_popup.ok_button_text = tr("시작")
@@ -110,7 +120,6 @@ func _build_ui() -> void:
 	)
 	popup_vbox.add_child(_name_input)
 
-	# ── Delete Popup ──
 	_delete_popup = ConfirmationDialog.new()
 	_delete_popup.ok_button_text = tr("삭제")
 	_delete_popup.confirmed.connect(_on_delete_confirm)
@@ -169,62 +178,10 @@ func _build_slot_card(slot: Dictionary) -> Control:
 	hbox.add_child(info_vbox)
 
 	if not is_valid:
-		var warn_lbl: Label = Label.new()
-		warn_lbl.text = tr("⚠ 손상된 파일 — %s") % slot.get("name", "?")
-		warn_lbl.add_theme_color_override("font_color", Color(0.85, 0.45, 0.2))
-		warn_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		info_vbox.add_child(warn_lbl)
+		_build_slot_card_invalid(info_vbox, slot)
 	else:
-		# 슬롯 이름 (인라인 편집 가능)
-		var name_str: String = slot.get("name", tr("슬롯 %d") % (id + 1))
-		var name_lbl: Label = Label.new()
-		name_lbl.text = name_str
-		name_lbl.add_theme_font_size_override("font_size", 15)
-		name_lbl.add_theme_color_override("font_color", Color(0.918, 0.918, 0.918))
-		name_lbl.mouse_default_cursor_shape = Control.CURSOR_IBEAM
-		name_lbl.mouse_filter = Control.MOUSE_FILTER_STOP
-		name_lbl.gui_input.connect(func(ev: InputEvent) -> void:
-			if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
-				_start_name_edit(name_lbl, id, name_str)
-				get_viewport().set_input_as_handled()
-		)
-		info_vbox.add_child(name_lbl)
+		_build_slot_card_valid(info_vbox, slot, id)
 
-		# Lv · 시즌 · 날짜
-		var level: int = slot.get("level", 1)
-		var season: int = slot.get("season_number", 1)
-		var week: int = slot.get("fiction_week", 0) + 1
-		var day: int = slot.get("fiction_day", 0) + 1
-		var stats_lbl: Label = Label.new()
-		stats_lbl.text = tr("Lv.%d  ·  시즌 %d  ·  %d주차 %d일") % [level, season, week, day]
-		stats_lbl.add_theme_font_size_override("font_size", 12)
-		stats_lbl.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55))
-		stats_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		info_vbox.add_child(stats_lbl)
-
-		# 평가금액
-		var pf_val: int = slot.get("portfolio_value", 0)
-		var pf_lbl: Label = Label.new()
-		pf_lbl.text = tr("평가금액  ₩%s") % FormatUtils.number(pf_val)
-		pf_lbl.add_theme_font_size_override("font_size", 14)
-		pf_lbl.add_theme_color_override("font_color", Color(0.8, 0.85, 0.95))
-		pf_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		info_vbox.add_child(pf_lbl)
-
-		# 저장 시각
-		var saved_at: int = slot.get("saved_at", 0)
-		var date_lbl: Label = Label.new()
-		if saved_at > 0:
-			var dt: Dictionary = Time.get_datetime_dict_from_unix_time(saved_at)
-			date_lbl.text = tr("저장: %04d-%02d-%02d") % [dt["year"], dt["month"], dt["day"]]
-		else:
-			date_lbl.text = tr("저장: -")
-		date_lbl.add_theme_font_size_override("font_size", 11)
-		date_lbl.add_theme_color_override("font_color", Color(0.38, 0.38, 0.38))
-		date_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		info_vbox.add_child(date_lbl)
-
-	# 삭제 버튼 (손상 슬롯도 삭제 가능)
 	var btn_del: Button = Button.new()
 	btn_del.text = tr("삭제")
 	btn_del.custom_minimum_size = Vector2(60, 0)
@@ -235,6 +192,67 @@ func _build_slot_card(slot: Dictionary) -> Control:
 	hbox.add_child(btn_del)
 
 	return card
+
+
+## Populates info_vbox with a corrupted-file warning label for an invalid slot.
+func _build_slot_card_invalid(info_vbox: VBoxContainer, slot: Dictionary) -> void:
+	var warn_lbl: Label = Label.new()
+	warn_lbl.text = tr("⚠ 손상된 파일 — %s") % slot.get("name", "?")
+	warn_lbl.add_theme_color_override("font_color", Color(0.85, 0.45, 0.2))
+	warn_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	info_vbox.add_child(warn_lbl)
+
+
+## Populates info_vbox with the full slot details (name, stats, value, date) for a valid slot.
+func _build_slot_card_valid(info_vbox: VBoxContainer, slot: Dictionary, id: int) -> void:
+	# 슬롯 이름 (인라인 편집 가능)
+	var name_str: String = slot.get("name", tr("슬롯 %d") % (id + 1))
+	var name_lbl: Label = Label.new()
+	name_lbl.text = name_str
+	name_lbl.add_theme_font_size_override("font_size", 15)
+	name_lbl.add_theme_color_override("font_color", Color(0.918, 0.918, 0.918))
+	name_lbl.mouse_default_cursor_shape = Control.CURSOR_IBEAM
+	name_lbl.mouse_filter = Control.MOUSE_FILTER_STOP
+	name_lbl.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
+			_start_name_edit(name_lbl, id, name_str)
+			get_viewport().set_input_as_handled()
+	)
+	info_vbox.add_child(name_lbl)
+
+	# Lv · 시즌 · 날짜
+	var level: int = slot.get("level", 1)
+	var season: int = slot.get("season_number", 1)
+	var week: int = slot.get("fiction_week", 0) + 1
+	var day: int = slot.get("fiction_day", 0) + 1
+	var stats_lbl: Label = Label.new()
+	stats_lbl.text = tr("Lv.%d  ·  시즌 %d  ·  %d주차 %d일") % [level, season, week, day]
+	stats_lbl.add_theme_font_size_override("font_size", 12)
+	stats_lbl.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55))
+	stats_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	info_vbox.add_child(stats_lbl)
+
+	# 평가금액
+	var pf_val: int = slot.get("portfolio_value", 0)
+	var pf_lbl: Label = Label.new()
+	pf_lbl.text = tr("평가금액  ₩%s") % FormatUtils.number(pf_val)
+	pf_lbl.add_theme_font_size_override("font_size", 14)
+	pf_lbl.add_theme_color_override("font_color", Color(0.8, 0.85, 0.95))
+	pf_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	info_vbox.add_child(pf_lbl)
+
+	# 저장 시각
+	var saved_at: int = slot.get("saved_at", 0)
+	var date_lbl: Label = Label.new()
+	if saved_at > 0:
+		var dt: Dictionary = Time.get_datetime_dict_from_unix_time(saved_at)
+		date_lbl.text = tr("저장: %04d-%02d-%02d") % [dt["year"], dt["month"], dt["day"]]
+	else:
+		date_lbl.text = tr("저장: -")
+	date_lbl.add_theme_font_size_override("font_size", 11)
+	date_lbl.add_theme_color_override("font_color", Color(0.38, 0.38, 0.38))
+	date_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	info_vbox.add_child(date_lbl)
 
 
 # ── Slot Name Inline Edit ──

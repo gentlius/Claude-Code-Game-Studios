@@ -148,7 +148,15 @@ func open_position(stock_id: String, quantity: int, multiplier: int) -> int:
 ## Returns total net_proceeds for the closed quantity (may be negative on heavy loss).
 ## GDD §3-4, F4.
 func close_position(stock_id: String, quantity: int) -> int:
-	# Collect and sort positions for this stock FIFO (oldest open_day first)
+	var matching: Array[Dictionary] = _collect_fifo_positions(stock_id)
+	var filled_price: int = PriceEngine.get_current_price(stock_id)
+	var total_net: int = _settle_partial_close(matching, filled_price, quantity)
+	_prune_exhausted_positions()
+	return total_net
+
+
+## Collect and FIFO-sort all open positions for a given stock (oldest open_day first).
+func _collect_fifo_positions(stock_id: String) -> Array[Dictionary]:
 	var matching: Array[Dictionary] = []
 	for pos: Dictionary in _positions:
 		if pos["stock_id"] == stock_id:
@@ -156,8 +164,13 @@ func close_position(stock_id: String, quantity: int) -> int:
 	matching.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return a["open_day"] < b["open_day"]
 	)
+	return matching
 
-	var filled_price: int = PriceEngine.get_current_price(stock_id)
+
+## Settle up to `quantity` shares across FIFO positions; return total net proceeds.
+func _settle_partial_close(
+	matching: Array[Dictionary], filled_price: int, quantity: int
+) -> int:
 	var total_net: int = 0
 	var remaining_qty: int = quantity
 
@@ -187,13 +200,16 @@ func close_position(stock_id: String, quantity: int) -> int:
 		if pos["quantity"] <= 0:
 			on_leverage_position_closed.emit(pos["stock_id"], pos["multiplier"], net)
 
-	# Remove fully-exhausted positions
+	return total_net
+
+
+## Remove fully-exhausted positions (quantity == 0) from _positions.
+func _prune_exhausted_positions() -> void:
 	var surviving: Array[Dictionary] = []
 	for pos: Dictionary in _positions:
 		if pos["quantity"] > 0:
 			surviving.append(pos)
 	_positions = surviving
-	return total_net
 
 # ── Public API: Tick/Day Processing ──
 
@@ -298,7 +314,11 @@ func _forced_liquidation(pos: Dictionary) -> void:
 		var available: int = CurrencySystem.get_sim_cash()
 		CurrencySystem.sim_deduct(mini(loss, available))
 
-	_positions.erase(pos)
+	var surviving: Array[Dictionary] = []
+	for p: Dictionary in _positions:
+		if p != pos:
+			surviving.append(p)
+	_positions = surviving
 	on_leverage_forced_liquidation.emit(pos["stock_id"], pos["multiplier"], net_proceeds)
 	on_leverage_position_closed.emit(pos["stock_id"], pos["multiplier"], net_proceeds)
 

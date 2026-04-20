@@ -102,21 +102,24 @@ func test_no_trades_no_daily_xp() -> void:
 # ── AC-4: Season bonus XP ──
 
 func test_season_xp_rank_1() -> void:
-	var xp: int = XpSystem._calculate_season_xp(1, 30.0)
+	var breakdown: Dictionary = XpSystem._calculate_season_xp(1, 30.0)
 	# 200 + 500 + floor(30 * 10) = 200 + 500 + 300 = 1000
-	assert_eq(xp, 1000, "Rank 1, +30% return")
+	assert_eq(breakdown["xp"], 1000, "Rank 1, +30% return")
+	assert_eq(breakdown["rank_bonus"], 500, "Rank 1 rank_bonus")
+	assert_eq(breakdown["return_bonus"], 300, "Rank 1 return_bonus")
 
 
 func test_season_xp_rank_3() -> void:
-	var xp: int = XpSystem._calculate_season_xp(3, 25.0)
+	var breakdown: Dictionary = XpSystem._calculate_season_xp(3, 25.0)
 	# 200 + 250 + 250 = 700
-	assert_eq(xp, 700, "Rank 3, +25% return")
+	assert_eq(breakdown["xp"], 700, "Rank 3, +25% return")
 
 
 func test_season_xp_negative_return() -> void:
-	var xp: int = XpSystem._calculate_season_xp(6, -10.0)
+	var breakdown: Dictionary = XpSystem._calculate_season_xp(6, -10.0)
 	# 200 + 50 + 0 = 250
-	assert_eq(xp, 250, "Rank 6+, negative return → return_bonus = 0")
+	assert_eq(breakdown["xp"], 250, "Rank 6+, negative return → return_bonus = 0")
+	assert_eq(breakdown["return_bonus"], 0, "Negative return → return_bonus = 0")
 
 
 # ── AC-5: Level-up + skill point ──

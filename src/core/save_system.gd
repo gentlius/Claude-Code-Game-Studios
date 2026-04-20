@@ -108,30 +108,42 @@ func create_slot(slot_name: String) -> int:
 ## Sets _active_slot_id on success.
 func load_slot(id: int) -> bool:
 	var path: String = "user://save_slot_%d.json" % id
+	var data: Dictionary = _read_slot_json(path, id)
+	if data.is_empty():
+		return false
+	_restore_core_systems(data)
+	var season_active: bool = _restore_clock(data)
+	_restore_season_systems(data, season_active)
+	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)
+	_active_slot_id = id
+	return true
+
+
+## Parse save file at path. Returns empty Dict on any error.
+func _read_slot_json(path: String, id: int) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		push_warning("SaveSystem: 슬롯 파일 없음 — %s (EC-02)" % path)
-		return false
-
+		return {}
 	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		push_warning("SaveSystem: 슬롯 파일 읽기 실패 (EC-02) — %s" % path)
-		return false
-
+		return {}
 	var json_text: String = file.get_as_text()
 	file.close()
-
 	var _json := JSON.new()
 	if _json.parse(json_text) != OK or not _json.get_data() is Dictionary:
 		push_warning("SaveSystem: JSON 파싱 실패 (EC-03) — 슬롯 %d" % id)
-		return false
-	var parsed: Variant = _json.get_data()
-
-	var data: Dictionary = parsed as Dictionary
+		return {}
+	var data: Dictionary = _json.get_data() as Dictionary
 	var saved_version: int = data.get("save_version", 0)
 	if saved_version != SAVE_VERSION:
 		push_warning("SaveSystem: save_version 불일치 %d → %d (EC-04) — 알려진 필드만 로드" % [
 			saved_version, SAVE_VERSION])
+	return data
 
+
+## Restore XP, skills, season, currency, portfolio, lifestyle.
+func _restore_core_systems(data: Dictionary) -> void:
 	if data.has("xp"):
 		XpSystem.load_save_data(data["xp"])
 	if data.has("skill_tree"):
@@ -145,24 +157,27 @@ func load_slot(id: int) -> bool:
 	if data.has("lifestyle"):
 		LifestyleManager.load_save_data(data["lifestyle"])
 
-	# GameClock 복원 — is_season_active()의 권한자. 위 시스템들의 load_save_data()는
-	# GameClock.is_season_active()를 내부에서 호출하지 않으므로 순서는 안전.
-	# 이 라인 아래에서만 is_season_active()를 쿼리할 것 (line 145 참고).
-	GameClock.load_save_data(data.get("clock", {}))
 
-	# 구버전 세이브 호환: clock 섹션에 season_active가 없으면 currency 섹션 fallback.
+## Restore GameClock. Returns true if season was active.
+## Must be called after _restore_core_systems (clock owns is_season_active authority).
+func _restore_clock(data: Dictionary) -> bool:
+	GameClock.load_save_data(data.get("clock", {}))
 	var season_active: bool = GameClock.is_season_active()
+	# 구버전 세이브 호환: clock 섹션에 season_active가 없으면 currency 섹션 fallback.
 	if not season_active:
 		season_active = data.get("currency", {}).get("season_active", false)
 		if season_active:
 			GameClock.load_save_data({"season_active": true,
 				"market_state": GameClock.MarketState.PRE_MARKET})
+	return season_active
 
+
+## Restore in-season systems (prices, AI, news, positions). Safe to call with season_active=false.
+func _restore_season_systems(data: Dictionary, season_active: bool) -> void:
 	if season_active:
 		PriceEngine.initialize_for_load(data.get("prices", {}))
 		AiCompetitor.load_save_data(data.get("ai", {}))
 		NewsEventSystem.load_save_data(data.get("news", {}))
-
 	# StopTakeSystem은 holding 복원 이후에 로드해야 holding 유효성 검사가 가능 (EC-16)
 	StopTakeSystem.load_save_data(data.get("stop_take", []))
 	# TR3: 숏 포지션 복원 (holding 복원 이후 — margin_ratio는 첫 틱에 재계산)
@@ -171,9 +186,6 @@ func load_slot(id: int) -> bool:
 	LeverageManager.load_save_data(data.get("leverage_positions", []))
 	# OHLCV 시즌 간 누적 히스토리 복원 (S9-07)
 	OhlcvHistory.load_save_data(data.get("ohlcv_history", {}))
-	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)
-	_active_slot_id = id
-	return true
 
 
 ## Save all system state to save_slot_{id}.json and update index metadata.

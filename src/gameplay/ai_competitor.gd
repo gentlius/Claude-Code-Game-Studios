@@ -122,6 +122,10 @@ func _ready() -> void:
 	assert(TOTAL_PARTICIPANTS == SeasonManager.TOTAL_PARTICIPANTS - 1,
 		"AiCompetitor.TOTAL_PARTICIPANTS(%d) != SeasonManager.TOTAL_PARTICIPANTS-1(%d). Sync required!" \
 		% [TOTAL_PARTICIPANTS, SeasonManager.TOTAL_PARTICIPANTS - 1])
+	assert(PARTICIPANTS_PER_TICK * GameClock.TICKS_PER_DAY >= TOTAL_PARTICIPANTS,
+		"PARTICIPANTS_PER_TICK(%d) × TICKS_PER_DAY(%d) = %d < TOTAL_PARTICIPANTS(%d) — 하루 안에 전원 처리 불가!" \
+		% [PARTICIPANTS_PER_TICK, GameClock.TICKS_PER_DAY,
+		   PARTICIPANTS_PER_TICK * GameClock.TICKS_PER_DAY, TOTAL_PARTICIPANTS])
 
 
 # ── Public API ──

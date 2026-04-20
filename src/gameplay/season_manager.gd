@@ -50,9 +50,12 @@ const TIER_RATIOS: Array[float] = [
 ## Season 1 = 1월, Season 2 = 4월, Season 3 = 7월, Season 4 = 10월, Season 5 = 1월, …
 const SEASON_MONTH_STARTS: Array[int] = [1, 4, 7, 10]
 
+## Path to the external config file (assets/data/season_config.json).
+const CONFIG_PATH: String = "res://assets/data/season_config.json"
+
 # ── Config — Tier Thresholds (GDD §3-2, Tuning Knob §7-1) ──
 ## Entry capital threshold for each tier (index = tier constant).
-## Designer adjustable: align with narrative & daily return targets.
+## Loaded from season_config.json — designer adjustable.
 var TIER_THRESHOLD: Array[int] = [
 	1_000_000,          ## TIER_BRONZE
 	3_000_000,          ## TIER_SILVER
@@ -74,7 +77,7 @@ var TIER_NAMES: Array[String] = [
 
 # ── Config — Prize Rates (GDD §4-6, Tuning Knob §7-2) ──
 ## Cash prize multiplier per rank (applied to tier entry threshold).
-## rank key = 1-indexed finish position within the tier.
+## rank key = 1-indexed finish position within the tier. Loaded from season_config.json.
 var PRIZE_RATE: Dictionary = {
 	1:  0.50,
 	2:  0.30,
@@ -90,27 +93,31 @@ var PRIZE_RATE: Dictionary = {
 
 # ── Config — Special Rewards (GDD §3-4, Tuning Knob §7-3) ──
 ## Weekly top-return prize rate (× tier entry threshold).
-@export var WEEKLY_PRIZE_RATE: float = 0.02
+var WEEKLY_PRIZE_RATE: float = 0.02
 ## Minimum weekly fills to qualify for the weekly prize.
-@export var MIN_WEEKLY_TRADES: int = 2
+var MIN_WEEKLY_TRADES: int = 2
 ## Most-trades prize rate (× tier entry threshold).
-@export var MOST_TRADES_PRIZE_RATE: float = 0.01
+var MOST_TRADES_PRIZE_RATE: float = 0.01
 ## XP awarded to player for winning the weekly top-return prize (GDD §3-4).
-@export var WEEKLY_PRIZE_XP: int = 50
+var WEEKLY_PRIZE_XP: int = 50
 
 # ── Config — Season Structure (GDD §7-1) ──
 ## Minimum season-level fills to qualify for prize payouts.
-@export var MIN_TRADES_FOR_RANK: int = 5
+var MIN_TRADES_FOR_RANK: int = 5
 ## Total simulated participants (display only — AI object count is in ai-competitor.md).
-@export var TOTAL_PARTICIPANTS: int = 20_000
+var TOTAL_PARTICIPANTS: int = 20_000
+
+## 시즌 수익률 등급 임계값 (%). settlement_reporter.gd가 단일 소스로 참조 (TD-CR-23).
+## [S≥20%, A≥10%, B≥0%, C≥-10%, D<-10%]. Loaded from season_config.json.
+var GRADE_THRESHOLDS: Array[float] = [20.0, 10.0, 0.0, -10.0]
 
 # ── Config — Free Market & Endings (GDD §7-4) ──
 ## Assets below this threshold at season start → free-market mode.
-@export var FREE_MARKET_THRESHOLD: int = 1_000_000
+var FREE_MARKET_THRESHOLD: int = 1_000_000
 ## Cash below this with no holdings → Hangang ending (free-market only).
-@export var HANGANG_THRESHOLD: int = 10_000
+var HANGANG_THRESHOLD: int = 10_000
 ## Total assets at/above this at season end → Master ending.
-@export var ENDING_THRESHOLD: int = 100_000_000_000
+var ENDING_THRESHOLD: int = 100_000_000_000
 
 # ── State ──
 
@@ -133,6 +140,7 @@ var _ending_triggered: bool = false
 # ── Lifecycle ──
 
 func _ready() -> void:
+	_load_config()
 	GameClock.on_season_start.connect(_on_season_start)
 	GameClock.on_season_end.connect(_on_season_end)
 	GameClock.on_week_end.connect(_on_week_end)
@@ -141,6 +149,68 @@ func _ready() -> void:
 	## TD-08: SeasonManager owns the full season-start sequence.
 	## GameClock emits on_new_season_requested after SEASON_END confirmation.
 	GameClock.on_new_season_requested.connect(func() -> void: start_season())
+
+
+# ── Config Loading ──
+
+## Load tuning values from assets/data/season_config.json.
+## Falls back to hardcoded defaults on any read or parse error (design/gdd/season-manager.md §7).
+func _load_config() -> void:
+	var file: FileAccess = FileAccess.open(CONFIG_PATH, FileAccess.READ)
+	if file == null:
+		push_warning("SeasonManager._load_config: cannot open %s — using defaults" % CONFIG_PATH)
+		return
+	var json_text: String = file.get_as_text()
+	file.close()
+	var parsed: Variant = JSON.parse_string(json_text)
+	if not parsed is Dictionary:
+		push_warning("SeasonManager._load_config: JSON parse error in %s — using defaults" % CONFIG_PATH)
+		return
+	var cfg: Dictionary = parsed as Dictionary
+
+	# Tier thresholds (Array[int])
+	if cfg.has("tierThresholds") and cfg["tierThresholds"] is Array:
+		var arr: Array = cfg["tierThresholds"]
+		var loaded: Array[int] = []
+		for v: Variant in arr:
+			loaded.append(int(v))
+		if loaded.size() == TIER_COUNT:
+			TIER_THRESHOLD = loaded
+
+	# Tier names (Array[String])
+	if cfg.has("tierNames") and cfg["tierNames"] is Array:
+		var arr: Array = cfg["tierNames"]
+		var loaded: Array[String] = []
+		for v: Variant in arr:
+			loaded.append(str(v))
+		if loaded.size() == TIER_COUNT:
+			TIER_NAMES = loaded
+
+	# Prize rates — JSON keys are strings; convert to int keys at load time.
+	if cfg.has("prizeRates") and cfg["prizeRates"] is Dictionary:
+		var raw: Dictionary = cfg["prizeRates"]
+		var loaded: Dictionary = {}
+		for key: Variant in raw:
+			loaded[int(key)] = float(raw[key])
+		PRIZE_RATE = loaded
+
+	# Scalar tuning knobs — only override if key present and correct type.
+	if cfg.has("weeklyPrizeRate"):    WEEKLY_PRIZE_RATE    = float(cfg["weeklyPrizeRate"])
+	if cfg.has("minWeeklyTrades"):    MIN_WEEKLY_TRADES    = int(cfg["minWeeklyTrades"])
+	if cfg.has("mostTradesPrizeRate"): MOST_TRADES_PRIZE_RATE = float(cfg["mostTradesPrizeRate"])
+	if cfg.has("weeklyPrizeXp"):      WEEKLY_PRIZE_XP      = int(cfg["weeklyPrizeXp"])
+	if cfg.has("minTradesForRank"):   MIN_TRADES_FOR_RANK  = int(cfg["minTradesForRank"])
+	if cfg.has("totalParticipants"):  TOTAL_PARTICIPANTS   = int(cfg["totalParticipants"])
+	if cfg.has("freeMarketThreshold"): FREE_MARKET_THRESHOLD = int(cfg["freeMarketThreshold"])
+	if cfg.has("hangangThreshold"):   HANGANG_THRESHOLD    = int(cfg["hangangThreshold"])
+	if cfg.has("endingThreshold"):    ENDING_THRESHOLD     = int(cfg["endingThreshold"])
+	if cfg.has("gradeThresholds") and cfg["gradeThresholds"] is Array:
+		var arr: Array = cfg["gradeThresholds"]
+		var loaded: Array[float] = []
+		for v: Variant in arr:
+			loaded.append(float(v))
+		if loaded.size() == 4:
+			GRADE_THRESHOLDS = loaded
 
 
 # ── Public API ──

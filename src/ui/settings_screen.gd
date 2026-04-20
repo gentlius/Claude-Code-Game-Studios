@@ -82,7 +82,12 @@ func _build_ui() -> void:
 	vbox.add_theme_constant_override("separation", 8)
 	margin.add_child(vbox)
 
-	# ── Header ──
+	_build_ui_header(vbox)
+	_build_ui_sections(vbox)
+
+
+## Builds the settings panel header row (title label + close button + separator).
+func _build_ui_header(vbox: VBoxContainer) -> void:
 	var header := HBoxContainer.new()
 	header.alignment = BoxContainer.ALIGNMENT_BEGIN
 	vbox.add_child(header)
@@ -107,20 +112,19 @@ func _build_ui() -> void:
 	sep.add_theme_constant_override("separation", 4)
 	vbox.add_child(sep)
 
-	# ── 오디오 ──
+
+## Builds all settings sections (audio, gameplay, accessibility, key remap).
+func _build_ui_sections(vbox: VBoxContainer) -> void:
 	_add_section_label(vbox, tr("오디오"))
 	_add_volume_row(vbox)
 	_add_mute_row(vbox)
 
-	# ── 게임플레이 ──
 	_add_section_label(vbox, tr("게임플레이"))
 	_add_auto_slow_row(vbox)
 
-	# ── 접근성 ──
 	_add_section_label(vbox, tr("접근성"))
 	_add_colorblind_row(vbox)
 
-	# ── 키 리맵 ──
 	_add_section_label(vbox, tr("키 리맵"))
 	_add_keymap_row(vbox)
 

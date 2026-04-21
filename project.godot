@@ -46,6 +46,7 @@ OhlcvHistory="*res://src/gameplay/ohlcv_history.gd"
 EtfManager="*res://src/gameplay/etf_manager.gd"
 FinancialReportSystem="*res://src/gameplay/financial_report_system.gd"
 MarketProfile="*res://src/gameplay/market_profile.gd"
+M1CacheManager="*res://src/gameplay/m1_cache_manager.gd"
 
 [display]
 

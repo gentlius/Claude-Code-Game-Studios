@@ -9,8 +9,9 @@
 ## See: design/gdd/price-engine.md §OHLCV, design/gdd/chart-renderer.md §W1/MN
 extends Node
 
-## Tuning: number of synthetic past seasons generated from history_seed.
-const N_PRE_SEASONS: int = 200
+## Fallback pre-season count when StockData.history_seasons is unavailable.
+## Actual value is per-stock (StockData.history_seasons, range 3~300).
+const N_PRE_SEASONS: int = 100
 ## Daily bar count per season (GameClock.DAYS_PER_WEEK × GameClock.WEEKS_PER_SEASON = 20).
 const DAYS_PER_SEASON: int = 20
 ## Max daily candle volatility per step (±3%).
@@ -137,17 +138,19 @@ func _get_all_daily(stock_id: String) -> Array[Dictionary]:
 	return result
 
 
-## Generates N_PRE_SEASONS × DAYS_PER_SEASON daily bars using a seeded random walk.
+## Generates stock.history_seasons × DAYS_PER_SEASON daily bars using a seeded random walk.
 ## Deterministic: same history_seed + stock_id always produces the same bars.
+## Uses StockData.history_seasons (3~300) per stock; falls back to N_PRE_SEASONS if unavailable.
 func _generate_pre_history(stock_id: String) -> Array[Dictionary]:
 	var stock_data: StockData = StockDatabase.get_stock(stock_id)
 	var base_price: int = stock_data.base_price if stock_data != null else 10000
+	var n_seasons: int = stock_data.history_seasons if stock_data != null else N_PRE_SEASONS
 	var rng := RandomNumberGenerator.new()
 	# XOR with stock hash for stock-specific but reproducible sequences.
 	rng.seed = (history_seed ^ hash(stock_id)) & 0x7FFFFFFF
 	var result: Array[Dictionary] = [] as Array[Dictionary]
 	var close_prev: float = float(base_price)
-	var total_days: int = N_PRE_SEASONS * DAYS_PER_SEASON
+	var total_days: int = n_seasons * DAYS_PER_SEASON
 	for _i: int in range(total_days):
 		var change: float = rng.randf_range(-PRE_HISTORY_VOLATILITY, PRE_HISTORY_VOLATILITY)
 		var close: float = maxf(close_prev * (1.0 + change), 100.0)

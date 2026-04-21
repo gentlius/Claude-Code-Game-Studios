@@ -20,6 +20,9 @@ enum VolatilityProfile { LOW, MEDIUM, HIGH, EXTREME }
 @export var dividend_yield: float = 0.0  ## Annual dividend yield as a decimal (e.g. 0.02 = 2%). 0.0 = no dividend.
 @export var event_tags: Array[String] = []  ## Tags for INDIVIDUAL event matching
 @export var description: String = ""
+## 이 종목의 상장 역사 시즌 수 (3~300). 프리히스토리 생성 범위를 결정한다.
+## 3 = 신생 상장주, 300 = 대형 우량주. OhlcvHistory / M1CacheManager가 참조.
+@export var history_seasons: int = 100
 
 ## 종목 표시용 통합 포맷. 전체 코드에서 이 메서드만 사용한다.
 ## 포맷 변경 시 이 한 곳만 수정하면 된다.

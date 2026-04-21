@@ -557,3 +557,31 @@ func test_market_profile_api():
 	assert_true(MarketProfile.has_method("get_dlc_achievements"),     "get_dlc_achievements 존재")
 	assert_true(MarketProfile.has_method("apply_macro_context"),      "apply_macro_context 존재")
 	assert_true(MarketProfile.has_method("reset_macro_context"),      "reset_macro_context 존재")
+
+
+# ── M1CacheManager (프리히스토리 차트 데이터) ────────────────────────────────
+## Implements: design/gdd/chart-renderer.md §프리히스토리 M1
+## M1 1분봉 프리히스토리 생성·디스크 캐시·LRU 메모리 관리 autoload.
+
+func test_m1_cache_manager_api():
+	assert_true(M1CacheManager.has_method("load_stock"),          "load_stock 존재")
+	assert_true(M1CacheManager.has_method("get_m1_candles"),      "get_m1_candles 존재")
+	assert_true(M1CacheManager.has_method("get_total_m1_count"),  "get_total_m1_count 존재")
+	assert_true(M1CacheManager.has_method("is_season_available"), "is_season_available 존재")
+	assert_true(M1CacheManager.has_method("request_season"),      "request_season 존재")
+
+
+func test_m1_cache_manager_signals():
+	var signal_list: Array = M1CacheManager.get_signal_list()
+	var signal_names: Array[String] = []
+	for s: Dictionary in signal_list:
+		signal_names.append(s["name"])
+	assert_true("immediate_seasons_ready" in signal_names, "immediate_seasons_ready 시그널 존재")
+	assert_true("season_ready" in signal_names,            "season_ready 시그널 존재")
+
+
+func test_m1_cache_manager_constants():
+	assert_true("N_IMMEDIATE_SEASONS" in M1CacheManager, "N_IMMEDIATE_SEASONS 상수 존재")
+	assert_true("MAX_LOADED_SEASONS"  in M1CacheManager, "MAX_LOADED_SEASONS 상수 존재")
+	assert_true("MINUTES_PER_DAY"     in M1CacheManager, "MINUTES_PER_DAY 상수 존재")
+	assert_true("DAYS_PER_SEASON"     in M1CacheManager, "DAYS_PER_SEASON 상수 존재")

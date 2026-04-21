@@ -74,6 +74,20 @@ var _d1_open: int = 0
 var _d1_high: int = 0
 var _d1_low: int = 0
 var _d1_volume: float = 0.0
+## D1 base count: total completed bars (pre-history + past + current season) before today's partial.
+## Used to detect whether today's intra-day candle is already in _candles.
+var _d1_candle_base_count: int = 0
+
+## Pre-history M1 candles from M1CacheManager (covers N_IMMEDIATE_SEASONS immediately,
+## earlier seasons loaded on-demand when chart scrolls back).
+var _pre_m1_candles: Array[Dictionary] = []
+## Set to true after M1CacheManager emits immediate_seasons_ready for the active stock.
+var _m1_prehistory_ready: bool = false
+
+## Drag-to-scroll state. Left-button drag scrolls through time.
+var _is_dragging: bool = false
+var _drag_start_x: float = 0.0
+var _drag_start_offset: int = 0
 
 ## Indicator caches — computed in _rebuild_indicator_caches() (full) or
 ## _update_last_indicator() (incremental). _draw_rsi/_draw_macd read these directly.
@@ -138,6 +152,8 @@ func _ready() -> void:
 	GameClock.on_tick.connect(_on_tick)
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
 	PriceEngine.on_price_updated.connect(_on_price_updated)
+	M1CacheManager.immediate_seasons_ready.connect(_on_m1_immediate_ready)
+	M1CacheManager.season_ready.connect(_on_m1_season_ready)
 	clip_contents = true
 	tree_exiting.connect(_disconnect_signals)
 	_load_debounce_timer = Timer.new()
@@ -263,6 +279,14 @@ func _do_load_stock(stock_id: String) -> void:
 	_tick_volumes = PriceEngine.get_tick_volumes(stock_id)
 	_ohlcv_daily = PriceEngine.get_ohlcv_history(stock_id)
 
+	# Reset pre-history state and trigger M1 pre-history generation.
+	_pre_m1_candles.clear()
+	_m1_prehistory_ready = false
+	if OhlcvHistory.history_seed != 0:
+		var stock: StockData = StockDatabase.get_stock(stock_id)
+		if stock != null:
+			M1CacheManager.load_stock(stock_id, stock.history_seasons, OhlcvHistory.history_seed)
+
 	_aggregate_candles()
 	_update_header()
 
@@ -376,6 +400,10 @@ func _disconnect_signals() -> void:
 		GameClock.on_market_state_changed.disconnect(_on_market_state_changed)
 	if PriceEngine.on_price_updated.is_connected(_on_price_updated):
 		PriceEngine.on_price_updated.disconnect(_on_price_updated)
+	if M1CacheManager.immediate_seasons_ready.is_connected(_on_m1_immediate_ready):
+		M1CacheManager.immediate_seasons_ready.disconnect(_on_m1_immediate_ready)
+	if M1CacheManager.season_ready.is_connected(_on_m1_season_ready):
+		M1CacheManager.season_ready.disconnect(_on_m1_season_ready)
 	# TD-AUDIT-03: 씬 제거 시 타이머 dangling 방지 — timeout이 freed 객체에서 발화하는 오류 수정
 	if is_instance_valid(_load_debounce_timer):
 		_load_debounce_timer.stop()
@@ -383,21 +411,87 @@ func _disconnect_signals() -> void:
 			_load_debounce_timer.timeout.disconnect(_on_load_debounce_timeout)
 
 
+# ── M1 Pre-history Signal Handlers ──
+
+## Called when M1CacheManager has generated the immediate (last 5 season) pre-history.
+## Loads those candles and rebuilds the chart.
+func _on_m1_immediate_ready(stock_id: String) -> void:
+	if stock_id != _stock_id:
+		return
+	_m1_prehistory_ready = true
+	var total: int = M1CacheManager.get_total_m1_count()
+	if total > 0:
+		_pre_m1_candles = M1CacheManager.get_m1_candles(stock_id, 0, total - 1)
+	_aggregate_candles()
+	_dirty = true
+	queue_redraw()
+
+
+## Called when an on-demand season finishes generating. Refreshes pre-history and redraws.
+func _on_m1_season_ready(_season_idx: int, stock_id: String) -> void:
+	if stock_id != _stock_id:
+		return
+	var total: int = M1CacheManager.get_total_m1_count()
+	if total > 0:
+		_pre_m1_candles = M1CacheManager.get_m1_candles(stock_id, 0, total - 1)
+	_aggregate_candles()
+	_dirty = true
+	queue_redraw()
+
+
+## Checks whether the visible window is approaching the left boundary of loaded pre-history.
+## Triggers an on-demand season request when within 50 candles of the start.
+func _check_prehistory_boundary() -> void:
+	if not _m1_prehistory_ready or _timeframe == Timeframe.W1 or _timeframe == Timeframe.MN \
+			or _timeframe == Timeframe.D1:
+		return
+	var total: int = _candles.size()
+	var start_idx: int = maxi(0, total - _visible_count - _scroll_offset)
+	if start_idx >= 50:
+		return
+	# Determine which M1 cache season corresponds to the current left edge.
+	var m1_per_chart: int = maxi(1, int(_timeframe) / 4)
+	var m1_near_start: int = start_idx * m1_per_chart
+	var season_idx: int = m1_near_start / (M1CacheManager.DAYS_PER_SEASON * M1CacheManager.MINUTES_PER_DAY)
+	if season_idx > 0:
+		M1CacheManager.request_season(season_idx - 1)
+
+
 # ── Input ──
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb: InputEventMouseButton = event as InputEventMouseButton
-		if mb.pressed:
-			if mb.button_index == MOUSE_BUTTON_WHEEL_UP:
+		if mb.button_index == MOUSE_BUTTON_WHEEL_UP:
+			if mb.pressed:
 				_zoom(-5)
-			elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			if mb.pressed:
 				_zoom(5)
-			elif mb.button_index == MOUSE_BUTTON_LEFT:
-				_handle_chart_click(mb.position)
+		elif mb.button_index == MOUSE_BUTTON_LEFT:
+			if mb.pressed:
+				# Begin potential drag — record start position and current scroll offset.
+				_is_dragging = true
+				_drag_start_x = mb.position.x
+				_drag_start_offset = _scroll_offset
+			else:
+				_is_dragging = false
+				# Short press (no significant horizontal movement) → price selection click.
+				if absf(mb.position.x - _drag_start_x) < 5.0:
+					_handle_chart_click(mb.position)
 	elif event is InputEventMouseMotion:
-		_crosshair_pos = (event as InputEventMouseMotion).position
+		var motion: InputEventMouseMotion = event as InputEventMouseMotion
+		_crosshair_pos = motion.position
 		_show_crosshair = true
+		if _is_dragging and _chart_rect.size.x > 0.0:
+			# Drag left (negative delta) = scroll back in time (higher offset).
+			var candle_width: float = _chart_rect.size.x / float(_visible_count)
+			var drag_candles: int = roundi((_drag_start_x - motion.position.x) / candle_width)
+			_scroll_offset = maxi(0, _drag_start_offset + drag_candles)
+			_auto_scroll = _scroll_offset == 0
+			_btn_go_latest.visible = not _auto_scroll
+			_dirty = true
+			_check_prehistory_boundary()
 		queue_redraw()
 
 
@@ -440,10 +534,12 @@ func _aggregate_candles() -> void:
 		return
 
 	if _timeframe == Timeframe.D1:
-		# Use daily OHLCV from PriceEngine for completed days.
-		_candles = _ohlcv_daily.duplicate()
-		# today_start: tick index where today begins in the continuous season buffer.
-		# _ohlcv_daily.size() = completed days; each day has TICKS_PER_DAY ticks.
+		# Use OhlcvHistory for all completed daily bars (pre-history + past seasons + current season).
+		_candles = OhlcvHistory.get_all_daily_bars(_stock_id).duplicate()
+		# _d1_candle_base_count: completed bars before today's partial.
+		_d1_candle_base_count = _candles.size()
+		# today_start: tick index where today begins in the season tick buffer.
+		# _ohlcv_daily.size() = completed days in current season; each day = TICKS_PER_DAY ticks.
 		var today_start: int = _ohlcv_daily.size() * GameClock.TICKS_PER_DAY
 		# Add today's intra-day candle and seed D1 running state from today's ticks only.
 		if _tick_prices.size() > today_start:
@@ -461,17 +557,25 @@ func _aggregate_candles() -> void:
 		_rebuild_indicator_caches()
 		return
 
-	# For intra-day timeframes, aggregate from tick data
+	# For intra-day timeframes (M1/M5/M15): combine M1 pre-history + current season ticks.
 	var tf: int = int(_timeframe)
-	if _tick_prices.size() == 0:
-		return
+	# M1 cache stores 1 candle per minute; tf ticks / 4 ticks-per-minute = minutes per candle.
+	var m1_per_chart: int = tf / 4  # M1→1, M5→5, M15→15
 
-	var i: int = 0
-	while i < _tick_prices.size():
-		var end: int = mini(i + tf - 1, _tick_prices.size() - 1)
-		var candle: Dictionary = _aggregate_range(i, end)
-		_candles.append(candle)
-		i += tf
+	# Pre-history portion from M1CacheManager.
+	if _m1_prehistory_ready and not _pre_m1_candles.is_empty():
+		var i: int = 0
+		while i + m1_per_chart - 1 < _pre_m1_candles.size():
+			_candles.append(_aggregate_m1_range(i, i + m1_per_chart - 1))
+			i += m1_per_chart
+
+	# Current season portion from tick buffer.
+	if _tick_prices.size() > 0:
+		var j: int = 0
+		while j < _tick_prices.size():
+			var end: int = mini(j + tf - 1, _tick_prices.size() - 1)
+			_candles.append(_aggregate_range(j, end))
+			j += tf
 	_rebuild_indicator_caches()
 
 
@@ -508,7 +612,7 @@ func _update_last_candle() -> void:
 			"open": _d1_open, "high": _d1_high, "low": _d1_low, "close": p,
 			"volume": int(_d1_volume), "tick_start": 0, "tick_end": n - 1
 		}
-		if _candles.size() > _ohlcv_daily.size():
+		if _candles.size() > _d1_candle_base_count:
 			_candles[_candles.size() - 1] = today
 		else:
 			_candles.append(today)
@@ -665,6 +769,29 @@ func _update_last_indicator() -> void:
 		_macd_line_cache[last] = ef - es
 		var sig_k: float = 2.0 / float(MACD_SIGNAL + 1)
 		_signal_line_cache[last] = _macd_line_cache[last] * sig_k + _sig_ema_state * (1.0 - sig_k)
+
+
+## Aggregates a range of _pre_m1_candles into a single OHLCV candle Dictionary.
+## Used to combine M1 pre-history bars into M1/M5/M15 chart candles.
+func _aggregate_m1_range(start: int, end_idx: int) -> Dictionary:
+	var open_price: int = _pre_m1_candles[start].get("open", 0)
+	var close_price: int = _pre_m1_candles[end_idx].get("close", 0)
+	var high_price: int = open_price
+	var low_price: int = maxi(open_price, 1)
+	var volume: float = 0.0
+	for i: int in range(start, end_idx + 1):
+		var c: Dictionary = _pre_m1_candles[i]
+		var h: int = c.get("high", 0)
+		var l: int = c.get("low", 999999999)
+		if h > high_price:
+			high_price = h
+		if l < low_price:
+			low_price = l
+		volume += float(c.get("volume", 0))
+	return {
+		"open": open_price, "high": high_price, "low": low_price, "close": close_price,
+		"volume": int(volume), "tick_start": -1, "tick_end": -1,
+	}
 
 
 func _aggregate_range(start: int, end: int) -> Dictionary:

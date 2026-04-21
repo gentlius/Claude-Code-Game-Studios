@@ -78,9 +78,6 @@ var _d1_volume: float = 0.0
 ## Used to detect whether today's intra-day candle is already in _candles.
 var _d1_candle_base_count: int = 0
 
-## Pre-history M1 candles from M1CacheManager (covers N_IMMEDIATE_SEASONS immediately,
-## earlier seasons loaded on-demand when chart scrolls back).
-var _pre_m1_candles: Array[Dictionary] = []
 ## Set to true after M1CacheManager emits immediate_seasons_ready for the active stock.
 var _m1_prehistory_ready: bool = false
 
@@ -280,12 +277,11 @@ func _do_load_stock(stock_id: String) -> void:
 	_ohlcv_daily = PriceEngine.get_ohlcv_history(stock_id)
 
 	# Reset pre-history state and trigger M1 pre-history generation.
-	_pre_m1_candles.clear()
 	_m1_prehistory_ready = false
 	if OhlcvHistory.history_seed != 0:
 		var stock: StockData = StockDatabase.get_stock(stock_id)
 		if stock != null:
-			M1CacheManager.load_stock(stock_id, stock.history_seasons, OhlcvHistory.history_seed)
+			M1CacheManager.load_stock(stock_id, stock.history_seasons)
 
 	_aggregate_candles()
 	_update_header()
@@ -414,26 +410,20 @@ func _disconnect_signals() -> void:
 # ── M1 Pre-history Signal Handlers ──
 
 ## Called when M1CacheManager has generated the immediate (last 5 season) pre-history.
-## Loads those candles and rebuilds the chart.
+## Sets the ready flag and rebuilds the chart — aggregation reads from M1CacheManager directly.
 func _on_m1_immediate_ready(stock_id: String) -> void:
 	if stock_id != _stock_id:
 		return
 	_m1_prehistory_ready = true
-	var total: int = M1CacheManager.get_total_m1_count()
-	if total > 0:
-		_pre_m1_candles = M1CacheManager.get_m1_candles(stock_id, 0, total - 1)
 	_aggregate_candles()
 	_dirty = true
 	queue_redraw()
 
 
-## Called when an on-demand season finishes generating. Refreshes pre-history and redraws.
+## Called when an on-demand season finishes generating. Refreshes chart (new seasons now available).
 func _on_m1_season_ready(_season_idx: int, stock_id: String) -> void:
 	if stock_id != _stock_id:
 		return
-	var total: int = M1CacheManager.get_total_m1_count()
-	if total > 0:
-		_pre_m1_candles = M1CacheManager.get_m1_candles(stock_id, 0, total - 1)
 	_aggregate_candles()
 	_dirty = true
 	queue_redraw()
@@ -563,11 +553,10 @@ func _aggregate_candles() -> void:
 	var m1_per_chart: int = tf / 4  # M1→1, M5→5, M15→15
 
 	# Pre-history portion from M1CacheManager.
-	if _m1_prehistory_ready and not _pre_m1_candles.is_empty():
-		var i: int = 0
-		while i + m1_per_chart - 1 < _pre_m1_candles.size():
-			_candles.append(_aggregate_m1_range(i, i + m1_per_chart - 1))
-			i += m1_per_chart
+	# get_aggregated_candles() works directly on PackedArrays — only allocates output-count Dicts.
+	if _m1_prehistory_ready:
+		var pre: Array[Dictionary] = M1CacheManager.get_aggregated_candles(_stock_id, m1_per_chart)
+		_candles.append_array(pre)
 
 	# Current season portion from tick buffer.
 	if _tick_prices.size() > 0:
@@ -771,29 +760,6 @@ func _update_last_indicator() -> void:
 		_signal_line_cache[last] = _macd_line_cache[last] * sig_k + _sig_ema_state * (1.0 - sig_k)
 
 
-## Aggregates a range of _pre_m1_candles into a single OHLCV candle Dictionary.
-## Used to combine M1 pre-history bars into M1/M5/M15 chart candles.
-func _aggregate_m1_range(start: int, end_idx: int) -> Dictionary:
-	var open_price: int = _pre_m1_candles[start].get("open", 0)
-	var close_price: int = _pre_m1_candles[end_idx].get("close", 0)
-	var high_price: int = open_price
-	var low_price: int = maxi(open_price, 1)
-	var volume: float = 0.0
-	for i: int in range(start, end_idx + 1):
-		var c: Dictionary = _pre_m1_candles[i]
-		var h: int = c.get("high", 0)
-		var l: int = c.get("low", 999999999)
-		if h > high_price:
-			high_price = h
-		if l < low_price:
-			low_price = l
-		volume += float(c.get("volume", 0))
-	return {
-		"open": open_price, "high": high_price, "low": low_price, "close": close_price,
-		"volume": int(volume), "tick_start": -1, "tick_end": -1,
-	}
-
-
 func _aggregate_range(start: int, end: int) -> Dictionary:
 	var open_price: int = _tick_prices[start]
 	var close_price: int = _tick_prices[end]
@@ -881,6 +847,14 @@ func _draw() -> void:
 		_draw_macd()
 	_draw_volume_bars()
 	_draw_axes()
+	# Show a non-blocking notice while M1 pre-history is still generating in the background.
+	if not _m1_prehistory_ready and (_timeframe == Timeframe.M1 or _timeframe == Timeframe.M5 or _timeframe == Timeframe.M15):
+		draw_string(
+			ThemeDB.fallback_font,
+			Vector2(_chart_rect.position.x + 8.0, _chart_rect.position.y + HEADER_HEIGHT + 4.0),
+			tr("프리히스토리 로딩 중..."), HORIZONTAL_ALIGNMENT_LEFT,
+			-1, 11, CANDLE_NEUTRAL_COLOR
+		)
 
 	if _show_crosshair:
 		_draw_crosshair()

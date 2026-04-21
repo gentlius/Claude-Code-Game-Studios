@@ -14,8 +14,16 @@ extends Node
 const N_PRE_SEASONS: int = 100
 ## Daily bar count per season (GameClock.DAYS_PER_WEEK × GameClock.WEEKS_PER_SEASON = 20).
 const DAYS_PER_SEASON: int = 20
-## Max daily candle volatility per step (±3%).
-const PRE_HISTORY_VOLATILITY: float = 0.03
+## Daily volatility per volatility_profile. 평균 회귀가 있으므로 HIGH/EXTREME도 발산 안 함.
+## GDD price-engine.md §1-4 변동성 프로필과 일치.
+const VOL_BY_PROFILE: Dictionary = {
+	"LOW": 0.015, "MEDIUM": 0.025, "HIGH": 0.04, "EXTREME": 0.06
+}
+## 기본 일별 변동률 (volatility_profile 미지정 fallback).
+const PRE_HISTORY_VOLATILITY: float = 0.025
+## 평균 회귀 강도 — base_price 방향으로 매 거래일 이 비율만큼 당김.
+## 값이 클수록 base_price 근처를 벗어나지 않음. 0.05 = 5%/일 회귀.
+const MEAN_REVERSION_STRENGTH: float = 0.05
 ## Volume range for synthetic bars (shares).
 const PRE_HISTORY_VOLUME_MIN: float = 100000.0
 const PRE_HISTORY_VOLUME_MAX: float = 2000000.0
@@ -140,11 +148,25 @@ func _get_all_daily(stock_id: String) -> Array[Dictionary]:
 
 ## Generates stock.history_seasons × DAYS_PER_SEASON daily bars using a seeded random walk.
 ## Deterministic: same history_seed + stock_id always produces the same bars.
-## Uses StockData.history_seasons (3~300) per stock; falls back to N_PRE_SEASONS if unavailable.
+##
+## 가격 모델:
+##   - 일별 변동률은 stock.volatility_profile 에 따라 다름 (GDD price-engine.md §1-4).
+##   - MEAN_REVERSION_STRENGTH 비율로 base_price 방향으로 매일 당김 (발산 방지).
+##   - M1CacheManager 가 이 바를 기반으로 M1 캔들을 생성하므로 반드시 같은 시드 사용.
 func _generate_pre_history(stock_id: String) -> Array[Dictionary]:
 	var stock_data: StockData = StockDatabase.get_stock(stock_id)
 	var base_price: int = stock_data.base_price if stock_data != null else 10000
 	var n_seasons: int = stock_data.history_seasons if stock_data != null else N_PRE_SEASONS
+
+	# Volatility lookup by profile enum value (int) → string → constant.
+	var volatility: float = PRE_HISTORY_VOLATILITY
+	if stock_data != null:
+		match stock_data.volatility_profile:
+			StockData.VolatilityProfile.LOW:     volatility = VOL_BY_PROFILE["LOW"]
+			StockData.VolatilityProfile.MEDIUM:  volatility = VOL_BY_PROFILE["MEDIUM"]
+			StockData.VolatilityProfile.HIGH:    volatility = VOL_BY_PROFILE["HIGH"]
+			StockData.VolatilityProfile.EXTREME: volatility = VOL_BY_PROFILE["EXTREME"]
+
 	var rng := RandomNumberGenerator.new()
 	# XOR with stock hash for stock-specific but reproducible sequences.
 	rng.seed = (history_seed ^ hash(stock_id)) & 0x7FFFFFFF
@@ -152,14 +174,16 @@ func _generate_pre_history(stock_id: String) -> Array[Dictionary]:
 	var close_prev: float = float(base_price)
 	var total_days: int = n_seasons * DAYS_PER_SEASON
 	for _i: int in range(total_days):
-		var change: float = rng.randf_range(-PRE_HISTORY_VOLATILITY, PRE_HISTORY_VOLATILITY)
+		# 평균 회귀: base_price 방향으로 편향 추가.
+		var reversion: float = (float(base_price) - close_prev) / close_prev * MEAN_REVERSION_STRENGTH
+		var change: float = rng.randf_range(-volatility, volatility) + reversion
 		var close: float = maxf(close_prev * (1.0 + change), 100.0)
-		var open_off: float = rng.randf_range(-PRE_HISTORY_VOLATILITY * 0.5, PRE_HISTORY_VOLATILITY * 0.5)
+		var open_off: float = rng.randf_range(-volatility * 0.5, volatility * 0.5)
 		var open_price: float = close_prev * (1.0 + open_off)
 		var body_high: float = maxf(open_price, close)
 		var body_low: float = minf(open_price, close)
-		var high: float = body_high * (1.0 + rng.randf_range(0.0, PRE_HISTORY_VOLATILITY))
-		var low: float = body_low * (1.0 - rng.randf_range(0.0, PRE_HISTORY_VOLATILITY))
+		var high: float = body_high * (1.0 + rng.randf_range(0.0, volatility))
+		var low: float = body_low * (1.0 - rng.randf_range(0.0, volatility))
 		var volume: float = rng.randf_range(PRE_HISTORY_VOLUME_MIN, PRE_HISTORY_VOLUME_MAX)
 		result.append({
 			"open":   roundi(open_price),

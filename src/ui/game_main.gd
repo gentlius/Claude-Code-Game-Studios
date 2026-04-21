@@ -98,6 +98,11 @@ func _on_new_game_confirmed(slot_id: int) -> void:
 	CurrencySystem.init_first_season()
 	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)
 
+	# 인트로 시퀀스 재생 중 첫 번째 종목의 M1 프리히스토리 백그라운드 생성.
+	# OhlcvHistory.reset() 이후 → history_seed 확정 → D1 bars 유효 상태.
+	# 인트로가 끝날 때까지 생성이 완료되지 않으면 ChartRenderer가 스피너를 표시.
+	M1CacheManager.preheat_first_stock()
+
 	# 인트로 시퀀스 — 새 게임 시 항상 재생 (GDD intro-sequence.md §3-1)
 	var IntroScript = load("res://src/ui/intro_sequence.gd")
 	_intro = IntroScript.new()

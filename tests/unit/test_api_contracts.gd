@@ -564,11 +564,13 @@ func test_market_profile_api():
 ## M1 1분봉 프리히스토리 생성·디스크 캐시·LRU 메모리 관리 autoload.
 
 func test_m1_cache_manager_api():
-	assert_true(M1CacheManager.has_method("load_stock"),          "load_stock 존재")
-	assert_true(M1CacheManager.has_method("get_m1_candles"),      "get_m1_candles 존재")
-	assert_true(M1CacheManager.has_method("get_total_m1_count"),  "get_total_m1_count 존재")
-	assert_true(M1CacheManager.has_method("is_season_available"), "is_season_available 존재")
-	assert_true(M1CacheManager.has_method("request_season"),      "request_season 존재")
+	assert_true(M1CacheManager.has_method("load_stock"),             "load_stock 존재")
+	assert_true(M1CacheManager.has_method("preheat_first_stock"),    "preheat_first_stock 존재")
+	assert_true(M1CacheManager.has_method("get_m1_candles"),         "get_m1_candles 존재")
+	assert_true(M1CacheManager.has_method("get_aggregated_candles"), "get_aggregated_candles 존재")
+	assert_true(M1CacheManager.has_method("get_total_m1_count"),     "get_total_m1_count 존재")
+	assert_true(M1CacheManager.has_method("is_season_available"),    "is_season_available 존재")
+	assert_true(M1CacheManager.has_method("request_season"),         "request_season 존재")
 
 
 func test_m1_cache_manager_signals():
@@ -578,6 +580,8 @@ func test_m1_cache_manager_signals():
 		signal_names.append(s["name"])
 	assert_true("immediate_seasons_ready" in signal_names, "immediate_seasons_ready 시그널 존재")
 	assert_true("season_ready" in signal_names,            "season_ready 시그널 존재")
+	assert_true("preheat_progress" in signal_names,        "preheat_progress 시그널 존재")
+	assert_true("preheat_complete" in signal_names,        "preheat_complete 시그널 존재")
 
 
 func test_m1_cache_manager_constants():

@@ -14,8 +14,8 @@
 ##     season_idx s, day d, minute m → m1_idx = s*DAYS_PER_SEASON*MINUTES_PER_DAY + d*MINUTES_PER_DAY + m
 ##
 ## See: design/gdd/chart-renderer.md §프리히스토리 M1
+## NOTE: class_name 생략 — 오토로드 싱글톤과 동명 클래스 충돌 방지 (Godot 제약).
 extends Node
-class_name M1CacheManager
 
 # ── 상수 ──────────────────────────────────────────────────────────────────────
 

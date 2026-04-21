@@ -3,6 +3,7 @@
 ## 비율 < forced_liq_threshold 시 강제청산 카운트다운 표시.
 ## TradingScreen에서 인스턴스화 + add_child. 세션 동안 상주.
 ## See: design/gdd/leverage-trading.md §3-3, AC-15, AC-16
+class_name MarginCallPopup
 extends CanvasLayer
 
 # ── Constants ──

@@ -58,10 +58,21 @@ func _build_header_bar(root_vbox: VBoxContainer) -> void:
 	header.add_theme_constant_override("separation", 12)
 	header_panel.add_child(header)
 
+	var left_margin: Control = Control.new()
+	left_margin.custom_minimum_size.x = 12
+	header.add_child(left_margin)
+
+	var deco_lbl: Label = Label.new()
+	deco_lbl.text = "▶"
+	deco_lbl.add_theme_font_size_override("font_size", 14)
+	deco_lbl.add_theme_color_override("font_color", ThemeSetup.START_PORTFOLIO_VALUE)
+	deco_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(deco_lbl)
+
 	var title_lbl: Label = Label.new()
 	title_lbl.text = "SEED MONEY"  ## intentionally NOT wrapped in tr() — brand name, not translated
 	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_lbl.add_theme_font_size_override("font_size", 20)
+	title_lbl.add_theme_font_size_override("font_size", 22)
 	title_lbl.add_theme_color_override("font_color", ThemeSetup.START_TEXT_BRIGHT)
 	header.add_child(title_lbl)
 
@@ -168,9 +179,16 @@ func _build_slot_card(slot: Dictionary) -> Control:
 				slot_selected.emit(id)
 		)
 
+	var card_margin: MarginContainer = MarginContainer.new()
+	card_margin.add_theme_constant_override("margin_left", 12)
+	card_margin.add_theme_constant_override("margin_right", 8)
+	card_margin.add_theme_constant_override("margin_top", 8)
+	card_margin.add_theme_constant_override("margin_bottom", 8)
+	card.add_child(card_margin)
+
 	var hbox: HBoxContainer = HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 12)
-	card.add_child(hbox)
+	card_margin.add_child(hbox)
 
 	var info_vbox: VBoxContainer = VBoxContainer.new()
 	info_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -209,7 +227,8 @@ func _build_slot_card_valid(info_vbox: VBoxContainer, slot: Dictionary, id: int)
 	var name_str: String = slot.get("name", tr("슬롯 %d") % (id + 1))
 	var name_lbl: Label = Label.new()
 	name_lbl.text = name_str
-	name_lbl.add_theme_font_size_override("font_size", 15)
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.add_theme_font_size_override("font_size", 17)
 	name_lbl.add_theme_color_override("font_color", ThemeSetup.START_TEXT_BRIGHT)
 	name_lbl.mouse_default_cursor_shape = Control.CURSOR_IBEAM
 	name_lbl.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -227,7 +246,7 @@ func _build_slot_card_valid(info_vbox: VBoxContainer, slot: Dictionary, id: int)
 	var day: int = slot.get("fiction_day", 0) + 1
 	var stats_lbl: Label = Label.new()
 	stats_lbl.text = tr("Lv.%d  ·  시즌 %d  ·  %d주차 %d일") % [level, season, week, day]
-	stats_lbl.add_theme_font_size_override("font_size", 12)
+	stats_lbl.add_theme_font_size_override("font_size", 13)
 	stats_lbl.add_theme_color_override("font_color", ThemeSetup.LAYOUT_EXIT_TEXT)
 	stats_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info_vbox.add_child(stats_lbl)
@@ -236,7 +255,7 @@ func _build_slot_card_valid(info_vbox: VBoxContainer, slot: Dictionary, id: int)
 	var pf_val: int = slot.get("portfolio_value", 0)
 	var pf_lbl: Label = Label.new()
 	pf_lbl.text = tr("평가금액  ₩%s") % FormatUtils.number(pf_val)
-	pf_lbl.add_theme_font_size_override("font_size", 14)
+	pf_lbl.add_theme_font_size_override("font_size", 15)
 	pf_lbl.add_theme_color_override("font_color", ThemeSetup.START_PORTFOLIO_VALUE)
 	pf_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info_vbox.add_child(pf_lbl)
@@ -249,7 +268,7 @@ func _build_slot_card_valid(info_vbox: VBoxContainer, slot: Dictionary, id: int)
 		date_lbl.text = tr("저장: %04d-%02d-%02d") % [dt["year"], dt["month"], dt["day"]]
 	else:
 		date_lbl.text = tr("저장: -")
-	date_lbl.add_theme_font_size_override("font_size", 11)
+	date_lbl.add_theme_font_size_override("font_size", 12)
 	date_lbl.add_theme_color_override("font_color", ThemeSetup.START_TEXT_DIM)
 	date_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info_vbox.add_child(date_lbl)

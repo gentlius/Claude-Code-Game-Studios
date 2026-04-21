@@ -175,10 +175,10 @@ func _build_tab_bar(vbox: VBoxContainer) -> void:
 ## Builds and adds the settings (⚙) overlay toggle button to _tab_bar.
 func _build_settings_button() -> void:
 	_btn_settings = Button.new()
-	_btn_settings.text = tr("⚙")
+	_btn_settings.text = tr("설정")
 	_btn_settings.focus_mode = Control.FOCUS_NONE
-	_btn_settings.add_theme_font_size_override("font_size", 14)
-	_btn_settings.custom_minimum_size = Vector2(44, 32)
+	_btn_settings.add_theme_font_size_override("font_size", 13)
+	_btn_settings.custom_minimum_size = Vector2(80, 32)
 	_btn_settings.tooltip_text = tr("설정")
 	var settings_normal: StyleBoxFlat = StyleBoxFlat.new()
 	settings_normal.bg_color = ThemeSetup.LAYOUT_PANEL

@@ -67,3 +67,4 @@
 - [ADR-020](../../docs/architecture/020-settings-persistence-split.md) — 설정 저장 분할: AudioManager cfg + SettingsScreen game_settings.cfg 각자 소유
 - [ADR-021](../../docs/architecture/021-market-profile-data-driven.md) — MarketProfile JSON으로 시장별 규칙 전체 분리 (섹터/ETF/아키타입/로테이션/헤드라인 키/캘린더 포함, DLC 확장성)
 - [ADR-022](../../docs/architecture/022-event-source-pipeline.md) — EventSource → NewsEventSystem → PriceEngine 단방향 파이프라인 (PriceEngine 직접 조작 금지)
+- [ADR-023](../../docs/architecture/023-price-generation-single-ownership.md) — 가격 생성 규칙 단일 소유: PriceEngine.generate_synthetic_d1()로 프리히스토리 D1 통합, M1 캐시 슬롯별 분리

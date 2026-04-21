@@ -29,8 +29,9 @@ const MINUTES_PER_DAY: int = 390
 const DAYS_PER_SEASON: int = 20
 ## 장중 M1 노이즈 크기. D1 OHLC 엔벨로프 안에서만 움직이므로 작게 설정.
 const M1_VOLATILITY: float = 0.004
-## 캐시 디렉토리 (user:// 아래).
-const CACHE_DIR: String = "user://m1_cache/"
+## 캐시 루트 디렉토리 (user:// 아래). 실제 경로는 슬롯별 _cache_dir() 참조.
+## ADR-023: 슬롯마다 history_seed 가 다르므로 캐시를 슬롯별로 격리한다.
+const CACHE_ROOT: String = "user://m1_cache/"
 
 # ── 상태 ──────────────────────────────────────────────────────────────────────
 
@@ -409,13 +410,19 @@ func _evict_if_needed() -> void:
 
 # ── 유틸 ──────────────────────────────────────────────────────────────────────
 
+## 현재 활성 슬롯의 캐시 디렉토리 경로. 슬롯별 격리 (ADR-023).
+func _cache_dir() -> String:
+	return CACHE_ROOT + "slot_%d/" % SaveSystem.get_active_slot_id()
+
+
 func _cache_path(stock_id: String, season_idx: int) -> String:
-	return CACHE_DIR + "%s_%04d.bin" % [stock_id, season_idx]
+	return _cache_dir() + "%s_%04d.bin" % [stock_id, season_idx]
 
 
 func _ensure_cache_dir() -> void:
-	if not DirAccess.dir_exists_absolute(CACHE_DIR):
-		DirAccess.make_dir_recursive_absolute(CACHE_DIR)
+	var dir: String = _cache_dir()
+	if not DirAccess.dir_exists_absolute(dir):
+		DirAccess.make_dir_recursive_absolute(dir)
 
 
 func _cancel_thread() -> void:

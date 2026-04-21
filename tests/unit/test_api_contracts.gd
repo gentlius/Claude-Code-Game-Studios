@@ -170,6 +170,8 @@ func test_price_engine_api():
 	# 52주 최고/최저 API (GDD order-book.md §3-5 블록6)
 	assert_true(PriceEngine.has_method("get_week52_high"),      "get_week52_high 존재")
 	assert_true(PriceEngine.has_method("get_week52_low"),       "get_week52_low 존재")
+	# 프리히스토리 D1 생성 API (ADR-023: 가격 생성 규칙 단일 소유)
+	assert_true(PriceEngine.has_method("generate_synthetic_d1"), "generate_synthetic_d1 존재")
 
 
 # ── SkillTree ────────────────────────────────────────────────────────

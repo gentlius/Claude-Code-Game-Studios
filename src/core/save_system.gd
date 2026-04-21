@@ -247,6 +247,20 @@ func delete_slot(id: int) -> void:
 	if da and FileAccess.file_exists(path):
 		da.remove("save_slot_%d.json" % id)
 
+	# M1 캐시 디렉토리 삭제 (ADR-023: 슬롯별 격리).
+	var m1_dir: String = "user://m1_cache/slot_%d/" % id
+	if DirAccess.dir_exists_absolute(m1_dir):
+		var cache_da := DirAccess.open(m1_dir)
+		if cache_da:
+			cache_da.list_dir_begin()
+			var fname: String = cache_da.get_next()
+			while fname != "":
+				if not cache_da.current_is_dir():
+					cache_da.remove(fname)
+				fname = cache_da.get_next()
+			cache_da.list_dir_end()
+		DirAccess.open("user://m1_cache/").remove("slot_%d" % id)
+
 	var index: Dictionary = _read_index()
 	var slots: Array = index.get("slots", [])
 	var new_slots: Array = []

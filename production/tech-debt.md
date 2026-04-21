@@ -293,6 +293,48 @@ XpSystem._weekly_xp 필드 추가 + get_weekly_xp()/reset_weekly_xp() API. Settl
 **목표 스프린트**: Sprint 9 (일괄 처리)  
 `src/ui/*.gd` 전 파일의 복잡한 private 빌드 메서드(`_build_ui`, `_refresh_*`, `_show_*` 등)에 ## 주석 없음. 팀 가독성 개선을 위해 일괄 추가 권고.
 
+---
+
+## 전체 코드 리뷰 2026-04-21 식별 항목 (52개 파일 전수)
+
+> 즉시 수정 완료: trading_screen.gd(SKILL_TR1 상수화, TAB_ALERTS 상수 사용), order_engine.gd(ERR_BALANCE/ERR_QUANTITY 상수화), profit_celebration/sector_comparison_view(\_fmt\_int\_comma → FormatUtils.number), league_screen.gd(\_fmt\_pct/\_fmt\_comma → FormatUtils)
+
+### TD-CR-13. financial_report_system.gd 뉴스 헤드라인 문자열 중복
+
+**출처**: 2026-04-21 전체 코드 리뷰 — financial_report_system.gd:427, 430, 444, 447, 462, 465, 516, 519, 522, 525  
+**우선순위**: Low  
+**목표 스프린트**: Polish  
+이벤트 타입별 뉴스 헤드라인 문자열이 함수 내 11곳에 인라인 하드코딩. `event_pool.json` 로드 또는 상단 Dictionary 상수로 단일화 권장.
+
+### TD-CR-14. news_event_system.gd impact_hint 형식 혼용
+
+**출처**: 2026-04-21 전체 코드 리뷰 — news_event_system.gd:443, 420, 1115, 1260, 1279, 1306  
+**우선순위**: Low  
+**목표 스프린트**: Polish  
+`impact_hint` 필드값이 `"positive"/"negative"` 문자열과 `"ℹ️"/"⚠️"/"🚨"` 이모지 혼용. 단일 형식(문자열 상수)으로 통일하고 UI 렌더러에서 이모지 매핑.
+
+### TD-CR-15. intro_sequence.gd 게임 수치 리터럴 하드코딩
+
+**출처**: 2026-04-21 전체 코드 리뷰 — intro_sequence.gd:19-22  
+**우선순위**: Low  
+**목표 스프린트**: Polish  
+도입 카드 텍스트의 `"10,000원"`, `"1,000,000원에서 1,000억까지"` 등이 GDD 상수 미참조 리터럴. 상수 변경 시 텍스트가 자동으로 틀려짐. CurrencySystem 또는 GameBalance 상수에서 참조로 교체.
+
+### TD-CR-16. stop_take_system.gd Variant 반환 타입 명시화
+
+**출처**: 2026-04-21 전체 코드 리뷰 — stop_take_system.gd:74-75, 106  
+**우선순위**: Low  
+**목표 스프린트**: Polish  
+`get_setting() -> Variant` 반환 타입이 실제로 `Dictionary | null`임. Variant 사용으로 호출자가 타입 추론 불가. `-> Variant` → `-> Dictionary` + null 반환 조건 명시, 매개변수도 `Variant` 주석 대신 타입별 분리 오버로드 검토.
+
+### TD-CR-17. lifestyle_manager.gd 기본값 누락 + season_final 판별 하드코딩
+
+**출처**: 2026-04-21 전체 코드 리뷰 — lifestyle_manager.gd:166, 305-306, 342-344  
+**우선순위**: Low  
+**목표 스프린트**: Polish  
+(1) `_load_config()`에서 `donationMin/Max` 로드 실패 시 기본값 세팅 없음 — config 파일 누락 시 `DONATION_MIN = 0` 위험.  
+(2) `is_season_final_day` 판별 로직이 `GameClock` 상수 직접 계산 — `GameClock.is_season_final_day()` 헬퍼로 캡슐화 권장.
+
 ### TD-HIST-01. OHLCV 시즌 간 영구 히스토리 저장 구조
 
 **출처**: 팀 전체 토론 2026-04-15  

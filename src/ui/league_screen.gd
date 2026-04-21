@@ -128,11 +128,11 @@ func _update_left_panel() -> void:
 
 	var tier_participants: int = _estimate_tier_participants(tier)
 	if tier_rank > 0:
-		_lbl_tier_rank.text = tr("%d위 / %s명") % [tier_rank, _fmt_comma(tier_participants)]
+		_lbl_tier_rank.text = tr("%d위 / %s명") % [tier_rank, FormatUtils.number(tier_participants)]
 	else:
 		_lbl_tier_rank.text = tr("순위 집계 전")
 
-	_lbl_season_return.text = _fmt_pct(season_pct)
+	_lbl_season_return.text = FormatUtils.pct(season_pct)
 	_lbl_season_return.add_theme_color_override("font_color",
 		COLOR_POSITIVE if season_pct >= 0.0 else COLOR_NEGATIVE)
 
@@ -140,7 +140,7 @@ func _update_left_panel() -> void:
 	var current_assets: int = PortfolioManager.get_total_assets()
 	_lbl_season_value.text = "%s → %s" % [FormatUtils.currency(start_cap), FormatUtils.currency(current_assets)]
 
-	_lbl_weekly_return.text = _fmt_pct(weekly_pct)
+	_lbl_weekly_return.text = FormatUtils.pct(weekly_pct)
 	_lbl_weekly_return.add_theme_color_override("font_color",
 		COLOR_POSITIVE if weekly_pct >= 0.0 else COLOR_NEGATIVE)
 
@@ -203,7 +203,7 @@ func _update_leaderboard() -> void:
 		for t: int in range(my_tier + 1, AiCompetitor.TIER_COUNT):
 			players_above += _estimate_tier_participants(t)
 		var global_rank: int = players_above + tier_rank_val
-		_global_rank_label.text = tr("글로벌: %d위 / %s명") % [global_rank, _fmt_comma(SeasonManager.TOTAL_PARTICIPANTS)]
+		_global_rank_label.text = tr("글로벌: %d위 / %s명") % [global_rank, FormatUtils.number(SeasonManager.TOTAL_PARTICIPANTS)]
 		_global_rank_label.visible = true
 	else:
 		_global_rank_label.text = tr("글로벌: 순위 집계 전")
@@ -260,7 +260,7 @@ func _add_row_nick_label(hbox: HBoxContainer, nickname: String, is_player: bool,
 ## Adds the return-pct column label to a leaderboard row hbox.
 func _add_row_return_label(hbox: HBoxContainer, return_pct: float) -> void:
 	var lbl_ret: Label = Label.new()
-	lbl_ret.text = _fmt_pct(return_pct)
+	lbl_ret.text = FormatUtils.pct(return_pct)
 	lbl_ret.custom_minimum_size = Vector2(72, 0)
 	lbl_ret.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	lbl_ret.add_theme_font_size_override("font_size", 12)
@@ -630,12 +630,3 @@ func _make_spacer(height: int) -> Control:
 	var spacer: Control = Control.new()
 	spacer.custom_minimum_size = Vector2(0, height)
 	return spacer
-
-
-func _fmt_pct(pct: float) -> String:
-	var sign_str: String = "+" if pct >= 0.0 else ""
-	return "%s%.1f%%" % [sign_str, pct]
-
-
-func _fmt_comma(n: int) -> String:
-	return FormatUtils.number(n)

@@ -36,6 +36,8 @@ const TAB_NEWS: int = 0
 const TAB_ALERTS: int = 1
 const TAB_PORTFOLIO: int = 2
 
+const SKILL_TR1: String = "TR1"  ## 기본 거래 해금 스킬 ID
+
 var _active_tab: int = TAB_NEWS
 var _news_unread: int = 0
 var _portfolio_unread: int = 0
@@ -60,6 +62,8 @@ var _toast_manager: ToastManager
 var _chart_renderer: Control
 var _pause_overlay: Panel
 var _level_up_banner: LevelUpBanner
+var _profit_celebration: ProfitCelebration
+var _margin_call_popup: MarginCallPopup
 
 # ── Lifecycle ──
 
@@ -104,6 +108,7 @@ func _connect_signals() -> void:
 	OrderEngine.on_order_filled.connect(_on_order_filled)
 	NewsEventSystem.on_news_display.connect(_on_system_event_alert)
 	SkillTree.on_skill_unlocked.connect(_on_skill_unlocked)
+	PortfolioManager.holding_removed.connect(_on_holding_removed)
 
 
 func _sync_ui_state_from_clock() -> void:
@@ -236,6 +241,20 @@ func _on_order_filled(_order: Dictionary) -> void:
 		_btn_tab_portfolio.text = tr("포트폴리오 (%d)") % _portfolio_unread
 
 
+## PortfolioManager.holding_removed 핸들러 — B-13 팡파레 트리거.
+## GDD profit-celebration.md §3-1: cost_basis 계산 → ProfitCelebration.play().
+func _on_holding_removed(_stock_id: String, quantity: int, price: int, realized_pnl: int) -> void:
+	if realized_pnl <= 0:
+		return
+	var cost_basis: int = price * quantity - realized_pnl
+	var pnl_pct: float
+	if cost_basis <= 0:
+		pnl_pct = 0.0  # GDD §5 방어 처리 — 이펙트 미발동
+	else:
+		pnl_pct = float(realized_pnl) / float(cost_basis) * 100.0
+	_profit_celebration.play(realized_pnl, pnl_pct)
+
+
 func _on_settlement_needs_level_up(data: Dictionary) -> void:
 	_level_up_banner.show_level_up(data["old_level"], data["new_level"], data["sp"])
 
@@ -249,7 +268,7 @@ func _on_news_received() -> void:
 
 
 func _on_skill_unlocked(skill_id: String) -> void:
-	if skill_id == "TR1":
+	if skill_id == SKILL_TR1:
 		var enabled: bool = _ui_state not in [UIState.SETTLEMENT, UIState.SEASON_RESULT, UIState.LOADING]
 		var text: String = tr("주문 예약 Enter") if _ui_state == UIState.PRE_MARKET else tr("주문 실행 Enter")
 		_order_panel.set_ui_state_submit_enabled(enabled, text)
@@ -419,7 +438,7 @@ func _add_alert_card(headline: String, body: String, severity: String, stock_id:
 				if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
 					_select_stock(stock_id)
 		)
-	if _active_tab != 1:
+	if _active_tab != TAB_ALERTS:
 		_btn_tab_alerts.text = tr("VI/CB ●")
 
 
@@ -567,3 +586,13 @@ func _build_overlays() -> void:
 	_toast_manager.add_theme_constant_override("separation", 6)
 	_toast_manager.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_toast_manager)
+
+	# B-13 profit celebration effect — CanvasLayer(layer=5), added to TradingScreen tree
+	# GDD: design/gdd/profit-celebration.md §3-7
+	_profit_celebration = ProfitCelebration.new()
+	add_child(_profit_celebration)
+
+	# TR4 margin call warning popup — CanvasLayer(layer=6)
+	# Self-connects to LeverageManager.on_margin_call in its _ready(). GDD leverage-trading.md §3-3.
+	_margin_call_popup = MarginCallPopup.new()
+	add_child(_margin_call_popup)

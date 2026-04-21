@@ -18,6 +18,8 @@ const MAX_PENDING_LIMIT_ORDERS: int = 10
 const PRE_MARKET_BUFFER_PCT: float = 0.15
 ## 시즌당 주문 히스토리 최대 보관 건수. 초과 시 오래된 항목 제거. Tuning Knob.
 const ORDER_HISTORY_MAX_SIZE: int = 500
+const ERR_BALANCE: String = "잔액 부족"
+const ERR_QUANTITY: String = "보유 수량 부족"
 
 # ── State ──
 
@@ -82,6 +84,13 @@ func submit_market_order(side: String, stock_id: String, quantity: int,
 	if side == "LEVERAGE_SELL":
 		return _handle_leverage_sell_order(order)
 
+	# P3 ETF: reject TR3/TR4 sides, then route to immediate-fill path (sector-etf.md §3-3).
+	# ETF check comes AFTER TR3/TR4 branches so those sides can be caught here explicitly.
+	if EtfManager.is_etf(stock_id):
+		if side in ["SELL_SHORT", "BUY_TO_COVER", "LEVERAGE_BUY", "LEVERAGE_SELL"]:
+			return _reject_order(order, "ETF는 공매도/레버리지 거래가 불가합니다 (AC-06/07)")
+		return _handle_etf_market_order(order)
+
 	var reject: String = _validate_order(order)
 	if reject != "":
 		return _reject_order(order, reject)
@@ -100,7 +109,7 @@ func _handle_pre_market_market_order(order: Dictionary) -> Dictionary:
 		var gross_reserved: int = int(ceil(float(current_price) * (1.0 + PRE_MARKET_BUFFER_PCT))) * order["quantity"]
 		var reserved: int = MarketConfig.get_buy_cost(gross_reserved)
 		if not CurrencySystem.sim_deduct(reserved):
-			return _reject_order(order, "잔액 부족")
+			return _reject_order(order, ERR_BALANCE)
 		order["reserved_cash"] = reserved
 	elif order["side"] == "SELL":
 		_lock_sell_quantity(order["stock_id"], order["quantity"])
@@ -116,7 +125,7 @@ func _handle_open_market_order(order: Dictionary) -> Dictionary:
 		var current_price: int = PriceEngine.get_current_price(order["stock_id"])
 		var cost: int = MarketConfig.get_buy_cost(current_price * order["quantity"])
 		if not CurrencySystem.sim_deduct(cost):
-			return _reject_order(order, "잔액 부족")
+			return _reject_order(order, ERR_BALANCE)
 		order["reserved_cash"] = cost
 	elif order["side"] == "SELL":
 		_lock_sell_quantity(order["stock_id"], order["quantity"])
@@ -135,6 +144,42 @@ func _reject_order(order: Dictionary, reason: String) -> Dictionary:
 	order["reject_reason"] = reason
 	_history_append(order)
 	on_order_rejected.emit(order)
+	return order
+
+
+## P3 ETF: Immediate-fill handler — no order book, no slippage (sector-etf.md §3-3).
+## Validates the order, then fills at current ETF price immediately.
+## ETF orders fill regardless of PAUSED state (price is always current from EtfManager).
+func _handle_etf_market_order(order: Dictionary) -> Dictionary:
+	var reject: String = _validate_order(order)
+	if reject != "":
+		return _reject_order(order, reject)
+
+	var price: int = PriceEngine.get_current_price(order["stock_id"])
+	if price <= 0:
+		return _reject_order(order, "ETF 가격 오류")
+
+	if order["side"] == "BUY":
+		var cost: int = MarketConfig.get_buy_cost(price * order["quantity"])
+		if not CurrencySystem.sim_deduct(cost):
+			return _reject_order(order, ERR_BALANCE)
+		PortfolioManager.add_holding(order["stock_id"], order["quantity"], price)
+		order["reserved_cash"] = cost
+	elif order["side"] == "SELL":
+		var holding: Variant = PortfolioManager.get_holding(order["stock_id"])
+		if holding == null or (holding as Dictionary).get("quantity", 0) < order["quantity"]:
+			return _reject_order(order, ERR_QUANTITY)
+		var gross: int = price * order["quantity"]
+		var realized_pnl: int = PortfolioManager.remove_holding(
+			order["stock_id"], order["quantity"], price
+		)
+		var sell_breakdown: Dictionary = MarketConfig.get_fee_breakdown("SELL", gross, 0, realized_pnl)
+		CurrencySystem.sim_add(sell_breakdown["net"])
+		order["fee_breakdown"] = sell_breakdown
+	else:
+		return _reject_order(order, "지원하지 않는 ETF 주문 방향입니다")
+
+	_notify_fill(order, order["quantity"], price)
 	return order
 
 
@@ -337,6 +382,10 @@ func submit_limit_order(
 ) -> Dictionary:
 	var order: Dictionary = _create_order("LIMIT", side, stock_id, quantity, limit_price)
 
+	# ETF orders are always immediate fill — no order book, no limit queuing (sector-etf.md §3-3).
+	if EtfManager.is_etf(stock_id):
+		return _reject_order(order, "ETF는 즉시 체결만 가능합니다 (지정가 불가)")
+
 	var reject: String = _validate_order(order)
 	if reject != "":
 		order["status"] = "REJECTED"
@@ -350,7 +399,7 @@ func submit_limit_order(
 		var reserved: int = MarketConfig.get_buy_cost(limit_price * quantity)
 		if not CurrencySystem.sim_deduct(reserved):
 			order["status"] = "REJECTED"
-			order["reject_reason"] = "잔액 부족"
+			order["reject_reason"] = ERR_BALANCE
 			_history_append(order)
 			on_order_rejected.emit(order)
 			return order
@@ -744,15 +793,19 @@ func _validate_order_state_and_stock(order: Dictionary) -> String:
 	)
 	if not valid_states:
 		return "장이 열려 있지 않습니다"
-	# 2. Stock exists + VI/CB halt check (GDD Rules 2-4, 2-5)
-	if StockDatabase.get_stock(order["stock_id"]) == null:
+	# 2. Stock / ETF exists check (GDD Rules 2-4, 2-5)
+	var stock_id: String = order["stock_id"]
+	var is_etf: bool = EtfManager.is_etf(stock_id)
+	if not is_etf and StockDatabase.get_stock(stock_id) == null:
 		return "존재하지 않는 종목입니다"
-	# Stage 1 is a temporary halt; _cb_stage stays at 1 after it lifts.
-	# Only reject new orders during Stage 2 (permanent early close). (R-01 fix)
-	if PriceEngine.get_cb_stage() >= 2:
-		return "CB 2단계 발동 중 — 조기 장 마감"
-	if PriceEngine.is_vi_halted(order["stock_id"]):
-		return "변동성완화장치(VI) 발동 중입니다"
+	# ETF prices are always valid — no VI or CB halts apply to index products.
+	if not is_etf:
+		# Stage 1 is a temporary halt; _cb_stage stays at 1 after it lifts.
+		# Only reject new orders during Stage 2 (permanent early close). (R-01 fix)
+		if PriceEngine.get_cb_stage() >= 2:
+			return "CB 2단계 발동 중 — 조기 장 마감"
+		if PriceEngine.is_vi_halted(stock_id):
+			return "변동성완화장치(VI) 발동 중입니다"
 	return ""
 
 
@@ -760,6 +813,9 @@ func _validate_order_quantity_and_skills(order: Dictionary) -> String:
 	# 3. Quantity
 	if order["quantity"] <= 0:
 		return "수량은 1 이상이어야 합니다"
+	# 3.5. ETF: P3 skill unlock required (sector-etf.md §3-5, AC-01)
+	if EtfManager.is_etf(order["stock_id"]) and not SkillTree.is_skill_unlocked("P3"):
+		return "ETF 거래 스킬을 해금하세요 (P3: 섹터 ETF)"
 	# 4. Skill unlock — TR1 required for limit orders
 	if order["order_type"] == "LIMIT" and not SkillTree.is_skill_unlocked("TR1"):
 		return "지정가 주문 스킬을 해금하세요 (TR1: 지정가 주문)"
@@ -797,7 +853,7 @@ func _validate_order_buy_constraints(order: Dictionary) -> String:
 		var price: int = PriceEngine.get_current_price(order["stock_id"])
 		required = price * order["quantity"]
 	if CurrencySystem.get_sim_cash() < required:
-		return "잔액 부족"
+		return ERR_BALANCE
 	return ""
 
 
@@ -807,10 +863,10 @@ func _validate_order_sell_constraints(order: Dictionary) -> String:
 	# 7. Holdings check
 	var holding: Variant = PortfolioManager.get_holding(order["stock_id"])
 	if holding == null:
-		return "보유 수량 부족"
+		return ERR_QUANTITY
 	var available: int = holding["quantity"] - get_locked_quantity(order["stock_id"])
 	if order["quantity"] > available:
-		return "보유 수량 부족"
+		return ERR_QUANTITY
 	return ""
 
 

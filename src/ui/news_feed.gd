@@ -59,6 +59,7 @@ func _ready() -> void:
 	tree_exiting.connect(_disconnect_signals)
 
 
+## 뉴스 헤더, 프리마켓 번들 패널, 스크롤 가능 카드 목록 영역 구성.
 func _build_ui() -> void:
 	# Header
 	_header_bar = HBoxContainer.new()
@@ -197,6 +198,7 @@ func _on_market_state_changed(
 
 # ── Pre-Market Bundle ──
 
+## 장 시작 전 오버나이트 뉴스 번들을 프리마켓 패널에 표시하고 카드 목록에 삽입.
 func _show_pre_market_bundle() -> void:
 	_pre_market_panel.visible = true
 

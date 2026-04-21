@@ -108,6 +108,7 @@ func _refresh() -> void:
 	_update_leaderboard()
 
 
+## [param state]("pre_season"/"free_market"/"main")에 따라 해당 패널만 visible로 전환.
 func _show_state(state: String) -> void:
 	_pre_season_panel.visible  = (state == "pre_season")
 	_free_market_panel.visible = (state == "free_market")
@@ -299,6 +300,7 @@ func _add_separator() -> void:
 
 # ── UI Construction ──
 
+## 배경, pre_season/free_market/main 패널 3종을 구성하고 _show_state()로 초기 상태 적용.
 func _build_ui() -> void:
 	# 공유 배경
 	var bg_style: StyleBoxFlat = StyleBoxFlat.new()
@@ -323,6 +325,7 @@ func _build_ui() -> void:
 
 # ── EC-06: 시즌 시작 전 ──
 
+## 시즌 시작 전 대기 화면(EC-06) 패널을 구성해 반환.
 func _build_pre_season_panel() -> Control:
 	var panel: PanelContainer = PanelContainer.new()
 	var style: StyleBoxFlat = StyleBoxFlat.new()
@@ -366,6 +369,7 @@ func _build_pre_season_panel() -> Control:
 
 # ── EC-05: 프리마켓 ──
 
+## 프리마켓 대기 화면(EC-05) 패널을 구성해 반환.
 func _build_free_market_panel() -> Control:
 	var panel: PanelContainer = PanelContainer.new()
 	var style: StyleBoxFlat = StyleBoxFlat.new()
@@ -397,6 +401,7 @@ func _build_free_market_panel() -> Control:
 
 # ── Main Layout: 좌·우 패널 ──
 
+## 좌·우 패널 + 중앙 구분선을 담는 메인 레이아웃 컨테이너를 구성해 반환.
 func _build_main_panel() -> Control:
 	var panel: Control = Control.new()
 
@@ -412,6 +417,7 @@ func _build_main_panel() -> Control:
 	return panel
 
 
+## 좌·우 패널 사이 1px 수직 구분선을 생성해 반환.
 func _build_divider() -> Control:
 	var div: PanelContainer = PanelContainer.new()
 	div.custom_minimum_size = Vector2(1, 0)
@@ -423,6 +429,7 @@ func _build_divider() -> Control:
 
 # ── Left Panel ──
 
+## 티어·시즌·주간 섹션 3종을 담는 좌측 패널을 구성해 반환.
 func _build_left_panel() -> Control:
 	var panel: PanelContainer = PanelContainer.new()
 	panel.custom_minimum_size = Vector2(220, 0)
@@ -511,6 +518,7 @@ func _build_left_panel_weekly_section(vbox: VBoxContainer) -> void:
 
 # ── Right Panel: 리더보드 ──
 
+## 리더보드 헤더 + 참가자 행 스크롤 영역을 담는 우측 패널을 구성해 반환.
 func _build_right_panel() -> Control:
 	var panel: PanelContainer = PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -551,6 +559,7 @@ func _build_right_panel() -> Control:
 	return panel
 
 
+## "리더보드" 제목과 컬럼 헤더(순위·참가자·수익률) 행을 구성해 반환.
 func _build_leaderboard_header() -> Control:
 	var vbox: VBoxContainer = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 4)

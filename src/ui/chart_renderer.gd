@@ -147,6 +147,7 @@ func _ready() -> void:
 	add_child(_load_debounce_timer)
 
 
+## 종목명·가격 레이블, 타임프레임 버튼, [최신] 버튼을 포함한 차트 헤더 바 구성.
 func _build_header() -> void:
 	_header_bar = HBoxContainer.new()
 	_header_bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
@@ -161,6 +162,7 @@ func _build_header() -> void:
 	_build_header_go_latest()
 
 
+## 종목명·현재가·등락률 레이블을 헤더 바에 추가하고 노드 캐시.
 func _build_header_labels() -> void:
 	_lbl_stock_name = Label.new()
 	_lbl_stock_name.text = tr("종목 선택")
@@ -183,6 +185,7 @@ func _build_header_labels() -> void:
 	_header_bar.add_child(spacer)
 
 
+## 1틱·5분·15분·일봉·주봉·월봉 타임프레임 전환 버튼 6종을 헤더 바에 추가.
 func _build_header_tf_buttons() -> void:
 	_btn_tf_1t = Button.new()
 	_btn_tf_1t.text = tr("1분")
@@ -221,6 +224,7 @@ func _build_header_tf_buttons() -> void:
 	_header_bar.add_child(_btn_tf_mn)
 
 
+## 차트를 최신 캔들로 스크롤하는 [최신] 버튼을 헤더 바에 추가.
 func _build_header_go_latest() -> void:
 	_btn_go_latest = Button.new()
 	_btn_go_latest.text = tr("현재로 이동 →")

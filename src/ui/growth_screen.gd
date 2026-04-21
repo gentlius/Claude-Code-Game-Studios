@@ -106,6 +106,7 @@ func _refresh() -> void:
 		_refresh_detail(_selected_skill_id)
 
 
+## 레벨, 주간 XP, SP 표시 레이블을 현재 XpSystem 값으로 갱신.
 func _refresh_header() -> void:
 	var level: int = XpSystem.get_current_level()
 	_lbl_level.text = "Lv.%d" % level
@@ -123,6 +124,7 @@ func _refresh_header() -> void:
 		_lbl_sp.visible = false
 
 
+## 모든 스킬 버튼의 해금 상태·활성화 여부를 SkillTree 상태에 맞게 갱신.
 func _refresh_skill_nodes() -> void:
 	for skill_id: String in _skill_buttons:
 		var btn: Button = _skill_buttons[skill_id] as Button
@@ -146,6 +148,7 @@ func _refresh_skill_nodes() -> void:
 				btn.disabled = false
 
 
+## [param skill_id] 스킬의 이름·설명·선행조건·SP 비용을 디테일 패널에 표시.
 func _refresh_detail(skill_id: String) -> void:
 	var skills: Array[Dictionary] = SkillTree.get_all_skills()
 	for skill: Dictionary in skills:
@@ -171,6 +174,7 @@ func _refresh_detail(skill_id: String) -> void:
 		return
 
 
+## 현금·평가금액 레이블을 현재 포트폴리오 값으로 갱신.
 func _refresh_assets() -> void:
 	var cash: int = 0           ## Beta Sprint 9 (B-02): CurrencySystem.get_real_cash() — LifestyleManager 구현 시 활성화
 	var portfolio: int = PortfolioManager.get_total_assets()  ## 예수금 + 예약금 + 보유종목 평가액
@@ -194,6 +198,7 @@ func _refresh_bg() -> void:
 
 # ── UI Construction ──
 
+## 전체 성장 화면 레이아웃(헤더·스킬트리·디테일·자산 패널) 구성 및 노드 캐시 초기화.
 func _build_ui() -> void:
 	# Solid dark base — project clear color is near-white (#F5F5F8) so GrowthScreen
 	# (a plain Control = transparent) would show through as white without this rect.
@@ -231,6 +236,7 @@ func _build_ui() -> void:
 	_build_asset_panel(root)
 
 
+## 레벨·XP 바·SP 레이블을 포함한 상단 헤더 패널을 [param parent]에 추가하고 노드 캐시.
 func _build_header(parent: VBoxContainer) -> void:
 	var panel: PanelContainer = PanelContainer.new()
 	var style: StyleBoxFlat = StyleBoxFlat.new()
@@ -281,6 +287,7 @@ func _build_header(parent: VBoxContainer) -> void:
 	hbox.add_child(_lbl_sp)
 
 
+## A/S/TR/P 4개 브랜치 컬럼을 가로로 배치하는 스킬트리 그리드를 구성.
 func _build_skill_tree(parent: VBoxContainer) -> void:
 	var grid: HBoxContainer = HBoxContainer.new()
 	grid.add_theme_constant_override("separation", 4)
@@ -292,6 +299,7 @@ func _build_skill_tree(parent: VBoxContainer) -> void:
 		grid.add_child(col)
 
 
+## [param branch] 브랜치(A/S/TR/P)의 스킬 버튼 컬럼을 생성해 반환. _skill_buttons 캐시 등록.
 func _build_branch_column(branch: String) -> VBoxContainer:
 	var col: VBoxContainer = VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -346,6 +354,7 @@ func _build_branch_column(branch: String) -> VBoxContainer:
 	return col
 
 
+## 선택 스킬의 이름·설명·선행조건·SP 비용·해금 버튼을 표시하는 디테일 패널 구성.
 func _build_detail_panel(parent: VBoxContainer) -> void:
 	_detail_panel = PanelContainer.new()
 	var style: StyleBoxFlat = StyleBoxFlat.new()
@@ -391,6 +400,7 @@ func _build_detail_panel(parent: VBoxContainer) -> void:
 	vbox.add_child(_lbl_detail_prereq)
 
 
+## 현금·평가금액 레이블을 표시하는 하단 자산 패널 구성.
 func _build_asset_panel(parent: VBoxContainer) -> void:
 	var panel: PanelContainer = PanelContainer.new()
 	var style: StyleBoxFlat = StyleBoxFlat.new()

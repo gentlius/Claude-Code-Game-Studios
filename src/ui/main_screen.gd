@@ -130,6 +130,7 @@ func _switch_tab(tab: int, handle_pause: bool = true) -> void:
 
 # ── UI Construction ──
 
+## 다크 프레임 배경, 탭 바, F4 나가기 버튼, 콘텐츠 영역, 탭 씬 3종, 일시정지 배너 전체 구성.
 func _build_ui() -> void:
 	var bg_style: StyleBoxFlat = StyleBoxFlat.new()
 	bg_style.bg_color = ThemeSetup.LAYOUT_BG

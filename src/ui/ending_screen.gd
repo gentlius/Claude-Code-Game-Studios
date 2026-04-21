@@ -43,6 +43,7 @@ func _ready() -> void:
 	visible = false
 
 
+## 전체 화면 배경, 결말 텍스트, 통계 패널, 재도전 버튼 구성.
 func _build_ui() -> void:
 	# Full-screen dim
 	_bg = ColorRect.new()

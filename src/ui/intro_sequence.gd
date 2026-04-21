@@ -64,6 +64,7 @@ func _ready() -> void:
 	call_deferred("_show_card", 0)
 
 
+## 전체 화면 배경, 카드 컨테이너, 타자기 레이블, 페이드 오버레이 구성.
 func _build_ui() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -149,6 +150,7 @@ func _build_ui() -> void:
 	add_child(_overlay)
 
 
+## [param index]번 카드 텍스트를 타자기 효과로 표시. 마지막 카드면 _show_prompt() 호출.
 func _show_card(index: int) -> void:
 	_current_card = index
 	_typewriter_active = true
@@ -180,6 +182,7 @@ func _on_typewriter_finished() -> void:
 	_show_prompt()
 
 
+## "시작하려면 클릭" 프롬프트 레이블 표시 및 페이드인 애니메이션 실행.
 func _show_prompt() -> void:
 	var tween := create_tween()
 	tween.tween_property(_prompt_label, "modulate:a", 1.0, 0.5)

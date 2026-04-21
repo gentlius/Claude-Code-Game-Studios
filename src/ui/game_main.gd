@@ -29,6 +29,7 @@ func _ready() -> void:
 
 # ── Splash ──
 
+## SplashScreen 인스턴스를 생성·추가하고 splash_finished 시그널에 연결.
 func _show_splash() -> void:
 	_splash = load("res://src/ui/splash_screen.gd").new()
 	add_child(_splash)
@@ -43,6 +44,7 @@ func _on_splash_finished() -> void:
 
 # ── Start Screen ──
 
+## StartScreen 인스턴스를 생성·추가하고 slot_selected/new_game_confirmed 시그널에 연결.
 func _show_start_screen() -> void:
 	_start_screen = load("res://src/ui/start_screen.gd").new()
 	add_child(_start_screen)

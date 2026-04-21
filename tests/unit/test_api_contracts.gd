@@ -82,8 +82,11 @@ func test_game_clock_api():
 	assert_true(GameClock.has_method("get_current_day"),      "get_current_day 존재")
 	assert_true(GameClock.has_method("get_current_week"),     "get_current_week 존재")
 	assert_true(GameClock.has_method("set_speed"),                  "set_speed 존재")
-	assert_true(GameClock.has_method("get_auto_slow_on_event"),     "get_auto_slow_on_event 존재")
-	assert_true(GameClock.has_method("set_auto_slow_on_event"),     "set_auto_slow_on_event 존재")
+	assert_true(GameClock.has_method("get_auto_slow_on_event"),      "get_auto_slow_on_event 존재")
+	assert_true(GameClock.has_method("set_auto_slow_on_event"),      "set_auto_slow_on_event 존재")
+	assert_true(GameClock.has_method("is_season_final_day"),         "is_season_final_day 존재")
+	assert_true(GameClock.has_method("configure_trading_hours"),     "configure_trading_hours 존재")
+	assert_true(GameClock.has_method("get_effective_ticks_per_day"), "get_effective_ticks_per_day 존재")
 
 
 # ── XpSystem ────────────────────────────────────────────────────────
@@ -141,9 +144,10 @@ func test_ai_competitor_api():
 	assert_true(AiCompetitor.has_method("get_sorted_indices"),     "get_sorted_indices 존재")
 	assert_true(AiCompetitor.has_method("estimate_player_rank"),   "estimate_player_rank 존재")
 	assert_true(AiCompetitor.has_method("get_participant_meta"),   "get_participant_meta 존재")
-	assert_true(AiCompetitor.has_method("get_save_data"),          "get_save_data 존재")
-	assert_true(AiCompetitor.has_method("load_save_data"),         "load_save_data 존재")
-	assert_true(AiCompetitor.has_method("reset"),                  "reset 존재")
+	assert_true(AiCompetitor.has_method("get_save_data"),                    "get_save_data 존재")
+	assert_true(AiCompetitor.has_method("load_save_data"),                   "load_save_data 존재")
+	assert_true(AiCompetitor.has_method("reset"),                            "reset 존재")
+	assert_true(AiCompetitor.has_method("configure_market_distribution"),    "configure_market_distribution 존재")
 
 
 # ── PriceEngine ──────────────────────────────────────────────────────
@@ -163,6 +167,9 @@ func test_price_engine_api():
 	assert_true(PriceEngine.has_method("get_dividend_display"), "get_dividend_display 존재")
 	# 호가창 OHLCV API (GDD order-book.md §3-5 블록1)
 	assert_true(PriceEngine.has_method("get_today_ohlcv"),      "get_today_ohlcv 존재")
+	# 52주 최고/최저 API (GDD order-book.md §3-5 블록6)
+	assert_true(PriceEngine.has_method("get_week52_high"),      "get_week52_high 존재")
+	assert_true(PriceEngine.has_method("get_week52_low"),       "get_week52_low 존재")
 
 
 # ── SkillTree ────────────────────────────────────────────────────────
@@ -306,6 +313,9 @@ func test_short_selling_system_api():
 	assert_true(ShortSellingSystem.has_method("get_save_data"),                "get_save_data 존재")
 	assert_true(ShortSellingSystem.has_method("load_save_data"),               "load_save_data 존재")
 	assert_true(ShortSellingSystem.has_method("reset"),                        "reset 존재")
+	assert_true(ShortSellingSystem.has_method("get_borrow_pool"),              "get_borrow_pool 존재")
+	assert_true(ShortSellingSystem.has_method("get_borrow_pool_data"),         "get_borrow_pool_data 존재")
+	assert_true(ShortSellingSystem.has_method("load_borrow_pool_data"),        "load_borrow_pool_data 존재")
 
 
 func test_short_selling_signals():
@@ -469,6 +479,7 @@ func test_financial_report_system_api():
 func test_news_event_system_fire_stock_news_api():
 	assert_true(NewsEventSystem.has_method("fire_stock_news"), "fire_stock_news 존재")
 	assert_true(NewsEventSystem.has_method("_calc_template_weight"), "_calc_template_weight 존재")
+	assert_true(NewsEventSystem.has_method("set_active_market"), "set_active_market 존재")
 
 
 # ── ShortSellingSystem.MIN_MARGIN_RATE (S10-06e) ─────────────────────────────

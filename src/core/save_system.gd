@@ -182,6 +182,7 @@ func _restore_season_systems(data: Dictionary, season_active: bool) -> void:
 	StopTakeSystem.load_save_data(data.get("stop_take", []))
 	# TR3: 숏 포지션 복원 (holding 복원 이후 — margin_ratio는 첫 틱에 재계산)
 	ShortSellingSystem.load_save_data(data.get("short_positions", []))
+	ShortSellingSystem.load_borrow_pool_data(data.get("borrow_pool", {}))
 	# TR4: 레버리지 포지션 복원 (holding 복원 이후)
 	LeverageManager.load_save_data(data.get("leverage_positions", []))
 	# OHLCV 시즌 간 누적 히스토리 복원 (S9-07)
@@ -215,6 +216,7 @@ func save_slot(id: int) -> bool:
 		"stop_take": StopTakeSystem.get_save_data(),
 		"lifestyle": LifestyleManager.get_save_data(),
 		"short_positions": ShortSellingSystem.get_save_data(),
+		"borrow_pool": ShortSellingSystem.get_borrow_pool_data(),
 		"leverage_positions": LeverageManager.get_save_data(),
 		"ohlcv_history": OhlcvHistory.get_save_data(),
 		"etf": EtfManager.get_save_data(),

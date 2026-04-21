@@ -221,7 +221,13 @@ var _vi_states: Dictionary = {}  ## stock_id -> {halt_remaining: int, count_toda
 var _cb_stage: int = 0  ## 0=none, 1=stage1 active, 2=stage2 (early close)
 var _cb_halt_remaining: int = 0  ## Stage 1 remaining halt ticks
 var _player_pressure: Dictionary = {}  ## stock_id -> float; pending price delta from player fills (ADR-019)
+var _rumor_pressure: Dictionary = {}   ## stock_id -> {delta_per_tick: float, ticks_remaining: int} (TD-DR-04)
 var _old_prices: Dictionary = {}       ## pre-allocated: stock_id -> int. Reused each tick (TD-CR-07)
+
+# ── Config (loaded in _ready) ──
+
+const CONFIG_PATH: String = "res://assets/data/price_engine_config.json"
+var _rumor_pressure_strength: float = 0.0005  ## per-tick fractional delta per impact tier unit (GDD §3-5)
 
 # ── Lifecycle ──
 
@@ -230,7 +236,20 @@ func _ready() -> void:
 	# _process_tick() to enforce the GDD-mandated News → Price → Order order.
 	GameClock.on_season_start.connect(_on_season_start)
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
+	NewsEventSystem.on_rumor_hint.connect(_on_rumor_hint)
+	_load_config()
 	_reseed_session()
+
+
+## Load tuning values from price_engine_config.json. Falls back to in-code defaults.
+func _load_config() -> void:
+	var f: FileAccess = FileAccess.open(CONFIG_PATH, FileAccess.READ)
+	if f == null:
+		return
+	var parsed: Variant = JSON.parse_string(f.get_as_text())
+	f.close()
+	if parsed is Dictionary:
+		_rumor_pressure_strength = float(parsed.get("rumorPressureStrength", _rumor_pressure_strength))
 
 
 ## Re-seed the price RNG from wall-clock time (ADR-018).
@@ -375,6 +394,7 @@ func reset() -> void:
 	_stock_states.clear()
 	_vi_states.clear()
 	_player_pressure.clear()
+	_rumor_pressure.clear()
 	_cb_stage = 0
 	_cb_halt_remaining = 0
 	_prev_day_index = 0.0
@@ -524,10 +544,103 @@ func get_dividend_display(stock_id: String) -> String:
 	return "%.1f%%" % (adjusted * 100.0)
 
 
+## Returns the 52-week high price for a stock.
+## GDD order-book.md §3-5 블록6 — 호가창 하단 52주 최고/최저 표시용.
+## Scans ohlcv_daily (full season history) for the maximum high across all recorded days,
+## then compares with today's intraday high from get_today_ohlcv().
+## If no history exists (first day of season), returns today's intraday high or current_price.
+func get_week52_high(stock_id: String) -> int:
+	var state: Dictionary = _stock_states.get(stock_id, {})
+	if state.is_empty():
+		return 0
+	var daily: Array = state.get("ohlcv_daily", [])
+	var result: int = 0
+	for entry: Variant in daily:
+		var d: Dictionary = entry as Dictionary
+		var h: int = d.get("high", 0)
+		if h > result:
+			result = h
+	# Include today's intraday high
+	var today: Dictionary = get_today_ohlcv(stock_id)
+	var today_high: int = today.get("high", 0)
+	if today_high > result:
+		result = today_high
+	# Fallback to current price when no data at all
+	if result == 0:
+		result = state.get("current_price", 0)
+	return result
+
+
+## Returns the 52-week low price for a stock.
+## GDD order-book.md §3-5 블록6 — 호가창 하단 52주 최고/최저 표시용.
+## Scans ohlcv_daily (full season history) for the minimum low across all recorded days,
+## then compares with today's intraday low from get_today_ohlcv().
+## If no history exists (first day of season), returns today's intraday low or current_price.
+func get_week52_low(stock_id: String) -> int:
+	var state: Dictionary = _stock_states.get(stock_id, {})
+	if state.is_empty():
+		return 0
+	var daily: Array = state.get("ohlcv_daily", [])
+	var result: int = 0
+	for entry: Variant in daily:
+		var d: Dictionary = entry as Dictionary
+		var l: int = d.get("low", 0)
+		if l > 0 and (result == 0 or l < result):
+			result = l
+	# Include today's intraday low
+	var today: Dictionary = get_today_ohlcv(stock_id)
+	var today_low: int = today.get("low", 0)
+	if today_low > 0 and (result == 0 or today_low < result):
+		result = today_low
+	# Fallback to current price when no data at all
+	if result == 0:
+		result = state.get("current_price", 0)
+	return result
+
+
 ## Returns the current Markov state for a stock.
 func get_markov_state(stock_id: String) -> MarkovState:
 	var state: Dictionary = _stock_states.get(stock_id, {})
 	return state.get("markov_state", MarkovState.SIDEWAYS) as MarkovState
+
+
+## Rumor hint handler (TD-DR-04, GDD §3-5).
+## Converts incoming rumor entry into per-tick fractional price pressure for target stocks.
+## Formula: delta_per_tick = direction × strength × tier_mult
+## tier_mult: SMALL=1, MEDIUM=2, LARGE=4 (matching GDD §3-5 proportional scaling)
+func _on_rumor_hint(rumor: Dictionary) -> void:
+	if rumor.get("is_fake", false):
+		return  # Fake rumors carry no price signal (GDD §5-4)
+	var target_ids: Array = rumor.get("target_stock_ids", [])
+	if target_ids.is_empty():
+		return
+	var direction: int = int(rumor.get("direction", 0))
+	var impact_tier: String = rumor.get("impact_tier", "SMALL")
+	var tier_mult: float
+	match impact_tier:
+		"SMALL":  tier_mult = 1.0
+		"MEDIUM": tier_mult = 2.0
+		_:        tier_mult = 4.0  # LARGE, CRITICAL
+	var delta_per_tick: float = float(direction) * _rumor_pressure_strength * tier_mult
+	var ticks_remaining: int = SkillTree.RUMOR_LEAD_MINUTES * GameClock.TICKS_PER_MINUTE
+	for stock_id: String in target_ids:
+		_rumor_pressure[stock_id] = {
+			"delta_per_tick": delta_per_tick,
+			"ticks_remaining": ticks_remaining,
+		}
+
+
+## Consumes one tick of rumor pressure for the given stock.
+## Decrements ticks_remaining and removes the entry when exhausted.
+func _consume_rumor_pressure(stock_id: String) -> float:
+	if not _rumor_pressure.has(stock_id):
+		return 0.0
+	var entry: Dictionary = _rumor_pressure[stock_id]
+	var delta: float = entry["delta_per_tick"]
+	entry["ticks_remaining"] -= 1
+	if entry["ticks_remaining"] <= 0:
+		_rumor_pressure.erase(stock_id)
+	return delta
 
 
 ## Push an event from the News/Events system.
@@ -538,6 +651,38 @@ func push_event(event: MarketEvent) -> void:
 		var state: Dictionary = _stock_states[stock_id]
 		var queue: Array = state["event_queue"]
 		queue.append(event)
+
+
+## Inject an ETF price directly into the price cache (sector-etf.md §3-2, ADR-021).
+## Called by EtfManager each tick after calculating the sector-weighted price.
+## Creates a minimal state entry on first call — ETF entries bypass Markov processing.
+## The minimal entry carries the same keys that _generate_daily_ohlcv() and
+## _reset_order_books() iterate over, so existing hot-path code handles ETFs naturally.
+## AC-13: price is clamped to ≥ 1원.
+##
+## Example:
+##   PriceEngine.inject_price("ETF_반도체", 51224.0)
+func inject_price(etf_id: String, price: float) -> void:
+	var clamped: int = maxi(1, roundi(price))
+	if not _stock_states.has(etf_id):
+		_stock_states[etf_id] = {
+			"stock_id":          etf_id,
+			"current_price":     clamped,
+			"base_price":        clamped,
+			"season_open_price": clamped,
+			"prev_day_close":    clamped,
+			"tick_prices":       [] as Array[int],
+			"tick_volumes":      [] as Array[float],
+			"ohlcv_daily":       [] as Array[Dictionary],
+			"order_book":        {"ask": [], "bid": []},
+			"event_queue":       [],
+			"is_etf":            true,
+		}
+	var state: Dictionary = _stock_states[etf_id]
+	state["current_price"] = clamped
+	(state["tick_prices"] as Array[int]).append(clamped)
+	(state["tick_volumes"] as Array[float]).append(0.0)
+
 
 # ── Season Initialization ──
 
@@ -609,6 +754,15 @@ func init_first_season() -> void:
 ## renderer re-fetches its buffers on the next MARKET_OPEN state transition.
 ## season_open_price is captured here so PER/PBR display methods reflect season-start price.
 func _reset_season_mechanics() -> void:
+	# ETF entries are managed by EtfManager and will be re-injected after on_season_started.
+	# Remove them before the reset loop (cannot erase during iteration — two-pass).
+	var etf_keys: Array[String] = []
+	for stock_id: String in _stock_states:
+		if _stock_states[stock_id].get("is_etf", false):
+			etf_keys.append(stock_id)
+	for etf_id: String in etf_keys:
+		_stock_states.erase(etf_id)
+
 	for stock_id: String in _stock_states:
 		var state: Dictionary = _stock_states[stock_id]
 		var bias: SeasonBias = _random_bias()
@@ -663,6 +817,12 @@ func process_tick(tick_number: int, _day: int, _week: int) -> void:
 		_old_prices[stock_id] = _stock_states[stock_id].get("current_price", 0)
 
 	for stock_id: String in _stock_states:
+		# ETF entries: prices are managed by EtfManager.process_tick() which runs
+		# immediately after. No Markov/drift processing — skip the Markov loop entirely.
+		# inject_price() appends to tick_prices each tick, so buffers stay aligned.
+		if _stock_states[stock_id].get("is_etf", false):
+			continue
+
 		# VI halt check (GDD Rule 2-4)
 		var vi: Dictionary = _vi_states.get(stock_id, {})
 		if vi.get("halt_remaining", 0) > 0:
@@ -719,8 +879,11 @@ func _process_stock_tick(stock_id: String, tick_in_day: int) -> void:
 	var player_delta: float = _player_pressure.get(stock_id, 0.0)
 	_player_pressure.erase(stock_id)
 
+	# Step 4c: Rumor price pressure (GDD §3-5, TD-DR-04)
+	var rumor_delta: float = _consume_rumor_pressure(stock_id)
+
 	# Step 5: Additive combination
-	var total_delta: float = pattern_delta + drift_delta + event_delta + player_delta
+	var total_delta: float = pattern_delta + drift_delta + event_delta + player_delta + rumor_delta
 
 	# Step 6: Price update
 	var raw_price: float = float(s["current_price"]) * (1.0 + total_delta)
@@ -774,7 +937,7 @@ func _process_stock_tick(stock_id: String, tick_in_day: int) -> void:
 			s["state_duration"] += 1
 
 	# Step 8: Volume (GDD Rule 4) — energy-correlated
-	var volume: float = _compute_volume(s, pattern_delta, event_delta, tick_in_day)
+	var volume: float = _compute_volume(s, pattern_delta, event_delta, rumor_delta, tick_in_day)
 
 	# Step 9: Record
 	s["tick_prices"].append(final_price)
@@ -903,16 +1066,16 @@ func _gradual_tick_impact(ge: Dictionary) -> float:
 
 ## Volume generation (GDD Rule 4)
 ## Volume calculation using shared tick energy (GDD Rule 4-2 ~ 4-6).
-## tick_energy = |pattern_delta| + |event_delta| measures total force before cancellation.
+## tick_energy = |pattern_delta| + |event_delta| + |rumor_delta| measures total force before cancellation.
 func _compute_volume(
-	s: Dictionary, pattern_delta: float, event_delta: float, tick_in_day: int
+	s: Dictionary, pattern_delta: float, event_delta: float, rumor_delta: float, tick_in_day: int
 ) -> float:
 	var vol: int = s["volatility_profile"]
 	var vol_range: Array = BASE_VOLUME_RANGE[vol]
 	var base_vol: float = _rng.randf_range(float(vol_range[0]), float(vol_range[1]))
 
 	# 4-2: Tick energy — correlation between price movement forces and volume
-	var tick_energy: float = absf(pattern_delta) + absf(event_delta)
+	var tick_energy: float = absf(pattern_delta) + absf(event_delta) + absf(rumor_delta)
 	var energy_mult: float = 1.0 + clampf(
 		tick_energy / ENERGY_THRESHOLD, 0.0, ENERGY_MAX_BOOST
 	)
@@ -1011,6 +1174,7 @@ func _end_trading_day() -> void:
 	_reset_order_books()
 	_reset_vi_and_circuit_breaker()
 	_prev_day_index = _current_index
+	_rumor_pressure.clear()  # TD-DR-04: stale rumor pressure does not carry over to next day
 
 
 ## Build OHLCV candle from today's tick arrays and append to each stock's history.
@@ -1087,6 +1251,9 @@ func _reset_vi_and_circuit_breaker() -> void:
 func initialize_order_books() -> void:
 	for stock_id: String in _stock_states:
 		var s: Dictionary = _stock_states[stock_id]
+		# ETF entries have no order book — skip (sector-etf.md §3-3 "즉시 체결")
+		if s.get("is_etf", false):
+			continue
 		var vol: int = s["volatility_profile"]
 		var price: int = s["current_price"]
 		var base_qty: float = _order_book_base_qty(vol)

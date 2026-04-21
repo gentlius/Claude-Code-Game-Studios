@@ -3,5 +3,11 @@
     "margin_rate": 1.40,
     "margin_call_threshold": 0.20,
     "forced_liquidation_warning_ratio": 0.35,
-    "max_short_positions": 3
+    "max_short_positions": 3,
+    "borrowableRatioByVolatility": {
+        "LOW": 0.12,
+        "MEDIUM": 0.05,
+        "HIGH": 0.02,
+        "EXTREME": 0.01
+    }
 }

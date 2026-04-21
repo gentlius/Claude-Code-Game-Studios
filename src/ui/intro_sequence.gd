@@ -14,13 +14,19 @@ const CARD_FADE_DURATION: float = 0.2
 const FINISH_FADE_DURATION: float = 1.2
 
 ## GDD §3-2 카드 텍스트 5장. tr()로 래핑됨 (S5-04).
-const CARD_TEXTS: Array[String] = [
-	"오늘, 퇴소했다.\n\n보육원 문이 닫혔다.\n뒤돌아보지 않았다.\n\n손에 쥔 건 전부다.\n정착지원금 1,000,000원.\n\n이게 시작이다.",
-	"같은 날, 공고 하나가 올라왔다.\n\n제1회 시드머니 투자 대회\n기간: 20거래일  /  참가자: 20,000명  /  무기: 당신의 판단\n\n19,999명이 이미 접속 중이다.\n모두 같은 돈으로 시작한다.\n모두 같은 시장을 본다.\n\n결과는 다를 것이다.",
-	"오늘 밤은 쪽방이다.\n\n벽이 얇다. 창이 없다.\n괜찮다. 여기가 출발선이다.\n\n자산이 오르면, 거처가 바뀐다.\n고층이 보이고, 나중엔 수평선이 보인다.\n개인 섬을 가진 사람들이 있다. 당신도 갈 수 있다.\n\n반대 방향도 있다.\n자산이 10,000원 아래로 떨어지면 — 끝이다.\n\n그러니까, 오르는 방향으로만 간다.",
-	"무기가 없다고 생각하지 마라.\n\n거래할수록 배운다.\n차트를 읽는 눈이 열리고,\n뉴스보다 빨리 움직이는 법을 익힌다.\n\n판단이 무기다. 분석이 수익이다.\n시즌 수익은 다음 시드머니가 된다.\n\n복리는 당신 편이다 — 방향이 맞다면.",
-	"브론즈에서 거장까지.\n\n1,000,000원에서 1,000억까지.\n\n쪽방에서 수평선까지.\n\n시장이 열린다."
-]
+## 수치 리터럴 대신 상수 참조 (TD-CR-15): CurrencySystem / SeasonManager 상수를 직접 읽어 빌드.
+## const → 함수로 변경: 상수가 업데이트되면 인트로 텍스트가 자동으로 따라간다.
+static func _build_card_texts() -> Array[String]:
+	var start_cash: String = FormatUtils.currency(CurrencySystem.INITIAL_CASH_ASSETS)
+	var floor_cash: String = FormatUtils.currency(SeasonManager.HANGANG_THRESHOLD)
+	var target_cash: String = FormatUtils.currency(SeasonManager.ENDING_THRESHOLD)
+	return [
+		"오늘, 퇴소했다.\n\n보육원 문이 닫혔다.\n뒤돌아보지 않았다.\n\n손에 쥔 건 전부다.\n정착지원금 %s.\n\n이게 시작이다." % start_cash,
+		"같은 날, 공고 하나가 올라왔다.\n\n제1회 시드머니 투자 대회\n기간: 20거래일  /  참가자: 20,000명  /  무기: 당신의 판단\n\n19,999명이 이미 접속 중이다.\n모두 같은 돈으로 시작한다.\n모두 같은 시장을 본다.\n\n결과는 다를 것이다.",
+		"오늘 밤은 쪽방이다.\n\n벽이 얇다. 창이 없다.\n괜찮다. 여기가 출발선이다.\n\n자산이 오르면, 거처가 바뀐다.\n고층이 보이고, 나중엔 수평선이 보인다.\n개인 섬을 가진 사람들이 있다. 당신도 갈 수 있다.\n\n반대 방향도 있다.\n자산이 %s 아래로 떨어지면 — 끝이다.\n\n그러니까, 오르는 방향으로만 간다." % floor_cash,
+		"무기가 없다고 생각하지 마라.\n\n거래할수록 배운다.\n차트를 읽는 눈이 열리고,\n뉴스보다 빨리 움직이는 법을 익힌다.\n\n판단이 무기다. 분석이 수익이다.\n시즌 수익은 다음 시드머니가 된다.\n\n복리는 당신 편이다 — 방향이 맞다면.",
+		"브론즈에서 거장까지.\n\n%s에서 %s까지.\n\n쪽방에서 수평선까지.\n\n시장이 열린다." % [start_cash, target_cash],
+	]
 
 ## Path to the persistent flag that records whether the intro has been seen.
 const SEEN_FLAG_PATH: String = "user://intro_seen.flag"
@@ -37,6 +43,7 @@ static func clear_seen_flag() -> void:
 		DirAccess.remove_absolute(SEEN_FLAG_PATH)
 
 
+var _card_texts: Array[String] = []  ## Built in _ready() from _build_card_texts()
 var _current_card: int = 0
 var _typewriter_active: bool = false
 var _finishing: bool = false
@@ -51,6 +58,7 @@ var _overlay: ColorRect
 
 
 func _ready() -> void:
+	_card_texts = _build_card_texts()
 	_build_ui()
 	# 뷰포트 연결 후 Tween이 정상 동작하도록 한 프레임 뒤에 시작
 	call_deferred("_show_card", 0)
@@ -145,9 +153,9 @@ func _show_card(index: int) -> void:
 	_current_card = index
 	_typewriter_active = true
 	_prompt_label.modulate.a = 0.0
-	_counter_label.text = "%d / %d" % [index + 1, CARD_TEXTS.size()]
+	_counter_label.text = "%d / %d" % [index + 1, _card_texts.size()]
 
-	var full_text: String = tr(CARD_TEXTS[index])
+	var full_text: String = tr(_card_texts[index])
 	_card_text.text = full_text
 	_card_text.visible_characters = 0
 
@@ -192,7 +200,7 @@ func _advance() -> void:
 		return
 
 	# 마지막 카드 → 종료
-	if _current_card >= CARD_TEXTS.size() - 1:
+	if _current_card >= _card_texts.size() - 1:
 		_finish()
 		return
 

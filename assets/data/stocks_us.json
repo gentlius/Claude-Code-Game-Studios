@@ -1,0 +1,6 @@
+{
+  "version": "1.0",
+  "description": "US stocks — TBD for DLC. See design/gdd/stock-database.md",
+  "_comment": "US stocks — TBD for DLC",
+  "stocks": []
+}

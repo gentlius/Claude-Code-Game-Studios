@@ -69,6 +69,16 @@ const ALERT_BG_LARGE: Color = Color(0.98, 0.96, 0.92)    # soft warm tint
 const ALERT_BORDER_MEGA: Color = Color(0.92, 0.22, 0.20)  # PROFIT_RED
 const ALERT_BORDER_LARGE: Color = Color(0.85, 0.55, 0.05) # orange/amber
 
+# ── Start Screen (dark pre-game screen) — TD-CR-09 ──
+const START_BG: Color              = Color(0.039, 0.039, 0.039)  # #0A0A0A — near-black canvas
+const START_TEXT_BRIGHT: Color     = Color(0.918, 0.918, 0.918)  # #EAEAEA — slot name / header text
+const START_TEXT_EMPTY: Color      = Color(0.40, 0.40, 0.40)     # #666666 — "빈 슬롯" placeholder
+const START_TEXT_DIM: Color        = Color(0.38, 0.38, 0.38)     # #616161 — date / time stamp
+const START_CARD_BG: Color         = Color(0.12, 0.12, 0.14)     # #1F1F24 — save-slot card
+const START_CARD_BORDER: Color     = Color(0.22, 0.22, 0.26)     # #383842 — card border
+const START_WARN: Color            = Color(0.85, 0.45, 0.20)     # #D97333 — delete warning
+const START_PORTFOLIO_VALUE: Color = Color(0.80, 0.85, 0.95)     # #CCD9F2 — portfolio highlight
+
 # ── Factory Methods ──
 
 static func make_panel_style(bg: Color = BG_PANEL, radius: int = 8, border: Color = BORDER_DIM, border_width: int = 0) -> StyleBoxFlat:

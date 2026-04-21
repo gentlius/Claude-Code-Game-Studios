@@ -82,6 +82,14 @@ const OVERNIGHT_SMALL_PROB: float = 0.6   ## SMALL vs MEDIUM split
 const MIN_DECAY_MINUTES: int = 8    ## ~8 game-minutes
 const DEFAULT_DECAY_MINUTES: int = 15  ## ~15 game-minutes
 
+## impact_hint 문자열 상수 — TD-CR-14: 이모지/텍스트 일관성 보장
+const IMPACT_HINT_POSITIVE: String  = "positive"
+const IMPACT_HINT_NEGATIVE: String  = "negative"
+const IMPACT_HINT_NEUTRAL:  String  = "neutral"
+const IMPACT_HINT_WARNING:  String  = "⚠️"   ## VI 발동 등 경고 시스템 이벤트
+const IMPACT_HINT_INFO:     String  = "ℹ️"   ## VI 해제 등 정보성 시스템 이벤트
+const IMPACT_HINT_EMERGENCY: String = "🚨"   ## 서킷브레이커 등 긴급 시스템 이벤트
+
 # ── Constants: S3 Rumor Channel (GDD Rule 5-4, F6) ──
 
 ## Rumor probability by impact tier: LARGE/MEGA=1.0, MEDIUM=0.3, SMALL=0.0 (GDD F6)
@@ -125,6 +133,10 @@ var _overnight_buffer: Array[Dictionary] = [] ## Events for next morning
 ## get_and_clear_loaded_news() in _ready(). MarketEvent objects are NOT re-pushed
 ## (price effects are already reflected in PriceEngine's saved state).
 var _loaded_news_bundle: Array[Dictionary] = []
+
+## Active market ID — used to filter event_pool templates by market_id field (TD-DR-05).
+## Uppercase (e.g. "KR", "US"). DLC markets call set_active_market() before season start.
+var _active_market_id: String = "KR"
 
 ## Cooldown tracking: template_id (or template_id+stock_id) -> last_used_tick
 var _cooldown_tracker: Dictionary = {}
@@ -367,7 +379,116 @@ func get_season_stats() -> Dictionary:
 func get_news_delay() -> int:
 	return SkillTree.get_news_delay_ticks()
 
+
+## External event injection (ADR-022 EventSource pipeline).
+## Called by EtfManager (SECTOR_ROTATION) and FinancialReportSystem (SECTOR_RIPPLE).
+## Creates a MarketEvent and pushes it to PriceEngine — the only sanctioned path for
+## external systems to affect prices. Never call PriceEngine.push_event() directly.
+##
+## Parameters:
+##   event_tag   : Caller-defined label ("SECTOR_ROTATION", "SECTOR_RIPPLE", …).
+##                 Used for debug logging; not evaluated at runtime.
+##   sector      : Target sector name (e.g. "반도체"). All stocks in sector are targeted.
+##   impact      : base_impact [0.0 .. 0.20]. Passed directly to MarketEvent.
+##   direction   : +1 (positive shock) or -1 (negative shock).
+##   headline_key: Godot .po key. Empty = no player-visible headline.
+##   decay_ticks : 0 = INSTANT_SHOCK, > 0 = GRADUAL_SHIFT over that many ticks.
+##
+## Example:
+##   NewsEventSystem.inject_event("SECTOR_ROTATION", "반도체", 0.055, 1,
+##       "ROTATION_KR_INFLOW_반도체", 8)
+func inject_event(
+		event_tag: String,
+		sector: String,
+		impact: float,
+		direction: int,
+		headline_key: String = "",
+		decay_ticks: int = 0
+) -> void:
+	if _state == SystemState.UNINITIALIZED:
+		return
+	var stocks: Array[StockData] = StockDatabase.get_stocks_by_sector(sector)
+	if stocks.is_empty():
+		return
+	var target_ids: Array[String] = []
+	for s: StockData in stocks:
+		target_ids.append(s.stock_id)
+
+	var event: MarketEvent
+	if decay_ticks > 0:
+		event = MarketEvent.gradual_shift(
+			impact, direction, MarketEvent.EventScope.SECTOR, target_ids, decay_ticks
+		)
+	else:
+		event = MarketEvent.instant_shock(
+			impact, direction, MarketEvent.EventScope.SECTOR, target_ids
+		)
+	PriceEngine.push_event(event)
+
+	if not headline_key.is_empty():
+		var entry: Dictionary = {
+			"headline": tr(headline_key),  # tr() returns key unchanged when no translation loaded
+			"body":     "",
+			"impact_hint": "positive" if direction > 0 else "negative",
+			"scope":    "SECTOR",
+			"sector":   sector,
+			"is_injected": true,
+			"event_tag": event_tag,
+		}
+		on_news_display.emit(entry)
+
+
+## Fire a player-visible news card for an individual stock — no price pressure.
+## Called by FinancialReportSystem for analyst reports, preliminary earnings, and official results.
+## [param direction]: +1 positive, -1 negative, 0 neutral.
+## [param impact_tier]: "SMALL", "MEDIUM", "LARGE" (visual weight in news feed).
+## GDD financial-report-system.md §3-7, §3-8, §3-10; ADR-022.
+func fire_stock_news(
+		stock_id: String,
+		headline: String,
+		body: String,
+		direction: int,
+		impact_tier: String = "MEDIUM"
+) -> void:
+	if _state == SystemState.UNINITIALIZED:
+		return
+	var hint: String = "positive" if direction > 0 else ("negative" if direction < 0 else "ℹ️")
+	var entry: Dictionary = {
+		"headline":         headline,
+		"body":             body,
+		"impact_hint":      hint,
+		"scope":            "INDIVIDUAL",
+		"impact_tier":      impact_tier,
+		"direction":        direction,
+		"target_stock_ids": [stock_id],
+		"display_tick":     GameClock.get_current_tick(),
+		"day":              GameClock.get_current_day(),
+		"is_system_event":  true,
+	}
+	on_news_display.emit(entry)
+
+
+## Compute effective weight for [param template] given [param sector_bias] dict.
+## Extracted for testability. Weight = weight_base × sector_bias[target_sector].
+## Sector default bias = 1.0 when not present in [param sector_bias].
+## Called internally by _pick_template(); exposed for unit tests (S10-06b).
+func _calc_template_weight(template: Dictionary, sector_bias: Dictionary) -> float:
+	var w: float = float(template.get("weight_base", 1.0))
+	var t_sector: String = str(template.get("target_sector", ""))
+	if t_sector != "":
+		w *= float(sector_bias.get(t_sector, 1.0))
+	return w
+
+
 # ── Data Loading ──
+
+## Set the active market and reload the event pool filtered to that market.
+## Call before season start. [param market_id] is case-insensitive ("kr", "KR" both work).
+## DLC markets call this when the player selects a non-KR market.
+func set_active_market(market_id: String) -> void:
+	_active_market_id = market_id.to_upper()
+	_load_event_pool()
+
 
 func _load_event_pool() -> void:
 	_event_pool.clear()
@@ -382,7 +503,13 @@ func _load_event_pool() -> void:
 		push_warning("NewsEventSystem: event_pool.json parse error at line %d: %s" % [json.get_error_line(), json.get_error_message()])
 		return
 	var data: Dictionary = json.data
-	_event_pool = Array(data.get("templates", []), TYPE_DICTIONARY, &"", null)
+	var all_templates: Array[Dictionary] = Array(data.get("templates", []), TYPE_DICTIONARY, &"", null)
+	## TD-DR-05: filter by market_id — only load templates matching the active market.
+	## Templates without a market_id field default to "KR" (backwards-compat).
+	_event_pool = all_templates.filter(
+		func(t: Dictionary) -> bool:
+			return t.get("market_id", "KR").to_upper() == _active_market_id
+	)
 
 
 func _load_themes() -> void:
@@ -665,6 +792,7 @@ func _emit_rumor_if_eligible(
 		"is_fake": false,
 		"display_tick": maxi(0, event_tick - _get_rumor_advance_ticks()),
 		"day": GameClock.get_current_day(),
+		"target_stock_ids": news_entry.get("target_stock_ids", []),
 	}
 	on_rumor_hint.emit(rumor_entry)
 
@@ -1156,7 +1284,7 @@ func _on_vi_triggered(stock_id: String, is_upper: bool, halt_ticks: int) -> void
 	var entry: Dictionary = {
 		"headline": headline,
 		"body": "단기 급%s으로 VI가 발동됐다. %s 전후 %d분간 단일가 매매로 전환, 이후 거래 재개." % [direction_text, limit_type, halt_min],
-		"impact_hint": "⚠️",
+		"impact_hint": IMPACT_HINT_WARNING,
 		"scope": "INDIVIDUAL",
 		"impact_tier": "LARGE",
 		"direction": 1 if is_upper else -1,
@@ -1175,7 +1303,7 @@ func _on_vi_released(stock_id: String) -> void:
 	var entry: Dictionary = {
 		"headline": headline,
 		"body": "변동성 완화 확인 후 VI가 해제됐다. %s 정규 연속 매매가 재개된다." % display_name,
-		"impact_hint": "ℹ️",
+		"impact_hint": IMPACT_HINT_INFO,
 		"scope": "INDIVIDUAL",
 		"impact_tier": "MEDIUM",
 		"direction": 0,
@@ -1202,7 +1330,7 @@ func _on_circuit_breaker(stage: int, halt_ticks: int) -> void:
 	var entry: Dictionary = {
 		"headline": headline,
 		"body": cb_body,
-		"impact_hint": "🚨",
+		"impact_hint": IMPACT_HINT_EMERGENCY,
 		"scope": "MACRO",
 		"impact_tier": "MEGA",
 		"direction": -1,

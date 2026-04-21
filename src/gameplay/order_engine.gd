@@ -282,6 +282,11 @@ func _validate_sell_short(order: Dictionary) -> String:
 	if CurrencySystem.get_sim_cash() < required_margin:
 		return _margin_error(required_margin)
 
+	# 4-S5: Borrow pool availability (GDD §규칙 12, TD-DR-06)
+	var pool: Dictionary = ShortSellingSystem.get_borrow_pool(stock_id)
+	if pool["current"] < order["quantity"]:
+		return "대여 가능 물량 부족 (잔량: %d주)" % pool["current"]
+
 	return ""
 
 

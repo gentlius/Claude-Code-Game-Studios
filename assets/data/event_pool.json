@@ -1,8 +1,10 @@
 {
-  "version": "2.0",
+  "version": "2.1",
+  "_comment": "market_id added to all templates in v2.1 for DLC multi-market filtering (TD-DR-05).",
   "templates": [
     {
       "template_id": "BIO_CLINICAL_SUCCESS_01",
+      "market_id": "KR",
       "scope": "INDIVIDUAL",
       "target_sector": null,
       "event_tags": ["clinical_trial"],
@@ -35,6 +37,7 @@
     },
     {
       "template_id": "BIO_CLINICAL_FAIL_01",
+      "market_id": "KR",
       "scope": "INDIVIDUAL",
       "target_sector": null,
       "event_tags": ["clinical_trial"],
@@ -67,6 +70,7 @@
     },
     {
       "template_id": "FDA_APPROVAL_01",
+      "market_id": "KR",
       "scope": "INDIVIDUAL",
       "target_sector": null,
       "event_tags": ["fda"],
@@ -98,6 +102,7 @@
     },
     {
       "template_id": "PATENT_DISPUTE_01",
+      "market_id": "KR",
       "scope": "INDIVIDUAL",
       "target_sector": null,
       "event_tags": ["patent"],
@@ -127,6 +132,7 @@
     },
     {
       "template_id": "EARNINGS_BEAT_01",
+      "market_id": "KR",
       "scope": "INDIVIDUAL",
       "target_sector": null,
       "event_tags": ["earnings"],
@@ -158,6 +164,7 @@
     },
     {
       "template_id": "EARNINGS_MISS_01",
+      "market_id": "KR",
       "scope": "INDIVIDUAL",
       "target_sector": null,
       "event_tags": ["earnings"],
@@ -189,6 +196,7 @@
     },
     {
       "template_id": "BIG_CONTRACT_01",
+      "market_id": "KR",
       "scope": "INDIVIDUAL",
       "target_sector": null,
       "event_tags": ["contract"],
@@ -221,6 +229,7 @@
     },
     {
       "template_id": "INSIDER_SELL_01",
+      "market_id": "KR",
       "scope": "INDIVIDUAL",
       "target_sector": null,
       "event_tags": ["earnings"],
@@ -252,6 +261,7 @@
     },
     {
       "template_id": "COMEBACK_ANNOUNCE_01",
+      "market_id": "KR",
       "scope": "INDIVIDUAL",
       "target_sector": null,
       "event_tags": ["comeback"],
@@ -283,6 +293,7 @@
     },
     {
       "template_id": "SHIPBUILDING_ORDER_01",
+      "market_id": "KR",
       "scope": "INDIVIDUAL",
       "target_sector": null,
       "event_tags": ["shipbuilding"],
@@ -316,6 +327,7 @@
     },
     {
       "template_id": "SEMI_EXPORT_QUOTA_01",
+      "market_id": "KR",
       "scope": "SECTOR",
       "target_sector": "반도체",
       "event_tags": ["semiconductor", "export"],

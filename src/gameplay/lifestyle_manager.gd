@@ -78,6 +78,10 @@ var STARTUP_IPO_MAX: float       = 5.0
 var STARTUP_MA_MIN: float        = 1.0
 var STARTUP_MA_MAX: float        = 1.5
 
+## Donation amount limits (GDD §3-2). Overridden by lifestyle_config.json.
+var DONATION_MIN: int = 1_000_000
+var DONATION_MAX: int = 50_000_000
+
 # ── State ──
 
 ## Current residence tier (index into RESIDENCE_NAMES / RESIDENCE_COSTS).
@@ -302,9 +306,6 @@ func purchase_social_item(item_id: String, cost: int, xp_bonus: int, is_recurrin
 
 ## Donate to public campaign (공익 캠페인 기부). GDD §3-2: XP = ₩10M당 +1, 최대 +5/회.
 ## Returns false if amount out of range or insufficient cash.
-var DONATION_MIN: int = 1_000_000
-var DONATION_MAX: int = 50_000_000
-
 func donate(amount: int) -> bool:
 	if amount < DONATION_MIN or amount > DONATION_MAX:
 		return false
@@ -337,11 +338,8 @@ func invest_startup(amount: int, seasons_to_exit: int, rng_seed: int) -> bool:
 ##   - Startup exits: checked every day (when seasons_remaining reaches 0).
 ##   - Rental income / Recurring costs / seasons_held++: season-final day only.
 ## GDD: lifestyle-spending.md §3-1
-func process_market_close(current_day: int, current_week: int) -> void:
-	var is_season_final: bool = (
-		current_day % GameClock.DAYS_PER_WEEK == GameClock.DAYS_PER_WEEK - 1 and
-		current_week >= GameClock.WEEKS_PER_SEASON - 1
-	)
+func process_market_close(_current_day: int = 0, _current_week: int = 0) -> void:
+	var is_season_final: bool = GameClock.is_season_final_day()
 	# Startup exits: decrement counter on season-final day, resolve when it hits 0.
 	_process_startup_exits(is_season_final)
 	if is_season_final:

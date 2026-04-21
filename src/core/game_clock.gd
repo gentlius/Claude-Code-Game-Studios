@@ -50,6 +50,13 @@ const MAX_TICKS_PER_FRAME: int = 3
 
 # ── State ──
 
+## Runtime trading-hours override — set by configure_trading_hours().
+## Defaults to the KR constant. DLC markets call configure_trading_hours() on
+## market load so a US/JP market can have fewer or more minutes per day.
+## See: TD-DR-08 — GameClock 거래 시간 MarketProfile 동적 로드
+var _effective_minutes_per_day: int = MINUTES_PER_DAY
+var _effective_ticks_per_day: int = TICKS_PER_DAY
+
 ## Auto-slow to 1× when a news event fires above 1×. Configurable via SettingsScreen.
 ## GDD: design/gdd/settings-screen.md §3-2
 var _auto_slow_on_event: bool = true
@@ -99,15 +106,25 @@ func get_current_week() -> int:
 
 
 ## Returns intraday progress as a fraction [0.0, 1.0].
+## Uses _effective_ticks_per_day so DLC markets with different hours display correctly.
 func get_day_progress() -> float:
-	if TICKS_PER_DAY == 0:
+	if _effective_ticks_per_day == 0:
 		return 0.0
-	return float(_current_tick) / float(TICKS_PER_DAY)
+	return float(_current_tick) / float(_effective_ticks_per_day)
 
 
 ## Returns the current game speed multiplier (1.0 to 4.0).
 func get_speed_multiplier() -> float:
 	return _speed_multiplier
+
+
+## Returns true if today is the final day of the season (TD-CR-17).
+## Encapsulates the calendar arithmetic so callers do not depend on raw constants.
+func is_season_final_day() -> bool:
+	return (
+		_current_day % DAYS_PER_WEEK == DAYS_PER_WEEK - 1 and
+		_current_week >= WEEKS_PER_SEASON - 1
+	)
 
 
 ## Returns true if news events automatically slow the clock to 1×.
@@ -118,6 +135,30 @@ func get_auto_slow_on_event() -> bool:
 ## Sets whether news events auto-slow the clock to 1×. Called by SettingsScreen.
 func set_auto_slow_on_event(value: bool) -> void:
 	_auto_slow_on_event = value
+
+
+## Configures runtime trading hours for the active market.
+## Called by the DLC market setup sequence (e.g. SeasonManager after MarketProfile loads).
+## [param minutes_per_day] — total trading minutes in one game day.
+##   KR default: 390 (09:00–15:30 KST).
+##   US example: 390 (09:30–16:00 EST). JP example: 330 (09:00–15:30 JST with lunch break adjusted).
+## The const TICKS_PER_DAY remains the KR compile-time value; this method sets
+## the runtime override that _process_tick() uses for day-end detection.
+## Example: GameClock.configure_trading_hours(MarketProfile.get_calendar_param("trading_minutes"))
+func configure_trading_hours(minutes_per_day: int) -> void:
+	if minutes_per_day <= 0:
+		push_warning("GameClock.configure_trading_hours: invalid minutes_per_day %d — ignoring" % minutes_per_day)
+		return
+	_effective_minutes_per_day = minutes_per_day
+	_effective_ticks_per_day = TICKS_PER_MINUTE * minutes_per_day
+
+
+## Returns the runtime ticks-per-day value for the currently active market.
+## Use this instead of the const TICKS_PER_DAY for any runtime calculation
+## that must respect DLC market trading hours.
+## Example: float(_current_tick) / float(GameClock.get_effective_ticks_per_day())
+func get_effective_ticks_per_day() -> int:
+	return _effective_ticks_per_day
 
 
 ## Sets game speed multiplier. Valid values are the discrete set {1, 2, 4}.
@@ -263,6 +304,8 @@ func _process_tick() -> void:
 	# other subscribers (UI, analytics, etc.) that have no ordering requirement.
 	NewsEventSystem.process_tick(_current_tick, _current_day, _current_week)
 	PriceEngine.process_tick(_current_tick, _current_day, _current_week)
+	# P3 ETF: recalculate ETF prices from updated stock prices (sector-etf.md §3-2)
+	EtfManager.process_tick(_current_tick, _current_day, _current_week)
 	# TR3: margin monitoring after price update, before order matching (GDD short-selling.md §규칙 6)
 	ShortSellingSystem.update_and_check_margin(_current_tick)
 	OrderEngine.process_tick(_current_tick, _current_day, _current_week)
@@ -273,7 +316,7 @@ func _process_tick() -> void:
 	# get_current_tick() during on_tick receive the same value as tick_number.
 	on_tick.emit(_current_tick, _current_day, _current_week)
 
-	if _current_tick >= TICKS_PER_DAY:
+	if _current_tick >= _effective_ticks_per_day:
 		_end_trading_day()
 
 # ── Internal State Transitions ──

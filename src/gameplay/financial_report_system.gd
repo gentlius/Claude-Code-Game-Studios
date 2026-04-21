@@ -18,6 +18,18 @@ extends Node
 
 const CONFIG_PATH: String = "res://assets/data/financial_report_config.json"
 
+## 헤드라인 템플릿 상수 — TD-CR-13: 리터럴 중복 방지. %s = display_name 자리
+const _HL_TARGET_UP:    String = "[%s] 목표주가 상향 — 분기 실적 기대감 반영"
+const _HL_TARGET_DOWN:  String = "[%s] 목표주가 하향 — 원가 압박 지속 우려"
+const _HL_EARNS_POS:    String = "[%s] 잠정실적 — 영업이익 전분기 대비 개선"
+const _HL_EARNS_NEG:    String = "[%s] 잠정실적 — 매출 컨센서스 하회 우려"
+const _HL_RUMOR_POS:    String = "[%s] 실적 발표 임박 — 컨센서스 상회 강력 전망"
+const _HL_RUMOR_NEG:    String = "[%s] 실적 발표 임박 — 컨센서스 하회 우려 고조"
+const _HL_TURNAROUND:   String = "[%s] 흑자 전환 성공 — 시장 예상 크게 상회"
+const _HL_RED_TURN:     String = "[%s] 적자 전환 — 실적 대폭 악화"
+const _HL_BEAT:         String = "[%s] 어닝서프라이즈 — 컨센서스 대비 대폭 상회"
+const _HL_MISS:         String = "[%s] 어닝쇼크 — 컨센서스 크게 하회"
+
 # ── Config (loaded from JSON) ──
 
 ## Market-calendar params — loaded from MarketProfile.get_calendar_param() (ADR-021).
@@ -424,10 +436,10 @@ func _fire_analyst_report(ev: Dictionary) -> void:
 	var headline: String
 	var body: String
 	if direction > 0:
-		headline = "[%s] 목표주가 상향 — 분기 실적 기대감 반영" % display_name
+		headline = _HL_TARGET_UP % display_name
 		body = "애널리스트 리포트: 향후 실적 개선 전망 반영, 목표주가 상향 조정."
 	else:
-		headline = "[%s] 목표주가 하향 — 원가 압박 지속 우려" % display_name
+		headline = _HL_TARGET_DOWN % display_name
 		body = "애널리스트 리포트: 비용 증가 압박으로 수익성 악화 전망, 목표주가 하향 조정."
 	NewsEventSystem.fire_stock_news(stock_id, headline, body, direction, "SMALL")
 
@@ -441,10 +453,10 @@ func _fire_preliminary_news(ev: Dictionary) -> void:
 	var headline: String
 	var body: String
 	if direction > 0:
-		headline = "[%s] 잠정실적 — 영업이익 전분기 대비 개선" % display_name
+		headline = _HL_EARNS_POS % display_name
 		body = "잠정실적 공시: 영업이익 전분기 대비 개선, 컨센서스 상회 전망. 순이익 미확정."
 	else:
-		headline = "[%s] 잠정실적 — 매출 컨센서스 하회 우려" % display_name
+		headline = _HL_EARNS_NEG % display_name
 		body = "잠정실적 공시: 매출 컨센서스 하회, 수익성 악화 우려. 순이익 미확정."
 	NewsEventSystem.fire_stock_news(stock_id, headline, body, direction, "MEDIUM")
 
@@ -459,10 +471,10 @@ func _fire_rumor(ev: Dictionary) -> void:
 	var headline: String
 	var body: String
 	if rumor_direction > 0:
-		headline = "[%s] 실적 발표 임박 — 컨센서스 상회 강력 전망" % display_name
+		headline = _HL_RUMOR_POS % display_name
 		body = "내부 채널: 컨센서스를 크게 상회하는 실적이 예상된다는 소문이 돌고 있다."
 	else:
-		headline = "[%s] 실적 발표 임박 — 컨센서스 하회 우려 고조" % display_name
+		headline = _HL_RUMOR_NEG % display_name
 		body = "내부 채널: 컨센서스를 하회하는 실적이 예상된다는 소문이 돌고 있다."
 	NewsEventSystem.fire_stock_news(stock_id, headline, body, rumor_direction, "SMALL")
 	# Apply light price pressure via inject_event (ADR-022 pipeline)
@@ -513,16 +525,16 @@ func _publish_earnings_news(stock_id: String, event_type: String, direction: int
 	var body: String
 	match event_type:
 		"TURNAROUND_PROFIT":
-			headline = "[%s] 흑자 전환 성공 — 시장 예상 크게 상회" % display_name
+			headline = _HL_TURNAROUND % display_name
 			body = "공식 실적 발표: 이전 분기 적자에서 흑자 전환. 시장 컨센서스를 대폭 상회."
 		"TURNAROUND_LOSS":
-			headline = "[%s] 적자 전환 — 실적 대폭 악화" % display_name
+			headline = _HL_RED_TURN % display_name
 			body = "공식 실적 발표: 흑자에서 적자로 전환. 수익성이 크게 악화됐다."
 		"EARNINGS_SURPRISE":
-			headline = "[%s] 어닝서프라이즈 — 컨센서스 대비 대폭 상회" % display_name
+			headline = _HL_BEAT % display_name
 			body = "공식 실적 발표: 시장 컨센서스를 크게 상회하는 어닝서프라이즈 달성."
 		"EARNINGS_SHOCK":
-			headline = "[%s] 어닝쇼크 — 컨센서스 크게 하회" % display_name
+			headline = _HL_MISS % display_name
 			body = "공식 실적 발표: 시장 기대치를 크게 하회하는 어닝쇼크. 투자자들이 당혹감을 감추지 못하고 있다."
 		_:
 			return  # No news for neutral result

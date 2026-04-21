@@ -43,6 +43,9 @@ var _fill_strength_container: Control
 var _fill_strength_fill: Panel
 var _lbl_fill_pct: Label
 var _lbl_fill_side: Label
+## 블록 6: 52주 최고/최저 행. GDD order-book.md §3-5 블록6.
+var _lbl_week52_high: Label
+var _lbl_week52_low: Label
 
 ## 호가창 섹션. GDD order-book.md §3-5.
 ## TR1 미해금 시 트리에서 제거. on_skill_unlocked("TR1") → add_child로 삽입.
@@ -57,6 +60,12 @@ var _spin_take_profit: SpinBox
 var _spin_st_qty: SpinBox
 var _lbl_st_error: Label
 
+## 분석 탭 컨테이너 — A3 / A4 탭 전환. GDD sector-comparison.md §3-1.
+## A3 해금 시 탭 바 표시. A4 해금 시 A4 탭 버튼 추가.
+var _analysis_tab_bar: HBoxContainer
+var _btn_analysis_a3: Button
+var _btn_analysis_a4: Button
+
 ## A3 재무제표 섹션. GDD financial-statements.md §3.
 ## A3 미해금 시 숨김. on_skill_unlocked("A3") → 즉시 표시.
 var _a3_section: VBoxContainer
@@ -64,6 +73,10 @@ var _lbl_per: Label
 var _lbl_pbr: Label
 var _lbl_roe: Label
 var _lbl_dividend: Label
+
+## A4 섹터 비교 뷰. GDD sector-comparison.md.
+## A4 해금 시 탭 버튼 표시 + 뷰 활성화.
+var _a4_view: SectorComparisonView
 
 
 func _ready() -> void:
@@ -76,7 +89,7 @@ func _ready() -> void:
 	add_child(_vbox)
 	_build_header(_vbox)
 	_build_order_book_section(_vbox)  # visible=false if TR1 not unlocked
-	_build_a3_section(_vbox)
+	_build_analysis_section(_vbox)
 	_build_side_tabs(_vbox)
 	_build_type_row(_vbox)
 	_build_qty_row(_vbox)
@@ -244,8 +257,47 @@ func _build_ob_fill_strength_block() -> void:
 	_lbl_fill_side.custom_minimum_size.x = 40
 	ThemeSetup.style_label_secondary(_lbl_fill_side)
 	fs_row.add_child(_lbl_fill_side)
-	# 블록 6: 52주 — Sprint 9 (숨김)
-	# 생략: StockData.week52_high/low 미구현
+	_build_ob_week52_block()
+
+
+## 블록 6: 52주 최고/최저 행. GDD order-book.md §3-5 블록6.
+## PriceEngine.get_week52_high/low()로 ohlcv_daily 전체 스캔 + 오늘 장중값 포함.
+func _build_ob_week52_block() -> void:
+	var row: HBoxContainer = HBoxContainer.new()
+	row.add_theme_constant_override("separation", 3)
+	_order_book_section.add_child(row)
+
+	var high_key: Label = Label.new()
+	high_key.text = tr("52최고")
+	high_key.add_theme_font_size_override("font_size", 10)
+	ThemeSetup.style_label_secondary(high_key)
+	row.add_child(high_key)
+
+	_lbl_week52_high = Label.new()
+	_lbl_week52_high.text = "-"
+	_lbl_week52_high.add_theme_font_size_override("font_size", 10)
+	_lbl_week52_high.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_lbl_week52_high.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_lbl_week52_high.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
+	row.add_child(_lbl_week52_high)
+
+	var sep_v: VSeparator = VSeparator.new()
+	sep_v.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
+	row.add_child(sep_v)
+
+	var low_key: Label = Label.new()
+	low_key.text = tr("52최저")
+	low_key.add_theme_font_size_override("font_size", 10)
+	ThemeSetup.style_label_secondary(low_key)
+	row.add_child(low_key)
+
+	_lbl_week52_low = Label.new()
+	_lbl_week52_low.text = "-"
+	_lbl_week52_low.add_theme_font_size_override("font_size", 10)
+	_lbl_week52_low.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_lbl_week52_low.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_lbl_week52_low.add_theme_color_override("font_color", ThemeSetup.LOSS_BLUE)
+	row.add_child(_lbl_week52_low)
 
 
 ## 체결강도 바 내부: 회색 배경 Panel + 채움 Panel. _fill_strength_container에 추가.
@@ -414,12 +466,38 @@ func _on_order_book_row_clicked_price(price_text: String, ask_side: bool) -> voi
 	_update_estimated_amount()
 
 
-## Builds A3 재무제표 섹션. GDD financial-statements.md §3.
-## A3 미해금 시 visible = false 로 숨김.
-func _build_a3_section(vbox: VBoxContainer) -> void:
+## Builds analysis section: tab bar (재무 A3 / 섹터 A4) + A3 panel + A4 panel.
+## GDD sector-comparison.md §3-1 — A4 탭 추가. financial-statements.md §3 — A3 유지.
+## Tab bar visible only when A3 is unlocked. A4 tab button hidden until A4 unlocked.
+func _build_analysis_section(vbox: VBoxContainer) -> void:
+	var a3_unlocked: bool = SkillTree.is_skill_unlocked("A3")
+	var a4_unlocked: bool = SkillTree.is_skill_unlocked("A4")
+
+	# ── Tab bar ──
+	_analysis_tab_bar = HBoxContainer.new()
+	_analysis_tab_bar.add_theme_constant_override("separation", 2)
+	_analysis_tab_bar.visible = a3_unlocked
+	vbox.add_child(_analysis_tab_bar)
+
+	_btn_analysis_a3 = Button.new()
+	_btn_analysis_a3.text = tr("재무")
+	_btn_analysis_a3.add_theme_font_size_override("font_size", 10)
+	ThemeSetup.apply_tab_active(_btn_analysis_a3)
+	_btn_analysis_a3.pressed.connect(_switch_analysis_tab.bind("A3"))
+	_analysis_tab_bar.add_child(_btn_analysis_a3)
+
+	_btn_analysis_a4 = Button.new()
+	_btn_analysis_a4.text = tr("섹터")
+	_btn_analysis_a4.add_theme_font_size_override("font_size", 10)
+	ThemeSetup.apply_tab_inactive(_btn_analysis_a4)
+	_btn_analysis_a4.visible = a4_unlocked
+	_btn_analysis_a4.pressed.connect(_switch_analysis_tab.bind("A4"))
+	_analysis_tab_bar.add_child(_btn_analysis_a4)
+
+	# ── A3 panel ──
 	_a3_section = VBoxContainer.new()
 	_a3_section.add_theme_constant_override("separation", 2)
-	_a3_section.visible = SkillTree.is_skill_unlocked("A3")
+	_a3_section.visible = a3_unlocked
 	vbox.add_child(_a3_section)
 
 	var title: Label = Label.new()
@@ -441,6 +519,28 @@ func _build_a3_section(vbox: VBoxContainer) -> void:
 	var sep: HSeparator = HSeparator.new()
 	sep.add_theme_color_override("separator", ThemeSetup.SEPARATOR)
 	_a3_section.add_child(sep)
+
+	# ── A4 panel ──
+	_a4_view = SectorComparisonView.new()
+	_a4_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_a4_view.visible = false  # hidden until A4 tab is selected
+	vbox.add_child(_a4_view)
+
+
+## Switches the active analysis tab between "A3" (재무) and "A4" (섹터).
+## A4 tab is only reachable after A4 is unlocked.
+func _switch_analysis_tab(tab: String) -> void:
+	var show_a3: bool = (tab == "A3")
+	_a3_section.visible = show_a3
+	_a4_view.visible    = not show_a3
+	if show_a3:
+		ThemeSetup.apply_tab_active(_btn_analysis_a3)
+		ThemeSetup.apply_tab_inactive(_btn_analysis_a4)
+		_refresh_a3_section()
+	else:
+		ThemeSetup.apply_tab_inactive(_btn_analysis_a3)
+		ThemeSetup.apply_tab_active(_btn_analysis_a4)
+		_a4_view.refresh()
 
 
 func _make_financial_label(parent: HBoxContainer, key_text: String) -> Label:
@@ -476,6 +576,7 @@ func _on_tick(_tick: int) -> void:
 	_update_order_panel_price()
 	_refresh_order_book()
 	_refresh_ohlcv()
+	_refresh_week52()
 	_refresh_a3_section()
 
 
@@ -584,6 +685,21 @@ func _refresh_ohlcv() -> void:
 		ThemeSetup.PROFIT_RED if ohlcv.get("high", 0) >= cur else ThemeSetup.TEXT_PRIMARY)
 	_lbl_ob_low.add_theme_color_override("font_color",
 		ThemeSetup.LOSS_BLUE if ohlcv.get("low", 0) <= cur else ThemeSetup.TEXT_PRIMARY)
+
+
+## 블록 6: 52주 최고/최저 레이블 갱신. GDD order-book.md §3-5 블록6.
+## PriceEngine.get_week52_high/low()는 ohlcv_daily 전체 + 오늘 장중값을 포함한다.
+func _refresh_week52() -> void:
+	if _lbl_week52_high == null or _lbl_week52_low == null:
+		return
+	if _selected_stock_id == "":
+		_lbl_week52_high.text = "-"
+		_lbl_week52_low.text  = "-"
+		return
+	var high: int = PriceEngine.get_week52_high(_selected_stock_id)
+	var low: int  = PriceEngine.get_week52_low(_selected_stock_id)
+	_lbl_week52_high.text = FormatUtils.number(high) if high > 0 else "-"
+	_lbl_week52_low.text  = FormatUtils.number(low)  if low  > 0 else "-"
 
 
 ## 블록 5: 체결강도 바 + 퍼센트 갱신. GDD §3-5 블록5.
@@ -823,9 +939,9 @@ func _refresh_st_section() -> void:
 	var holding: Dictionary = PortfolioManager.get_holding(_selected_stock_id) as Dictionary
 	var max_qty: int = holding.get("quantity", 1)
 	_spin_st_qty.max_value = max_qty
-	var cur: Variant = StopTakeSystem.get_setting(_selected_stock_id)
-	if cur != null:
-		var d: Dictionary = cur as Dictionary
+	var cur: Dictionary = StopTakeSystem.get_setting(_selected_stock_id)
+	if not cur.is_empty():
+		var d: Dictionary = cur
 		var sl: Variant = d.get("stop_loss_price")
 		var tp: Variant = d.get("take_profit_price")
 		_spin_stop_loss.value = float(sl if sl != null else 0)
@@ -905,6 +1021,7 @@ func set_stock(stock_id: String) -> void:
 	_update_order_panel_price()
 	_refresh_order_book()
 	_refresh_ohlcv()
+	_refresh_week52()
 	_refresh_a3_section()
 	_lbl_order_error.text = ""
 	_spin_quantity.value = 0
@@ -1147,18 +1264,23 @@ func _refresh_limit_tab_state() -> void:
 
 ## SkillTree.on_skill_unlocked 핸들러.
 ## TR1 해금: 호가창 섹션 즉시 표시 + 지정가 버튼 활성.
-## A3 해금: 재무 섹션 즉시 표시.
+## A3 해금: 재무 섹션 즉시 표시 + 분석 탭 바 표시.
+## A4 해금: 섹터 탭 버튼 표시.
 func _on_skill_unlocked(skill_id: String) -> void:
 	if skill_id == "TR1":
 		_order_book_section.visible = true
 		_refresh_order_book()
 		_refresh_ohlcv()
+		_refresh_week52()
 		_refresh_limit_tab_state()
 	elif skill_id == "TR2":
 		_refresh_st_section()
 	elif skill_id == "A3":
+		_analysis_tab_bar.visible = true
 		_a3_section.visible = true
 		_refresh_a3_section()
+	elif skill_id == "A4":
+		_btn_analysis_a4.visible = true
 
 
 ## Called by TradingScreen for B/S keyboard shortcuts.

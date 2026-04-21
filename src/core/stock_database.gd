@@ -1,12 +1,24 @@
 ## Autoload — Manages stock definitions for the current season.
-## 46 stocks across 11 sectors, loaded from assets/data/stocks.json.
+## 46 stocks across 11 sectors, loaded from assets/data/stocks_kr.json (KR default).
+## DLC markets supply their own stocks_[market_id].json files.
 ## Foundation layer: no dependencies on other game systems.
+## See: TD-DR-07 — StockDatabase DLC 동적 로드
 extends Node
 
 ## Emitted after season stocks are loaded and ready.
 signal stocks_loaded
 
-const STOCK_DATA_PATH: String = "res://assets/data/stocks.json"
+## Base path pattern — %s is replaced by the lowercase market_id.
+## KR loads stocks_kr.json, US loads stocks_us.json, etc.
+const STOCK_DATA_PATH_TEMPLATE: String = "res://assets/data/stocks_%s.json"
+
+## Backwards-compat alias kept so any external code holding the old const path
+## does not break at parse time. Points to the KR default.
+const STOCK_DATA_PATH: String = "res://assets/data/stocks_kr.json"
+
+## Lowercase market identifier that controls which stocks_*.json file is loaded.
+## Default "kr" matches the Korean base game.
+var _active_market_id: String = "kr"
 
 ## Volatility string -> enum mapping for JSON parsing.
 const VOL_MAP: Dictionary = {
@@ -23,6 +35,15 @@ var _tag_index: Dictionary = {}     ## event_tag -> Array[StockData]
 
 
 func _ready() -> void:
+	_load_stocks_from_json()
+
+
+## Sets the active market and reloads stocks from the corresponding JSON file.
+## [param market_id] must be lowercase (e.g. "kr", "us", "jp") to match
+## the stocks_*.json filename convention.
+## Example: StockDatabase.set_active_market("us")
+func set_active_market(market_id: String) -> void:
+	_active_market_id = market_id.to_lower()
 	_load_stocks_from_json()
 
 
@@ -101,19 +122,21 @@ func get_stocks_by_event_tag(tag: String) -> Array[StockData]:
 
 
 ## Load stocks from JSON data file. See design/gdd/stock-database.md for spec.
+## File loaded is determined by _active_market_id (e.g. "kr" → stocks_kr.json).
 func _load_stocks_from_json() -> void:
 	_stocks.clear()
 
-	var file: FileAccess = FileAccess.open(STOCK_DATA_PATH, FileAccess.READ)
+	var path: String = STOCK_DATA_PATH_TEMPLATE % _active_market_id
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
 	if file == null:
-		push_error("StockDatabase: Failed to open %s — %s" % [STOCK_DATA_PATH, error_string(FileAccess.get_open_error())])
+		push_error("StockDatabase: Failed to open %s — %s" % [path, error_string(FileAccess.get_open_error())])
 		return
 
 	var json: JSON = JSON.new()
 	var err: Error = json.parse(file.get_as_text())
 	file.close()
 	if err != OK:
-		push_error("StockDatabase: JSON parse error at line %d — %s" % [json.get_error_line(), json.get_error_message()])
+		push_error("StockDatabase: JSON parse error in '%s' at line %d — %s" % [path, json.get_error_line(), json.get_error_message()])
 		return
 
 	var data: Dictionary = json.data

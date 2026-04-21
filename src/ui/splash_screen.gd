@@ -80,14 +80,14 @@ func _build_ui() -> void:
 	logo_hbox.add_child(text_vbox)
 
 	var lbl_seed: Label = Label.new()
-	lbl_seed.text = "SEED"
+	lbl_seed.text = "SEED"  ## intentionally NOT wrapped in tr() — brand name, not translated
 	lbl_seed.add_theme_font_size_override("font_size", 72)
 	lbl_seed.add_theme_color_override("font_color", Color(0.922, 0.922, 0.922))
 	lbl_seed.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text_vbox.add_child(lbl_seed)
 
 	var lbl_money: Label = Label.new()
-	lbl_money.text = "M O N E Y"
+	lbl_money.text = "M O N E Y"  ## intentionally NOT wrapped in tr() — brand name stylization
 	lbl_money.add_theme_font_size_override("font_size", 28)
 	lbl_money.add_theme_color_override("font_color", Color(0.302, 0.431, 0.600))
 	lbl_money.mouse_filter = Control.MOUSE_FILTER_IGNORE

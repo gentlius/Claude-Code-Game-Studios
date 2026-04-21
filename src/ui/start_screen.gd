@@ -31,7 +31,7 @@ func _ready() -> void:
 
 func _build_ui() -> void:
 	var bg: ColorRect = ColorRect.new()
-	bg.color = Color(0.039, 0.039, 0.039)
+	bg.color = ThemeSetup.START_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
@@ -50,7 +50,7 @@ func _build_ui() -> void:
 func _build_header_bar(root_vbox: VBoxContainer) -> void:
 	var header_panel: PanelContainer = PanelContainer.new()
 	var header_style: StyleBoxFlat = StyleBoxFlat.new()
-	header_style.bg_color = Color(0.08, 0.08, 0.09)
+	header_style.bg_color = ThemeSetup.LAYOUT_BG
 	header_panel.add_theme_stylebox_override("panel", header_style)
 	root_vbox.add_child(header_panel)
 
@@ -59,10 +59,10 @@ func _build_header_bar(root_vbox: VBoxContainer) -> void:
 	header_panel.add_child(header)
 
 	var title_lbl: Label = Label.new()
-	title_lbl.text = "SEED MONEY"
+	title_lbl.text = "SEED MONEY"  ## intentionally NOT wrapped in tr() — brand name, not translated
 	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_lbl.add_theme_font_size_override("font_size", 20)
-	title_lbl.add_theme_color_override("font_color", Color(0.918, 0.918, 0.918))
+	title_lbl.add_theme_color_override("font_color", ThemeSetup.START_TEXT_BRIGHT)
 	header.add_child(title_lbl)
 
 	var btn_new: Button = Button.new()
@@ -139,7 +139,7 @@ func _refresh_slots() -> void:
 		empty_lbl.text = tr("저장된 게임이 없습니다. 새 게임을 시작하세요.")
 		empty_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		empty_lbl.add_theme_font_size_override("font_size", 15)
-		empty_lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.4))
+		empty_lbl.add_theme_color_override("font_color", ThemeSetup.START_TEXT_EMPTY)
 		_slot_list.add_child(empty_lbl)
 		return
 
@@ -153,8 +153,8 @@ func _build_slot_card(slot: Dictionary) -> Control:
 
 	var card: PanelContainer = PanelContainer.new()
 	var card_style: StyleBoxFlat = StyleBoxFlat.new()
-	card_style.bg_color = Color(0.12, 0.12, 0.14)
-	card_style.border_color = Color(0.22, 0.22, 0.26)
+	card_style.bg_color = ThemeSetup.START_CARD_BG
+	card_style.border_color = ThemeSetup.START_CARD_BORDER
 	card_style.set_border_width_all(1)
 	card_style.set_corner_radius_all(4)
 	card.add_theme_stylebox_override("panel", card_style)
@@ -198,7 +198,7 @@ func _build_slot_card(slot: Dictionary) -> Control:
 func _build_slot_card_invalid(info_vbox: VBoxContainer, slot: Dictionary) -> void:
 	var warn_lbl: Label = Label.new()
 	warn_lbl.text = tr("⚠ 손상된 파일 — %s") % slot.get("name", "?")
-	warn_lbl.add_theme_color_override("font_color", Color(0.85, 0.45, 0.2))
+	warn_lbl.add_theme_color_override("font_color", ThemeSetup.START_WARN)
 	warn_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info_vbox.add_child(warn_lbl)
 
@@ -210,7 +210,7 @@ func _build_slot_card_valid(info_vbox: VBoxContainer, slot: Dictionary, id: int)
 	var name_lbl: Label = Label.new()
 	name_lbl.text = name_str
 	name_lbl.add_theme_font_size_override("font_size", 15)
-	name_lbl.add_theme_color_override("font_color", Color(0.918, 0.918, 0.918))
+	name_lbl.add_theme_color_override("font_color", ThemeSetup.START_TEXT_BRIGHT)
 	name_lbl.mouse_default_cursor_shape = Control.CURSOR_IBEAM
 	name_lbl.mouse_filter = Control.MOUSE_FILTER_STOP
 	name_lbl.gui_input.connect(func(ev: InputEvent) -> void:
@@ -228,7 +228,7 @@ func _build_slot_card_valid(info_vbox: VBoxContainer, slot: Dictionary, id: int)
 	var stats_lbl: Label = Label.new()
 	stats_lbl.text = tr("Lv.%d  ·  시즌 %d  ·  %d주차 %d일") % [level, season, week, day]
 	stats_lbl.add_theme_font_size_override("font_size", 12)
-	stats_lbl.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55))
+	stats_lbl.add_theme_color_override("font_color", ThemeSetup.LAYOUT_EXIT_TEXT)
 	stats_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info_vbox.add_child(stats_lbl)
 
@@ -237,7 +237,7 @@ func _build_slot_card_valid(info_vbox: VBoxContainer, slot: Dictionary, id: int)
 	var pf_lbl: Label = Label.new()
 	pf_lbl.text = tr("평가금액  ₩%s") % FormatUtils.number(pf_val)
 	pf_lbl.add_theme_font_size_override("font_size", 14)
-	pf_lbl.add_theme_color_override("font_color", Color(0.8, 0.85, 0.95))
+	pf_lbl.add_theme_color_override("font_color", ThemeSetup.START_PORTFOLIO_VALUE)
 	pf_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info_vbox.add_child(pf_lbl)
 
@@ -250,7 +250,7 @@ func _build_slot_card_valid(info_vbox: VBoxContainer, slot: Dictionary, id: int)
 	else:
 		date_lbl.text = tr("저장: -")
 	date_lbl.add_theme_font_size_override("font_size", 11)
-	date_lbl.add_theme_color_override("font_color", Color(0.38, 0.38, 0.38))
+	date_lbl.add_theme_color_override("font_color", ThemeSetup.START_TEXT_DIM)
 	date_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info_vbox.add_child(date_lbl)
 

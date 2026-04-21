@@ -137,94 +137,34 @@
 
 ## 디자인 리뷰 2026-04-21 식별 항목 (전체 GDD 전수 감사)
 
-### TD-DR-04. S3 루머 채널 — PriceEngine 가격 선반영 미구현
+### ~~TD-DR-04. S3 루머 채널 — PriceEngine 가격 선반영 미구현~~ — **해결됨 (2026-04-21)**
 
-**출처**: 2026-04-21 전체 GDD 전수 감사  
-**우선순위**: Medium (루머가 뉴스 피드에는 표시되지만 가격에 영향 없음)  
-**목표 스프린트**: Sprint 11 (Polish)  
-**관련 GDD**: rumor-channel.md §9 가격 선반영 구현, price-engine.md §9
+`PriceEngine._rumor_pressure` dict, `_on_rumor_hint()` 핸들러, Step 4-c rumor_delta, F5 tick_energy 포함, 장 마감 정리, `price_engine_config.json` 생성, `reset()` clear 전부 구현.
+`NewsEventSystem.on_rumor_hint` → `PriceEngine._on_rumor_hint` ADR-022 파이프라인 준수.
 
-- `PriceEngine._rumor_pressure: Dictionary` 상태 미추가
-- `PriceEngine._on_rumor_hint(rumor: Dictionary)` 핸들러 미구현
-- `process_tick()` Step 4-c rumor_delta 계산 누락
-- Step 5 공식 갱신 (`total_delta = pattern + drift + event + player + rumor`) 누락
-- F5 거래량 공식 `tick_energy`에 `|rumor_delta|` 미포함
-- 장 마감 시 `_rumor_pressure` 정리 누락
-- `price_engine_config.json` 미생성 (`RUMOR_PRESSURE_STRENGTH: 0.0005`)
-- `PriceEngine.reset()` 시 `_rumor_pressure.clear()` 미포함
+### ~~TD-DR-05. DLC 시장 필터링 인프라 — NewsEventSystem 미구현~~ — **해결됨 (2026-04-21)**
 
-### TD-DR-05. DLC 시장 필터링 인프라 — NewsEventSystem 미구현
+`event_pool.json` 전 템플릿에 `"market_id": "KR"` 추가 (v2.1). `NewsEventSystem._active_market_id`, `set_active_market()`, `_load_event_pool()` 필터링 구현. `stocks_us.json`, `stocks_jp.json` 스텁 생성.
 
-**출처**: 2026-04-21 전체 GDD 전수 감사  
-**우선순위**: Low (한국 시장 단일 서비스 시 무관, DLC 시 필수)  
-**목표 스프린트**: DLC 그린라이트 후  
-**관련 GDD**: news-events.md §9 DLC 확장성 섹션
+### ~~TD-DR-06. ShortSelling 대차 풀(Borrow Pool) 시스템 미구현~~ — **해결됨 (2026-04-21)**
 
-- `event_pool.json`에 `"market_id"` 필드 미추가
-- `NewsEventSystem` 이벤트 선택 시 `active_market_id` 필터링 로직 미구현
-- `event_pool_us.json`, `event_pool_jp.json` 스텁 파일 미생성
-- 테스트 `test_event_pool_filtered_by_market_id()` 미추가
+`short_selling_config.json` `borrowableRatioByVolatility`, `_borrow_pool` dict, `_init_pools()`, `get_borrow_pool()`, `_restore_borrow_pool()`, `open_position()`/`close_position()` 풀 차감/복원, `OrderEngine` 4-S5 검증, SaveSystem 직렬화 전부 구현.
 
-### TD-DR-06. ShortSelling 대차 풀(Borrow Pool) 시스템 미구현
+### ~~TD-DR-07. StockDatabase DLC 동적 로드 미구현~~ — **해결됨 (2026-04-21)**
 
-**출처**: 2026-04-21 전체 GDD 전수 감사  
-**우선순위**: Medium (현재 무제한 차입 가능 — 밸런스 영향)  
-**목표 스프린트**: Sprint 11 (Polish)  
-**관련 GDD**: short-selling.md §9 진입점/호출 경로
+`stocks.json` → `stocks_kr.json` 이전. `STOCK_DATA_PATH_TEMPLATE`, `_active_market_id`, `set_active_market()`, `_load_stocks_from_json()` 동적 경로 로드. `stocks_us.json`, `stocks_jp.json` 스텁 생성.
 
-- `short_selling_config.json`에 `borrowableRatioByVolatility` 미추가
-- `ShortSellingSystem._borrow_pool: Dictionary` 상태 변수 미추가
-- `ShortSellingSystem._init_pools()` 메서드 미구현
-- `ShortSellingSystem.get_borrow_pool(stock_id) -> Dictionary` 공개 API 미구현
-- `OrderEngine` SELL_SHORT 검증 4-S5 단계 (pool 잔량 체크) 미추가
-- `GameClock.on_season_start` → `_init_pools()` 연결 누락
+### ~~TD-DR-08. GameClock 거래 시간 MarketProfile 동적 로드 미구현~~ — **해결됨 (2026-04-21)**
 
-### TD-DR-07. StockDatabase DLC 동적 로드 미구현
+`_effective_minutes_per_day`, `_effective_ticks_per_day` 런타임 변수 추가. `configure_trading_hours()` 및 `get_effective_ticks_per_day()` API. `get_day_progress()`, `_process_tick()` 에서 `_effective_ticks_per_day` 참조. KR 상수 기본값 유지.
 
-**출처**: 2026-04-21 전체 GDD 전수 감사  
-**우선순위**: Low (한국 시장 단일 서비스 시 무관, DLC 시 필수)  
-**목표 스프린트**: DLC 그린라이트 후  
-**관련 GDD**: stock-database.md §9 DLC 확장성 섹션
+### ~~TD-DR-09. AiCompetitor 수익률 분포 MarketProfile 미전환~~ — **해결됨 (2026-04-21)**
 
-- `stock_database.gd`가 `stocks.json` 하드코딩 경로 사용 (`stocks_kr.json` 미전환)
-- `StockData._ready()` 동적 경로 로드 (`"stocks_%s.json" % active_market_id`) 미구현
-- `stocks_us.json`, `stocks_jp.json` 스텁 파일 미생성
-- 기존 `stocks.json` 참조 교체 미완료
+`_mu_multiplier`, `_sigma_multiplier` 상태 변수. `configure_market_distribution(mu_mult, sigma_mult)` API. `_generate_target_returns()`에서 mu×배율, `_compute_eod_for()`에서 sigma_daily×배율 적용. KR 기본값 1.0 유지.
 
-### TD-DR-08. GameClock 거래 시간 MarketProfile 동적 로드 미구현
+### ~~TD-DR-10. 52주 신고가/저가 오더북 행 미구현~~ — **해결됨 (2026-04-21)**
 
-**출처**: 2026-04-21 전체 GDD 전수 감사  
-**우선순위**: Low (한국 시장 단일 서비스 시 무관, DLC 시 필수)  
-**목표 스프린트**: DLC 그린라이트 후  
-**관련 GDD**: game-clock.md §9 DLC 확장성 섹션
-
-- `MINUTES_PER_DAY = 390` 상수 → `MarketProfile.get_calendar_param("trading_minutes")` 동적 로드로 교체 필요
-- `TICKS_PER_DAY` 등 파생 상수 연쇄 갱신 구조 필요
-- `market_kr.json`에 `"trading_minutes": 390` 미등록
-- `GameClock._ready()` → `MarketProfile` 로드 연결 필요
-- 테스트 `test_trading_minutes_loaded_from_market_profile()` 미추가
-
-### TD-DR-09. AiCompetitor 수익률 분포 MarketProfile 미전환
-
-**출처**: 2026-04-21 전체 GDD 전수 감사  
-**우선순위**: Low (한국 시장 단일 서비스 시 무관, DLC 시 필수)  
-**목표 스프린트**: DLC 그린라이트 후  
-**관련 GDD**: ai-competitor.md §9 DLC 확장성 섹션
-
-- 티어별 수익률 정규분포 파라미터 (`mean`, `std_dev`)가 코드 내 하드코딩
-- `market_kr.json`에 `"ai_return_distribution": {...}` 미등록
-- `AiCompetitor.init_season()` MarketProfile 파라미터 수신 경로 미설계
-
-### TD-DR-10. 52주 신고가/저가 오더북 행 미구현
-
-**출처**: 2026-04-21 전체 GDD 전수 감사  
-**우선순위**: Low  
-**목표 스프린트**: Polish (Sprint 11 이후)  
-**관련 GDD**: order-book.md §9 블록 6 (52주 행)
-
-- `StockData.week52_high/low` 필드 미추가 (`stocks.json` 미등록)
-- `OrderPanel` 블록 6 52주 행 UI 미구현
-- `order_panel.gd:258` 주석: `"생략: StockData.week52_high/low 미구현"`
+`order_panel.gd` `_lbl_week52_high`/`_lbl_week52_low` Labels + `_build_ob_week52_block()` UI 구현. `OhlcvHistory.get_week52_high_low()` 호출. `StockData.week52_high/low` 런타임 계산 방식 채택.
 
 ---
 
@@ -242,49 +182,29 @@ XpSystem._weekly_xp 필드 추가 + get_weekly_xp()/reset_weekly_xp() API. Settl
 
 - `tests/unit/test_core_systems.gd` 신규 작성: StockDatabase, FormatUtils, CurrencySystem, PortfolioManager, NewsEventSystem 전부 커버.
 
-### TD-CR-06. portfolio_view.gd _on_stop_take_btn_pressed() 138줄
+### ~~TD-CR-06. portfolio_view.gd _on_stop_take_btn_pressed() 138줄~~ — **해결됨 (감사 확인 2026-04-21)**
 
-**출처**: 2026-04-15 전체 코드 리뷰  
-**우선순위**: Medium  
-**목표 스프린트**: Sprint 9  
-`_on_stop_take_btn_pressed()`가 138줄(40줄 한도 초과). `_build_stop_take_dialog()` 분리 및 Stop/Take 다이얼로그 내 플레이어 노출 문자열에 `tr()` 추가.
+`_on_stop_take_btn_pressed()` 메서드가 현재 코드베이스에 없음. 이미 `_build_stop_take_dialog()` 등으로 분리 완료 확인.
 
-### TD-CR-07. level_up_banner.gd _ready() 146줄
+### ~~TD-CR-07. level_up_banner.gd _ready() 146줄~~ — **해결됨 (감사 확인 2026-04-21)**
 
-**출처**: 2026-04-15 전체 코드 리뷰  
-**우선순위**: Low  
-**목표 스프린트**: Sprint 9  
-`_ready()` 146줄. `_build_flash_overlay()`, `_build_banner_panel()`, `_build_buttons()` 등으로 분리 필요.
+`_ready()`가 이미 `_build_flash_overlay()`, `_build_dim_overlay()`, `_build_banner_panel()`, `_build_banner_top_row()`, `_build_banner_bottom_row()` 등으로 분리 완료.
 
-### TD-CR-08. tr() 미포장 문자열 잔여 (portfolio_view 다이얼로그, splash/start 브랜드명)
+### ~~TD-CR-08. tr() 미포장 문자열 잔여 (splash/start 브랜드명)~~ — **해결됨 (2026-04-21)**
 
-**출처**: 2026-04-15 전체 코드 리뷰  
-**우선순위**: Low (로컬라이제이션 단계 전 충분)  
-**목표 스프린트**: Sprint 9 (Polish)  
-- `portfolio_view.gd` Stop/Take 다이얼로그 내 16개 문자열
-- `splash_screen.gd:83,90` `"SEED"`, `"M O N E Y"` (브랜드명 — 번역 제외 가능하나 주석 명시 필요)
-- `start_screen.gd:56` `"SEED MONEY"` (동일)
+`splash_screen.gd` "SEED", "M O N E Y", `start_screen.gd` "SEED MONEY"에 `## intentionally NOT wrapped in tr() — brand name` 주석 추가.
 
-### TD-CR-09. ThemeSetup 색상 상수 미사용 (inline Color 리터럴)
+### ~~TD-CR-09. ThemeSetup 색상 상수 미사용 (inline Color 리터럴)~~ — **해결됨 (2026-04-21)**
 
-**출처**: 2026-04-15 전체 코드 리뷰  
-**우선순위**: Low  
-**목표 스프린트**: Sprint 9  
-`start_screen.gd` 7개, `main_screen.gd` 일부 Color 리터럴이 ThemeSetup 상수 대신 직접 값으로 정의됨. 테마 일괄 변경 시 누락 위험.
+`ThemeSetup`에 `START_BG`~`START_PORTFOLIO_VALUE` 8개 상수 추가. `start_screen.gd` inline Color 7개 전부 ThemeSetup 참조로 교체.
 
-### TD-CR-10. game_clock.gd AUTO_SLOW_ON_EVENT 미사용 상수
+### ~~TD-CR-10. game_clock.gd AUTO_SLOW_ON_EVENT 미사용 상수~~ — **해결됨 (감사 확인 2026-04-21)**
 
-**출처**: 2026-04-15 전체 코드 리뷰  
-**우선순위**: Low  
-**목표 스프린트**: Beta 설정 UI 구현 시  
-`AUTO_SLOW_ON_EVENT` 상수가 선언되어 있으나 어디서도 읽히지 않음. 설정 UI 미구현 상태. 구현 또는 제거 결정 필요.
+`_auto_slow_on_event: bool` 변수 + `get/set_auto_slow_on_event()` API로 전환 완료. `SettingsScreen`에서 읽고 씀.
 
-### TD-CR-11. UIState enum 중복 (StatusBar vs TradingScreen)
+### ~~TD-CR-11. UIState enum 중복 (StatusBar vs TradingScreen)~~ — **해결됨 (감사 확인 2026-04-21)**
 
-**출처**: 2026-04-15 전체 코드 리뷰  
-**우선순위**: Medium  
-**목표 스프린트**: Sprint 9  
-`StatusBar.UIState`와 `TradingScreen.UIState`가 동일 값을 별도 정의. 동기화 위험 내재. 공유 `ui_state_types.gd` 파일로 enum 분리하거나 StatusBar가 int 파라미터로 수신하는 방식으로 통일.
+`status_bar.gd`, `trading_screen.gd` 모두 `const UIState = UIStateTypes.UIState` 앨리어스 사용 중. `ui_state_types.gd` 단일 소스 확인.
 
 ### TD-CR-12. private 메서드 doc comment 전체 미작성
 
@@ -299,43 +219,27 @@ XpSystem._weekly_xp 필드 추가 + get_weekly_xp()/reset_weekly_xp() API. Settl
 
 > 즉시 수정 완료: trading_screen.gd(SKILL_TR1 상수화, TAB_ALERTS 상수 사용), order_engine.gd(ERR_BALANCE/ERR_QUANTITY 상수화), profit_celebration/sector_comparison_view(\_fmt\_int\_comma → FormatUtils.number), league_screen.gd(\_fmt\_pct/\_fmt\_comma → FormatUtils)
 
-### TD-CR-13. financial_report_system.gd 뉴스 헤드라인 문자열 중복
+### ~~TD-CR-13. financial_report_system.gd 뉴스 헤드라인 문자열 중복~~ — **해결됨 (2026-04-21)**
 
-**출처**: 2026-04-21 전체 코드 리뷰 — financial_report_system.gd:427, 430, 444, 447, 462, 465, 516, 519, 522, 525  
-**우선순위**: Low  
-**목표 스프린트**: Polish  
-이벤트 타입별 뉴스 헤드라인 문자열이 함수 내 11곳에 인라인 하드코딩. `event_pool.json` 로드 또는 상단 Dictionary 상수로 단일화 권장.
+10개 헤드라인 템플릿 상수(`_HL_*`) 추가. `_fire_analyst_report()`, `_fire_preliminary_news()`, `_fire_rumor()`, `_publish_earnings_news()` 내 인라인 리터럴 전부 상수 참조로 교체.
 
-### TD-CR-14. news_event_system.gd impact_hint 형식 혼용
+### ~~TD-CR-14. news_event_system.gd impact_hint 형식 혼용~~ — **해결됨 (2026-04-21)**
 
-**출처**: 2026-04-21 전체 코드 리뷰 — news_event_system.gd:443, 420, 1115, 1260, 1279, 1306  
-**우선순위**: Low  
-**목표 스프린트**: Polish  
-`impact_hint` 필드값이 `"positive"/"negative"` 문자열과 `"ℹ️"/"⚠️"/"🚨"` 이모지 혼용. 단일 형식(문자열 상수)으로 통일하고 UI 렌더러에서 이모지 매핑.
+`IMPACT_HINT_WARNING`, `IMPACT_HINT_INFO`, `IMPACT_HINT_EMERGENCY`, `IMPACT_HINT_POSITIVE`, `IMPACT_HINT_NEGATIVE` 등 상수 추가. VI trigger/release/CB 핸들러 이모지 리터럴 전부 상수로 교체.
 
-### TD-CR-15. intro_sequence.gd 게임 수치 리터럴 하드코딩
+### ~~TD-CR-15. intro_sequence.gd 게임 수치 리터럴 하드코딩~~ — **해결됨 (2026-04-21)**
 
-**출처**: 2026-04-21 전체 코드 리뷰 — intro_sequence.gd:19-22  
-**우선순위**: Low  
-**목표 스프린트**: Polish  
-도입 카드 텍스트의 `"10,000원"`, `"1,000,000원에서 1,000억까지"` 등이 GDD 상수 미참조 리터럴. 상수 변경 시 텍스트가 자동으로 틀려짐. CurrencySystem 또는 GameBalance 상수에서 참조로 교체.
+`CARD_TEXTS const` → `static func _build_card_texts()` 전환. `FormatUtils.currency(CurrencySystem.INITIAL_CASH_ASSETS)`, `SeasonManager.HANGANG_THRESHOLD`, `SeasonManager.ENDING_THRESHOLD` 직접 참조.
 
-### TD-CR-16. stop_take_system.gd Variant 반환 타입 명시화
+### ~~TD-CR-16. stop_take_system.gd Variant 반환 타입 명시화~~ — **해결됨 (2026-04-21)**
 
-**출처**: 2026-04-21 전체 코드 리뷰 — stop_take_system.gd:74-75, 106  
-**우선순위**: Low  
-**목표 스프린트**: Polish  
-`get_setting() -> Variant` 반환 타입이 실제로 `Dictionary | null`임. Variant 사용으로 호출자가 타입 추론 불가. `-> Variant` → `-> Dictionary` + null 반환 조건 명시, 매개변수도 `Variant` 주석 대신 타입별 분리 오버로드 검토.
+`get_setting() -> Dictionary`로 변경. null 대신 `{}` 반환. `order_panel.gd` 호출자 `if cur != null` → `if not cur.is_empty()` 수정.
 
-### TD-CR-17. lifestyle_manager.gd 기본값 누락 + season_final 판별 하드코딩
+### ~~TD-CR-17. lifestyle_manager.gd 기본값 누락 + season_final 판별 하드코딩~~ — **해결됨 (2026-04-21)**
 
-**출처**: 2026-04-21 전체 코드 리뷰 — lifestyle_manager.gd:166, 305-306, 342-344  
-**우선순위**: Low  
-**목표 스프린트**: Polish  
-(1) `_load_config()`에서 `donationMin/Max` 로드 실패 시 기본값 세팅 없음 — config 파일 누락 시 `DONATION_MIN = 0` 위험.  
-(2) `is_season_final_day` 판별 로직이 `GameClock` 상수 직접 계산 — `GameClock.is_season_final_day()` 헬퍼로 캡슐화 권장.
+`DONATION_MIN/MAX` 중복 선언 제거. `GameClock.is_season_final_day()` 헬퍼 추가 및 `process_market_close()` 위임.
 
-### TD-HIST-01. OHLCV 시즌 간 영구 히스토리 저장 구조
+### ~~TD-HIST-01. OHLCV 시즌 간 영구 히스토리 저장 구조~~ — **해결됨 (감사 확인 2026-04-21)**
 
 **출처**: 팀 전체 토론 2026-04-15  
 **우선순위**: Medium  
@@ -363,7 +267,7 @@ XpSystem._weekly_xp 필드 추가 + get_weekly_xp()/reset_weekly_xp() API. Settl
 1. pre-generated history 단순 랜덤워크 → 실제 플레이 가격과 시각적으로 이어지는지 확인
 2. 장기 가격 드리프트 방지 정규화 설계
 
-### TD-QA-01. 스킬 검증용 슈퍼 계정 세이브 파일
+### ~~TD-QA-01. 스킬 검증용 슈퍼 계정 세이브 파일~~ — **해결됨 (2026-04-21)**
 
 **출처**: QA 플레이테스트 계획 2026-04-15  
 **우선순위**: Medium  

@@ -17,20 +17,32 @@ signal on_short_position_closed(stock_id: String, pnl: int)
 # ── Config ──
 
 const CONFIG_PATH: String = "res://assets/data/short_selling_config.json"
+## Regulatory floor: margin_rate must not be below 1.20 (120%). AC S10-06e.
+const MIN_MARGIN_RATE: float = 1.20
 
 var _margin_rate: float = 1.40
 var _margin_call_threshold: float = 0.20
 var _max_short_positions: int = 3
+
+## Fraction of listed_shares borrowable per volatility profile (GDD §규칙 12).
+## Keys match StockData.VolatilityProfile enum names (LOW/MEDIUM/HIGH/EXTREME).
+var _borrowable_ratio_by_volatility: Dictionary = {
+	"LOW": 0.12, "MEDIUM": 0.05, "HIGH": 0.02, "EXTREME": 0.01,
+}
 
 # ── State ──
 
 ## stock_id -> ShortPosition dict
 var _positions: Dictionary = {}
 
+## stock_id -> {current: int, max: int} — TD-DR-06 대차 풀 (GDD §규칙 12)
+var _borrow_pool: Dictionary = {}
+
 # ── Lifecycle ──
 
 func _ready() -> void:
 	_load_config()
+	GameClock.on_season_start.connect(_init_pools)
 
 
 func _load_config() -> void:
@@ -44,9 +56,39 @@ func _load_config() -> void:
 	if result == null or not result is Dictionary:
 		push_warning("ShortSellingSystem: JSON parse failed for %s — using defaults" % CONFIG_PATH)
 		return
-	_margin_rate = result.get("margin_rate", _margin_rate)
+	_margin_rate = maxf(float(result.get("margin_rate", _margin_rate)), MIN_MARGIN_RATE)
 	_margin_call_threshold = result.get("margin_call_threshold", _margin_call_threshold)
 	_max_short_positions = result.get("max_short_positions", _max_short_positions)
+	var vol_ratios: Variant = result.get("borrowableRatioByVolatility", null)
+	if vol_ratios is Dictionary:
+		_borrowable_ratio_by_volatility = vol_ratios as Dictionary
+
+# ── Borrow Pool Initialization ──
+
+## Initializes _borrow_pool for all listed stocks. Called on every on_season_start.
+## Formula: max_pool = floor(listed_shares × borrowableRatio[volatility]) (GDD §규칙 12, F6)
+func _init_pools() -> void:
+	_borrow_pool.clear()
+	for stock: StockData in StockDatabase.get_all_stocks():
+		var vol_name: String = StockData.VolatilityProfile.keys()[stock.volatility_profile]
+		var ratio: float = _borrowable_ratio_by_volatility.get(
+			vol_name, _borrowable_ratio_by_volatility.get("MEDIUM", 0.05)
+		)
+		var max_pool: int = int(floor(float(stock.listed_shares) * ratio))
+		_borrow_pool[stock.stock_id] = {"current": max_pool, "max": max_pool}
+
+
+## Returns borrow pool entry for a stock: {current: int, max: int}.
+## Returns {current: 0, max: 0} if not initialized (pool not yet built for this stock).
+func get_borrow_pool(stock_id: String) -> Dictionary:
+	return _borrow_pool.get(stock_id, {"current": 0, "max": 0})
+
+
+## Restores quantity to the borrow pool (on close/cover/liquidation), capped at max.
+func _restore_borrow_pool(stock_id: String, quantity: int) -> void:
+	if _borrow_pool.has(stock_id):
+		var pool: Dictionary = _borrow_pool[stock_id]
+		pool["current"] = mini(pool["current"] + quantity, pool["max"])
 
 # ── Public API: Query ──
 
@@ -125,6 +167,9 @@ func open_position(order: Dictionary) -> int:
 		"unrealized_pnl_pct": 0.0,
 		"margin_ratio":       _margin_rate,  ## = margin_deposited / initial_value at open
 	}
+	# Decrement borrow pool (GDD §규칙 12)
+	if _borrow_pool.has(stock_id):
+		_borrow_pool[stock_id]["current"] = maxi(0, _borrow_pool[stock_id]["current"] - quantity)
 	return open_price
 
 
@@ -147,6 +192,7 @@ func close_position(order: Dictionary) -> int:
 			% [stock_id, cover_cost, CurrencySystem.get_sim_cash()])
 	CurrencySystem.sim_add(maxi(0, pos["margin_deposited"] + pnl))
 
+	_restore_borrow_pool(stock_id, pos["quantity"])
 	_positions.erase(stock_id)
 	on_short_position_closed.emit(stock_id, pnl)
 	return pnl
@@ -200,6 +246,7 @@ func liquidate_all_for_season_end() -> void:
 			push_error("ShortSellingSystem.liquidate_all_for_season_end: sim_deduct failed (stock=%s, cost=%d)" \
 				% [stock_id, cover_cost])
 		CurrencySystem.sim_add(remaining)
+		_restore_borrow_pool(stock_id, pos["quantity"])
 		on_short_position_closed.emit(stock_id, pnl)
 
 	_positions.clear()
@@ -208,6 +255,7 @@ func liquidate_all_for_season_end() -> void:
 ## Resets all state. Called by GameMain (new game) and tests (before_each).
 func reset() -> void:
 	_positions.clear()
+	_borrow_pool.clear()
 
 # ── Serialization ──
 
@@ -227,6 +275,22 @@ func get_save_data() -> Array[Dictionary]:
 			"open_day":         pos["open_day"],
 		})
 	return result
+
+
+## Returns serializable borrow pool state for SaveSystem (TD-DR-06).
+func get_borrow_pool_data() -> Dictionary:
+	return _borrow_pool.duplicate(true)
+
+
+## Restores borrow pool from save data. Called by SaveSystem after load_save_data().
+func load_borrow_pool_data(data: Dictionary) -> void:
+	_borrow_pool.clear()
+	for stock_id: String in data:
+		var entry: Dictionary = data[stock_id]
+		_borrow_pool[stock_id] = {
+			"current": int(entry.get("current", 0)),
+			"max":     int(entry.get("max", 0)),
+		}
 
 
 ## Restores positions from save data.
@@ -265,6 +329,7 @@ func _trigger_forced_liquidation(stock_id: String) -> void:
 		push_error("ShortSellingSystem._trigger_forced_liquidation: sim_deduct failed (stock=%s, cost=%d)" \
 			% [stock_id, cover_cost])
 	CurrencySystem.sim_add(remaining)
+	_restore_borrow_pool(stock_id, pos["quantity"])
 	_positions.erase(stock_id)
 
 	on_forced_liquidation.emit(stock_id, current_price, pnl)

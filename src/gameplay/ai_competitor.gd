@@ -112,6 +112,12 @@ var _global_id_to_tier: Dictionary = {}
 ## 전체 글로벌 참가자 수 (실제 인원 합계, TOTAL_PARTICIPANTS와 다를 수 있음).
 var _actual_total: int = 0
 
+## DLC 시장 수익률 분포 배율 — 기본값 1.0 (KR 기준).
+## MarketProfile에서 로드한 mu_multiplier/sigma_multiplier를 적용해 시장별 특성 반영.
+## Call configure_market_distribution() before init_season().
+var _mu_multiplier: float = 1.0
+var _sigma_multiplier: float = 1.0
+
 # ── Lifecycle ──
 
 func _ready() -> void:
@@ -129,6 +135,14 @@ func _ready() -> void:
 
 
 # ── Public API ──
+
+## DLC 시장 수익률 분포 배율 설정. [param mu_mult] > 1이면 평균 수익률 상승, [param sigma_mult] > 1이면 변동성 증가.
+## MarketProfile.get_ai_distribution() 결과를 전달한다.
+## init_season() 호출 전에 반드시 설정해야 한다.
+func configure_market_distribution(mu_mult: float, sigma_mult: float) -> void:
+	_mu_multiplier = maxf(0.1, mu_mult)
+	_sigma_multiplier = maxf(0.1, sigma_mult)
+
 
 ## 시즌 시작 시 호출. 티어별 AI 참가자를 초기화한다.
 ## [br]player_tier: 플레이어 배정 티어 (TIER_BRONZE=0 ~ TIER_MASTER_OF_INVESTMENT=10)
@@ -452,8 +466,8 @@ func _generate_target_returns(tier: int, count: int) -> Array[float]:
 	var result: Array[float] = []
 	result.resize(count)
 	var params: Dictionary = TIER_PARAMS[tier]
-	var mu: float    = params["mu"]
-	var sigma: float = params["sigma"]
+	var mu: float    = params["mu"] * _mu_multiplier
+	var sigma: float = params["sigma"] * _sigma_multiplier
 	var r_min: float = params["r_min"]
 	var r_max: float = params["r_max"]
 	var rng := RandomNumberGenerator.new()
@@ -479,7 +493,7 @@ func _compute_eod_for(tier: int, local_id: int, day: int) -> float:
 	var td: Dictionary = _tier_data[tier]
 	var params: Dictionary = TIER_PARAMS[tier]
 	var target_r: float = (td["target_r"] as Array[float])[local_id]
-	var sigma_daily: float = params["sigma"] / sqrt(float(SEASON_DAYS))
+	var sigma_daily: float = params["sigma"] * _sigma_multiplier / sqrt(float(SEASON_DAYS))
 	var drift_per_day: float = target_r / float(SEASON_DAYS)
 
 	# 이 참가자 전용 일별 RNG — target_r RNG와 시드 분리 (0xDEAD_BEEF 상수)

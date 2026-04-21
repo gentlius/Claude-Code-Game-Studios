@@ -42,7 +42,15 @@
   },
 
   "prices": {},
-  "ai": {},
+  "ai": {
+    "season_seed": 42,
+    "player_tier": 3,
+    "participant_counts": {
+      "0": 7599, "1": 3999, "2": 2599, "3": 1799, "4": 1199,
+      "5": 899,  "6": 699,  "7": 499,  "8": 299,  "9": 199, "10": 209
+    },
+    "eod_snapshots": {}
+  },
   "news": {},
   "stop_take": [],
   "lifestyle": {},

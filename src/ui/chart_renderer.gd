@@ -729,6 +729,15 @@ func _update_header() -> void:
 # ── Rendering ──
 
 func _draw() -> void:
+	# Defensive fallback: if LIVE with a selected stock but still no candles,
+	# pull the latest tick buffer now. This covers the gap between market_open
+	# signal and the first on_price_updated emission (~192ms at 1x speed).
+	if _candles.is_empty() and _chart_state == ChartState.LIVE and _stock_id != "":
+		_tick_prices = PriceEngine.get_tick_buffer(_stock_id)
+		_tick_volumes = PriceEngine.get_tick_volumes(_stock_id)
+		if not _tick_prices.is_empty():
+			_aggregate_candles()
+
 	if _candles.size() == 0:
 		_draw_empty_chart()
 		return
@@ -750,11 +759,20 @@ func _draw() -> void:
 		_draw_crosshair()
 
 
+## 빈 차트 표시. 상태에 맞는 안내 메시지를 표시한다.
 func _draw_empty_chart() -> void:
 	var center: Vector2 = size / 2.0
+	var msg: String
+	match _chart_state:
+		ChartState.LIVE:
+			msg = tr("시장 데이터 수신 대기 중...")
+		ChartState.STATIC, ChartState.PAUSED:
+			msg = tr("장 시작 전 — 시장 열기 버튼을 누르세요")
+		_:
+			msg = tr("종목을 선택하세요")
 	draw_string(
-		ThemeDB.fallback_font, center - Vector2(60, 0),
-		"차트 데이터 없음", HORIZONTAL_ALIGNMENT_CENTER,
+		ThemeDB.fallback_font, center - Vector2(100, 0),
+		msg, HORIZONTAL_ALIGNMENT_CENTER,
 		-1, 14, CANDLE_NEUTRAL_COLOR
 	)
 

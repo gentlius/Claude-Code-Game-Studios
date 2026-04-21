@@ -2,7 +2,7 @@
 ## 성능 설계 (GDD trading-screen.md §10-4):
 ##   _row_nodes  — _ready() 1회 빌드. 런타임 get_children() 없음.
 ##   _last_prices — dirty flag. 가격 미변동 행은 틱마다 갱신 skip.
-##   _sel_style/_desel_style — StyleBoxFlat _ready() 1회 캐시.
+##   _sel_style — StyleBoxFlat _ready() 1회 캐시. 비선택은 remove_theme_stylebox_override (테마 상속).
 ##   _held_stocks — on_order_filled 시에만 갱신.
 class_name StockListPanel
 extends VBoxContainer

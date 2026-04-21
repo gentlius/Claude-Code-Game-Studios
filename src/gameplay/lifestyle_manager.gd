@@ -289,9 +289,7 @@ func purchase_network_item(item_id: String, cost: int, xp_bonus: int, is_recurri
 	if is_recurring:
 		add_recurring_cost(item_id, cost)
 	if xp_bonus > 0:
-		## GDD §3-2: 라이프스타일 XP는 grant_weekly_prize_xp 경로를 재사용한다.
-		## TODO(TD-LIFESTYLE-XP): XpSystem에 grant_lifestyle_xp(amount) public API 추가 후 교체.
-		XpSystem.grant_weekly_prize_xp(xp_bonus)
+		XpSystem.grant_lifestyle_xp(xp_bonus)
 	_check_and_grant_titles()
 	return true
 

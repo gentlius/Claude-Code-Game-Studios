@@ -3,8 +3,8 @@
 ## Phase 1: 분기 스케줄러, consensus_roe, 3단계 정보 공개,
 ##           뉴스/이벤트 연동, 세이브/로드, E-09 섹터 파급.
 ##
-## TODO(S10-07): 보고서 주기/잠정확률 등 시장별 상수를
-##               MarketProfile.get_reporting_param() 경유로 교체.
+## 시장별 보고서 주기/잠정확률은 MarketProfile.get_calendar_param()에서 읽는다. ADR-021.
+## 게임 메커닉 튜닝값(노이즈/임계값)은 financial_report_config.json에서 읽는다.
 ##
 ## 진입점:
 ##   SeasonManager.on_season_started → schedule_quarterly_events(season)
@@ -20,7 +20,8 @@ const CONFIG_PATH: String = "res://assets/data/financial_report_config.json"
 
 # ── Config (loaded from JSON) ──
 
-## KR market defaults — all overridable from JSON (TODO S10-07: MarketProfile)
+## Market-calendar params — loaded from MarketProfile.get_calendar_param() (ADR-021).
+## Defaults match KR market; overwritten in _load_from_market_profile().
 var REPORT_CYCLE_SEASONS: int = 3
 var FISCAL_YEAR_START_SEASON: int = 1
 var REPORT_TYPE_SEQUENCE: Array = ["Q1", "H1", "Q3", "Annual"]
@@ -70,6 +71,7 @@ var _consensus_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 func _ready() -> void:
 	_load_config()
+	_load_from_market_profile()  # market-specific calendar params override config defaults
 	SeasonManager.on_season_started.connect(_on_season_started)
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
 	GameClock.on_tick.connect(_on_tick)
@@ -86,10 +88,8 @@ func _load_config() -> void:
 		push_warning("FinancialReportSystem: JSON parse failed — using defaults")
 		return
 	var cfg: Dictionary = result as Dictionary
-	REPORT_CYCLE_SEASONS        = int(cfg.get("reportCycleSeasons", REPORT_CYCLE_SEASONS))
-	FISCAL_YEAR_START_SEASON    = int(cfg.get("fiscalYearStartSeason", FISCAL_YEAR_START_SEASON))
-	if cfg.has("reportTypeSequence"):
-		REPORT_TYPE_SEQUENCE    = cfg["reportTypeSequence"]
+	# reportCycleSeasons / reportTypeSequence 는 _load_from_market_profile()에서
+	# MarketProfile로 덮어쓰므로 config.json 값은 무시한다 (ADR-021).
 	NEWS_STOCK_MIN              = int(cfg.get("newsStockMin", NEWS_STOCK_MIN))
 	NEWS_STOCK_MAX              = int(cfg.get("newsStockMax", NEWS_STOCK_MAX))
 	REPORT_DAY_MIN              = int(cfg.get("reportDayMin", REPORT_DAY_MIN))
@@ -112,12 +112,32 @@ func _load_config() -> void:
 	ROE_DRIFT_SCALE             = float(cfg.get("roeDriftScale", ROE_DRIFT_SCALE))
 	SECTOR_RIPPLE_IMPACT        = float(cfg.get("sectorRippleImpact", SECTOR_RIPPLE_IMPACT))
 	SECTOR_RIPPLE_DECAY_TICKS   = int(cfg.get("sectorRippleDecayTicks", SECTOR_RIPPLE_DECAY_TICKS))
-	if cfg.has("preliminaryEarnings"):
-		var pe: Dictionary = cfg["preliminaryEarnings"]
-		PRELIMINARY_ENABLED     = bool(pe.get("enabled", PRELIMINARY_ENABLED))
-		PRELIMINARY_DAY_OFFSET  = int(pe.get("dayOffset", PRELIMINARY_DAY_OFFSET))
-		if pe.has("probabilityByProfile"):
-			PRELIMINARY_PROBABILITY = pe["probabilityByProfile"]
+	# preliminaryEarnings 는 _load_from_market_profile()에서 MarketProfile로 덮어쓴다 (ADR-021).
+
+
+## Load market-specific calendar params from MarketProfile (ADR-021).
+## Called from _ready() after _load_config(). Safe to call again on market switch.
+func _load_from_market_profile() -> void:
+	var cycle: Variant = MarketProfile.get_calendar_param("report_cycle_seasons")
+	if cycle != null:
+		REPORT_CYCLE_SEASONS = int(cycle)
+
+	var start: Variant = MarketProfile.get_calendar_param("fiscal_year_start_season")
+	if start != null:
+		FISCAL_YEAR_START_SEASON = int(start)
+
+	var seq: Variant = MarketProfile.get_calendar_param("report_type_sequence")
+	if seq is Array:
+		REPORT_TYPE_SEQUENCE = seq
+
+	var pe: Variant = MarketProfile.get_calendar_param("preliminary_earnings")
+	if pe is Dictionary:
+		PRELIMINARY_ENABLED    = bool(pe.get("enabled", PRELIMINARY_ENABLED))
+		PRELIMINARY_DAY_OFFSET = int(pe.get("day_offset", PRELIMINARY_DAY_OFFSET))
+		var prob: Variant = pe.get("probability_by_profile", null)
+		if prob is Dictionary:
+			PRELIMINARY_PROBABILITY = prob
+
 
 # ── Public API: Season Schedule ──
 
@@ -541,9 +561,9 @@ func _event_type_to_direction(event_type: String, new_roe: float, _prev_roe: flo
 # ── Signal Handlers ──
 
 func _on_season_started(_tier: int, _is_free_market: bool) -> void:
-	var season: int = SeasonManager.get_current_tier()  # proxy for season number
-	# Use GameClock day counter as season proxy if SeasonManager doesn't track absolute season.
-	# In practice we use the internal counter that increments with each season start.
+	# _current_season은 시즌 시작 시마다 1 증가하는 절대 카운터.
+	# reset() 또는 load_save_data()로 초기화되므로 세이브/로드 후에도 정확.
+	# SeasonManager.get_current_tier()는 랭크 티어이므로 여기서 사용하지 않는다.
 	_current_season += 1
 	schedule_quarterly_events(_current_season)
 

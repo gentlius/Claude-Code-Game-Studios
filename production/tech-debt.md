@@ -82,15 +82,9 @@
 - `_compute_eod_for`에 `eod_rng_states: Array[int]` 캐시 도입. 전일 EOD RNG 상태를 저장해
   다음 호출 시 O(1) 한 스텝만 진행. Day 0 또는 캐시 미존재 시만 O(day) 재계산.
 
-### TD-CR-02. 게임패드 홀딩 목록 탐색 불가
+### ~~TD-CR-02. 게임패드 홀딩 목록 탐색 불가~~ — **해결됨 (2026-04-20, S10-11)**
 
-- **현황**: `portfolio_view.gd` 홀딩 목록 행(`HBoxContainer`)이 `MOUSE_FILTER_STOP`만 설정.
-  `focus_mode` 미설정으로 키보드/게임패드 탐색 불가. ADR ui-code.md 규칙("키보드/마우스 AND 게임패드") 위반.
-- **영향**: 포트폴리오 뷰에서 종목 클릭 → 차트 전환 기능을 게임패드로 사용 불가.
-- **우선순위**: Low (현재 마우스 중심 UI이지만 접근성 규칙 위반)
-- **목표 스프린트**: Sprint 9 (Polish 단계)
-- **제안 수정**: 각 홀딩 행에 `focus_mode = Control.FOCUS_ALL` + `focus_neighbor_*` 설정.
-  방향키로 행 이동, Enter로 `stock_clicked` 발행.
+- `portfolio_view.gd` `_add_holding_row()`에 `focus_mode = Control.FOCUS_ALL` 적용 완료.
 
 ## 잔여 오픈 항목
 
@@ -105,19 +99,13 @@
   추가 안전망: `tree_exiting` 연결이 노드 제거 시 타이머 강제 중지.
   코드 위치: `settlement_reporter.gd` lines 46-50, 321-328.
 
-### TD-AUDIT-02. xp_bar.gd C-01 시그니처 불일치
+### ~~TD-AUDIT-02. xp_bar.gd C-01 시그니처 불일치~~ — **해결됨 (2026-04-21 감사 확인)**
 
-- **현황**: `_on_xp_gained` 핸들러가 2파라미터이나 시그널이 3파라미터 emit 가능성.
-- **우선순위**: Critical → Sprint 6 S6-04에서 검증 및 수정.
-- **목표 스프린트**: Sprint 6 S6-04
+- `_on_xp_gained(amount, _new_total, _source)` 3-파라미터 핸들러. 시그널 선언과 일치 확인.
 
-### TD-AUDIT-03. chart_renderer.gd Timer dangling
+### ~~TD-AUDIT-03. chart_renderer.gd Timer dangling~~ — **해결됨 (2026-04-21 감사 확인)**
 
-- **현황**: 80ms 디바운스 타이머가 씬 제거 시 dangling 가능성.
-- **우선순위**: Low
-- **목표 스프린트**: Sprint 6 S6-03 (RSI/MACD 작업과 병행)
-
-> **참고**: chart_renderer.gd의 RSI/MACD 구현 자체는 완료 상태 (`_draw_rsi()`, `_draw_macd()`, `_rsi_cache` 전부 존재). S6-03은 Timer dangling 수정만 진행.
+- `tree_exiting` + `_disconnect_signals()`에서 타이머 cleanup 완료.
 
 ### ✅ 해결됨 (2026-04-09)
 
@@ -129,28 +117,17 @@
 
 ## 디자인 리뷰 2026-04-15 식별 항목
 
-### TD-DR-01. trading-screen.md 미완 구현 5개 (Sprint 8 예정)
+### ~~TD-DR-01. trading-screen.md 미완 구현 5개~~ — **해결됨 (2026-04-21 감사 확인)**
 
-**출처**: 2026-04-15 전체 GDD 디자인 리뷰  
-**우선순위**: Medium  
-**목표 스프린트**: Sprint 8
+- MainScreen [나가기] 버튼: `main_screen.gd:198-220` `_build_f4_exit_button()` 확인
+- MainScreen F4 감지: `_unhandled_input()` lines 80-81 확인
+- StockListPanel._row_nodes 1회 빌드: `_build_rows()` 확인
+- StockListPanel._last_prices dirty flag: `_on_price_updated()` lines 102-103 확인
+- _sel_style/_desel_style: `_sel_style` 캐시 확인. `_desel_style`는 `remove_theme_stylebox_override` 방식(테마 상속)으로 처리 — 주석 일치화 완료
 
-미완 항목:
-- `MainScreen` 탭바에 `[나가기]` 버튼 추가 (F1/F2/F3 우측)
-- `MainScreen._input(event)`: F4 감지 → `SavingOverlay.visible` 체크 → StartScreen 전환
-- `StockListPanel._row_nodes` — `_ready()`에서 1회 빌드, `get_children()` 런타임 호출 없음
-- `StockListPanel._last_prices` — dirty flag skip 동작
-- `StockListPanel._sel_style` / `_desel_style` — `_ready()` 1회 캐시, 런타임 `StyleBoxFlat.new()` 없음
+### ~~TD-DR-02. price-engine.md AC 35개 미검증~~ — **폴리시 스프린트로 이월**
 
-### TD-DR-02. price-engine.md AC 35개 미검증
-
-**출처**: 2026-04-15 전체 GDD 디자인 리뷰  
-**우선순위**: Low  
-**목표 스프린트**: Sprint 8 (오더북 구현과 병행)
-
-price-engine.md Acceptance Criteria 35개가 모두 `[ ]` 상태.  
-PriceEngine은 구현 완료됐으나 AC 항목별 검증이 공식 기록에 없음.  
-Sprint 8에서 QA Lead가 AC 체크리스트 기반 검증 실행 후 갱신.
+- PriceEngine 구현 완료. AC 검증은 Polish QA 단계에서 일괄 처리.
 
 ### TD-DR-03. skill_tree_overlay.gd orphan 파일
 
@@ -162,12 +139,9 @@ Sprint 8에서 QA Lead가 AC 체크리스트 기반 검증 실행 후 갱신.
 
 ## 코드 리뷰 2026-04-15 식별 항목 (전체 37개 파일)
 
-### TD-CR-03. SaveSystem.active_slot_id public 직접 쓰기 가능
+### ~~TD-CR-03. SaveSystem.active_slot_id public 직접 쓰기 가능~~ — **해결됨 (2026-04-21 감사 확인)**
 
-**출처**: 2026-04-15 전체 코드 리뷰  
-**우선순위**: Medium  
-**목표 스프린트**: Sprint 9  
-`active_slot_id`가 public var로 외부에서 직접 쓰기 가능. `get_active_slot_id()` 게터 추가 후 private으로 전환. 테스트 파일(6개) `before_each` 패턴도 함께 수정.
+- `_active_slot_id` private var + `get_active_slot_id()` 게터 완료.
 
 ### TD-CR-04. SettlementReporter._weekly_xp_gained 세이브/로드 간 소실
 
@@ -176,17 +150,9 @@ Sprint 8에서 QA Lead가 AC 체크리스트 기반 검증 실행 후 갱신.
 **목표 스프린트**: Sprint 9 → **✅ 2026-04-15 해결**  
 XpSystem._weekly_xp 필드 추가 + get_weekly_xp()/reset_weekly_xp() API. SettlementReporter는 자체 카운터 제거 후 XpSystem.get_weekly_xp() 읽기. 세이브/로드 직렬화는 XpSystem.get_save_data()에서 처리.
 
-### TD-CR-05. 단위 테스트 미작성 시스템 (P1)
+### ~~TD-CR-05. 단위 테스트 미작성 시스템 (P1)~~ — **해결됨 (2026-04-20, S10-08)**
 
-**출처**: 2026-04-15 전체 코드 리뷰  
-**우선순위**: High  
-**목표 스프린트**: Sprint 8  
-다음 시스템에 전용 단위 테스트 파일 없음:
-- `StockDatabase`: `get_stock()`, `get_stocks_by_sector()`, `stock_exists()` 등 미검증
-- `FormatUtils`: 경계값(0, <1000, 음수, 매우 큰 수) 및 `pct()` 부호 로직 미검증
-- `CurrencySystem`: `sim_deduct()` 언더플로우, `award_prize()` 음수 가드 미검증
-- `PortfolioManager`: FIFO 평균 단가, 실현 손익, `update_valuation()` 공식 미검증
-- `NewsEventSystem`: 일별 스케줄 생성, 야간 이벤트, 지연 큐, 가중치 랜덤 픽 미검증
+- `tests/unit/test_core_systems.gd` 신규 작성: StockDatabase, FormatUtils, CurrencySystem, PortfolioManager, NewsEventSystem 전부 커버.
 
 ### TD-CR-06. portfolio_view.gd _on_stop_take_btn_pressed() 138줄
 

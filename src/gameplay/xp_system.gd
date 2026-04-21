@@ -170,6 +170,11 @@ func grant_weekly_prize_xp(amount: int) -> void:
 	_grant_xp(amount, "weekly_prize")
 
 
+## Called by LifestyleManager when a luxury/network/social item grants XP. GDD lifestyle-spending.md §3-2.
+func grant_lifestyle_xp(amount: int) -> void:
+	_grant_xp(amount, "lifestyle")
+
+
 ## Called by SkillTree when a skill point is consumed
 func spend_skill_point() -> bool:
 	if get_available_skill_points() <= 0:

@@ -29,6 +29,10 @@ var _badge_tween: Tween
 ## TR4 해금 시 표시. 매 틱 갱신.
 var _leverage_section: VBoxContainer
 var _leverage_rows_container: VBoxContainer
+## stock_id → {lbl_pnl: Label, lbl_margin: Label} — 값 갱신용 레퍼런스 캐시.
+## 구조 변경(포지션 추가/제거) 시에만 재빌드. 매 틱 값 갱신은 레이블 text만 변경.
+var _leverage_row_refs: Dictionary = {}
+var _leverage_position_ids: Array[String] = []  ## 구조 변경 감지용 이전 ID 목록
 
 # ── Lifecycle ──
 
@@ -361,16 +365,32 @@ func _update_holding_values(holdings: Array[Dictionary]) -> void:
 
 
 ## Refresh leverage position rows. Called every tick when TR4 is unlocked. GDD leverage-trading.md §3-1.
+## Uses diff pattern: structure rebuild only when positions add/remove; value-only update on tick.
 func _refresh_leverage_section() -> void:
 	if not SkillTree.is_skill_unlocked("TR4"):
 		return
 	if _leverage_rows_container == null:
 		return
 
+	var positions: Array[Dictionary] = LeverageManager.get_all_positions()
+
+	# ── 1. Detect structure change ──
+	var current_ids: Array[String] = []
+	for pos: Dictionary in positions:
+		current_ids.append(str(pos["stock_id"]))
+	if current_ids != _leverage_position_ids:
+		_leverage_position_ids = current_ids
+		_rebuild_leverage_rows(positions)
+
+	# ── 2. Value-only update (no node allocation) ──
+	_update_leverage_values(positions)
+
+
+func _rebuild_leverage_rows(positions: Array[Dictionary]) -> void:
 	for child: Node in _leverage_rows_container.get_children():
 		child.queue_free()
+	_leverage_row_refs.clear()
 
-	var positions: Array[Dictionary] = LeverageManager.get_all_positions()
 	if positions.is_empty():
 		var empty: Label = Label.new()
 		empty.text = tr("레버리지 포지션 없음")
@@ -379,12 +399,11 @@ func _refresh_leverage_section() -> void:
 		return
 
 	for pos: Dictionary in positions:
+		var stock_id: String = pos["stock_id"]
 		var row: HBoxContainer = HBoxContainer.new()
 		row.add_theme_constant_override("separation", 8)
 		_leverage_rows_container.add_child(row)
 
-		# Stock name
-		var stock_id: String = pos["stock_id"]
 		var stock_data: StockData = StockDatabase.get_stock(stock_id)
 		var lbl_name: Label = Label.new()
 		lbl_name.text = stock_data.get_display_name() if stock_data != null else stock_id
@@ -392,41 +411,52 @@ func _refresh_leverage_section() -> void:
 		ThemeSetup.style_label_primary(lbl_name)
 		row.add_child(lbl_name)
 
-		# Multiplier (e.g. "×2배")
 		var lbl_mult: Label = Label.new()
 		lbl_mult.text = tr("×%d배") % pos["multiplier"]
 		lbl_mult.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		ThemeSetup.style_label_secondary(lbl_mult)
 		row.add_child(lbl_mult)
 
-		# Unrealized PnL = market_val − entry_val
+		var lbl_pnl: Label = Label.new()
+		lbl_pnl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(lbl_pnl)
+
+		var lbl_margin: Label = Label.new()
+		lbl_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(lbl_margin)
+
+		_leverage_row_refs[stock_id] = {"lbl_pnl": lbl_pnl, "lbl_margin": lbl_margin,
+				"multiplier": pos["multiplier"]}
+
+
+func _update_leverage_values(positions: Array[Dictionary]) -> void:
+	for pos: Dictionary in positions:
+		var stock_id: String = pos["stock_id"]
+		if not _leverage_row_refs.has(stock_id):
+			continue
+		var refs: Dictionary = _leverage_row_refs[stock_id]
+
 		var qty: int = pos["quantity"]
 		var current_price: int = PriceEngine.get_current_price(stock_id)
 		var market_val: int = current_price * qty
-		var entry_val: int = pos["entry_price"] * qty
-		var unrealized_pnl: int = market_val - entry_val
-		var lbl_pnl: Label = Label.new()
-		lbl_pnl.text = ("%+d" % unrealized_pnl)
-		lbl_pnl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var unrealized_pnl: int = market_val - pos["entry_price"] * qty
+
+		var lbl_pnl: Label = refs["lbl_pnl"]
+		lbl_pnl.text = "%+d" % unrealized_pnl
 		if unrealized_pnl > 0:
 			lbl_pnl.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
 		elif unrealized_pnl < 0:
 			lbl_pnl.add_theme_color_override("font_color", ThemeSetup.LOSS_BLUE)
 		else:
 			lbl_pnl.add_theme_color_override("font_color", ThemeSetup.NEUTRAL_GRAY)
-		row.add_child(lbl_pnl)
 
-		# Margin ratio = equity / market_val × 100%
-		# equity = market_val − borrowed − accrued_interest
-		var lbl_margin: Label = Label.new()
-		lbl_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var lbl_margin: Label = refs["lbl_margin"]
 		if market_val > 0:
 			var equity: int = market_val - pos["borrowed"] - pos["accrued_interest"]
 			var margin_ratio: float = float(equity) / float(market_val) * 100.0
 			lbl_margin.text = "%.1f%%" % margin_ratio
-			# Warn colour when below margin_call threshold (~20%)
 			var mc_threshold: float = LeverageManager.get_margin_call_threshold(
-					pos["multiplier"]) * 100.0
+					refs["multiplier"]) * 100.0
 			if margin_ratio < mc_threshold:
 				lbl_margin.add_theme_color_override("font_color", Color(0.95, 0.60, 0.10))
 			else:
@@ -434,7 +464,6 @@ func _refresh_leverage_section() -> void:
 		else:
 			lbl_margin.text = "—"
 			ThemeSetup.style_label_dim(lbl_margin)
-		row.add_child(lbl_margin)
 
 
 func _refresh_transactions() -> void:

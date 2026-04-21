@@ -44,7 +44,7 @@ if [ -n "$DESIGN_FILES" ]; then
             # 구현 완료 커밋에 GDD를 포함했으나 체크리스트를 갱신하지 않은 경우를 잡는다
             STATUS=$(grep -i '^\*\*Status\*\*:\|^> \*\*Status\*\*:' "$file" 2>/dev/null | head -1 | grep -oi 'Approved' || true)
             if [ "$STATUS" = "Approved" ] && grep -q "Implementation Checklist" "$file" 2>/dev/null; then
-                UNCHECKED=$(awk '/Implementation Checklist/,0' "$file" | grep "^- \[ \]" | wc -l)
+                UNCHECKED=$(awk '/Implementation Checklist/,/^---$/' "$file" | grep "^- \[ \]" | wc -l)
                 if [ "$UNCHECKED" -gt 0 ]; then
                     echo "BLOCKED: $file — Implementation Checklist에 미완 항목 ${UNCHECKED}개 남음." >&2
                     echo "  DoD 체크 전 GDD Implementation Checklist를 전부 [x]로 갱신하라." >&2

@@ -77,7 +77,7 @@
 
 ## 베타 코드 리뷰 잔여 항목 (2026-04-14)
 
-### ✅ TD-CR-01. ai_competitor.gd EOD 재계산 O(day) — **해결됨 (2026-04-14)**
+### ~~TD-CR-01. ai_competitor.gd EOD 재계산 O(day)~~ — **해결됨 (2026-04-14)**
 
 - `_compute_eod_for`에 `eod_rng_states: Array[int]` 캐시 도입. 전일 EOD RNG 상태를 저장해
   다음 호출 시 O(1) 한 스텝만 진행. Day 0 또는 캐시 미존재 시만 O(day) 재계산.
@@ -129,11 +129,102 @@
 
 - PriceEngine 구현 완료. AC 검증은 Polish QA 단계에서 일괄 처리.
 
-### TD-DR-03. skill_tree_overlay.gd orphan 파일
+### ~~TD-DR-03. skill_tree_overlay.gd orphan 파일~~ — **해결됨 (2026-04-15)**
 
-**출처**: 2026-04-15 전체 GDD 디자인 리뷰  
-**우선순위**: Low → 처리 완료 2026-04-15  
 **결과**: `src/deprecated/skill_tree_overlay.gd`로 이동. 코드/씬에서 미참조 확인됨.
+
+---
+
+## 디자인 리뷰 2026-04-21 식별 항목 (전체 GDD 전수 감사)
+
+### TD-DR-04. S3 루머 채널 — PriceEngine 가격 선반영 미구현
+
+**출처**: 2026-04-21 전체 GDD 전수 감사  
+**우선순위**: Medium (루머가 뉴스 피드에는 표시되지만 가격에 영향 없음)  
+**목표 스프린트**: Sprint 11 (Polish)  
+**관련 GDD**: rumor-channel.md §9 가격 선반영 구현, price-engine.md §9
+
+- `PriceEngine._rumor_pressure: Dictionary` 상태 미추가
+- `PriceEngine._on_rumor_hint(rumor: Dictionary)` 핸들러 미구현
+- `process_tick()` Step 4-c rumor_delta 계산 누락
+- Step 5 공식 갱신 (`total_delta = pattern + drift + event + player + rumor`) 누락
+- F5 거래량 공식 `tick_energy`에 `|rumor_delta|` 미포함
+- 장 마감 시 `_rumor_pressure` 정리 누락
+- `price_engine_config.json` 미생성 (`RUMOR_PRESSURE_STRENGTH: 0.0005`)
+- `PriceEngine.reset()` 시 `_rumor_pressure.clear()` 미포함
+
+### TD-DR-05. DLC 시장 필터링 인프라 — NewsEventSystem 미구현
+
+**출처**: 2026-04-21 전체 GDD 전수 감사  
+**우선순위**: Low (한국 시장 단일 서비스 시 무관, DLC 시 필수)  
+**목표 스프린트**: DLC 그린라이트 후  
+**관련 GDD**: news-events.md §9 DLC 확장성 섹션
+
+- `event_pool.json`에 `"market_id"` 필드 미추가
+- `NewsEventSystem` 이벤트 선택 시 `active_market_id` 필터링 로직 미구현
+- `event_pool_us.json`, `event_pool_jp.json` 스텁 파일 미생성
+- 테스트 `test_event_pool_filtered_by_market_id()` 미추가
+
+### TD-DR-06. ShortSelling 대차 풀(Borrow Pool) 시스템 미구현
+
+**출처**: 2026-04-21 전체 GDD 전수 감사  
+**우선순위**: Medium (현재 무제한 차입 가능 — 밸런스 영향)  
+**목표 스프린트**: Sprint 11 (Polish)  
+**관련 GDD**: short-selling.md §9 진입점/호출 경로
+
+- `short_selling_config.json`에 `borrowableRatioByVolatility` 미추가
+- `ShortSellingSystem._borrow_pool: Dictionary` 상태 변수 미추가
+- `ShortSellingSystem._init_pools()` 메서드 미구현
+- `ShortSellingSystem.get_borrow_pool(stock_id) -> Dictionary` 공개 API 미구현
+- `OrderEngine` SELL_SHORT 검증 4-S5 단계 (pool 잔량 체크) 미추가
+- `GameClock.on_season_start` → `_init_pools()` 연결 누락
+
+### TD-DR-07. StockDatabase DLC 동적 로드 미구현
+
+**출처**: 2026-04-21 전체 GDD 전수 감사  
+**우선순위**: Low (한국 시장 단일 서비스 시 무관, DLC 시 필수)  
+**목표 스프린트**: DLC 그린라이트 후  
+**관련 GDD**: stock-database.md §9 DLC 확장성 섹션
+
+- `stock_database.gd`가 `stocks.json` 하드코딩 경로 사용 (`stocks_kr.json` 미전환)
+- `StockData._ready()` 동적 경로 로드 (`"stocks_%s.json" % active_market_id`) 미구현
+- `stocks_us.json`, `stocks_jp.json` 스텁 파일 미생성
+- 기존 `stocks.json` 참조 교체 미완료
+
+### TD-DR-08. GameClock 거래 시간 MarketProfile 동적 로드 미구현
+
+**출처**: 2026-04-21 전체 GDD 전수 감사  
+**우선순위**: Low (한국 시장 단일 서비스 시 무관, DLC 시 필수)  
+**목표 스프린트**: DLC 그린라이트 후  
+**관련 GDD**: game-clock.md §9 DLC 확장성 섹션
+
+- `MINUTES_PER_DAY = 390` 상수 → `MarketProfile.get_calendar_param("trading_minutes")` 동적 로드로 교체 필요
+- `TICKS_PER_DAY` 등 파생 상수 연쇄 갱신 구조 필요
+- `market_kr.json`에 `"trading_minutes": 390` 미등록
+- `GameClock._ready()` → `MarketProfile` 로드 연결 필요
+- 테스트 `test_trading_minutes_loaded_from_market_profile()` 미추가
+
+### TD-DR-09. AiCompetitor 수익률 분포 MarketProfile 미전환
+
+**출처**: 2026-04-21 전체 GDD 전수 감사  
+**우선순위**: Low (한국 시장 단일 서비스 시 무관, DLC 시 필수)  
+**목표 스프린트**: DLC 그린라이트 후  
+**관련 GDD**: ai-competitor.md §9 DLC 확장성 섹션
+
+- 티어별 수익률 정규분포 파라미터 (`mean`, `std_dev`)가 코드 내 하드코딩
+- `market_kr.json`에 `"ai_return_distribution": {...}` 미등록
+- `AiCompetitor.init_season()` MarketProfile 파라미터 수신 경로 미설계
+
+### TD-DR-10. 52주 신고가/저가 오더북 행 미구현
+
+**출처**: 2026-04-21 전체 GDD 전수 감사  
+**우선순위**: Low  
+**목표 스프린트**: Polish (Sprint 11 이후)  
+**관련 GDD**: order-book.md §9 블록 6 (52주 행)
+
+- `StockData.week52_high/low` 필드 미추가 (`stocks.json` 미등록)
+- `OrderPanel` 블록 6 52주 행 UI 미구현
+- `order_panel.gd:258` 주석: `"생략: StockData.week52_high/low 미구현"`
 
 ---
 
@@ -143,11 +234,8 @@
 
 - `_active_slot_id` private var + `get_active_slot_id()` 게터 완료.
 
-### TD-CR-04. SettlementReporter._weekly_xp_gained 세이브/로드 간 소실
+### ~~TD-CR-04. SettlementReporter._weekly_xp_gained 세이브/로드 간 소실~~ — **해결됨 (2026-04-15)**
 
-**출처**: 2026-04-15 전체 코드 리뷰  
-**우선순위**: Low  
-**목표 스프린트**: Sprint 9 → **✅ 2026-04-15 해결**  
 XpSystem._weekly_xp 필드 추가 + get_weekly_xp()/reset_weekly_xp() API. SettlementReporter는 자체 카운터 제거 후 XpSystem.get_weekly_xp() 읽기. 세이브/로드 직렬화는 XpSystem.get_save_data()에서 처리.
 
 ### ~~TD-CR-05. 단위 테스트 미작성 시스템 (P1)~~ — **해결됨 (2026-04-20, S10-08)**

@@ -478,23 +478,23 @@ estimated_amount = quantity × reference_price
 
 ## Acceptance Criteria
 
-- [ ] 종목 리스트 클릭 시 차트 + 주문 패널이 해당 종목으로 전환됨
-- [ ] 상태 바에 시즌/주차/요일/틱/배속/총자산이 정확히 표시됨
-- [ ] 주문 패널에서 시장가/지정가 주문이 정상 제출됨
-- [ ] 미해금 주문 유형에 자물쇠 아이콘이 표시됨
-- [ ] 체결 시 시각/청각 피드백이 즉각 제공됨
-- [ ] 주문 거부 시 에러 메시지가 인라인 표시됨
-- [ ] 일시정지 시 오버레이 표시 + UI 조작 가능 + 시간 정지
-- [ ] PRE_MARKET에서 프리마켓 뉴스 + "장 시작" 버튼 표시
-- [ ] MARKET_CLOSED에서 주문 비활성화 + 정산 리포트 표시
-- [ ] 하단 패널에서 뉴스↔VI/CB↔포트폴리오 탭 전환 정상 작동
-- [ ] 비활성 탭에 미확인 이벤트 발생 시 안읽음 뱃지(카운트 또는 ●)가 표시됨
-- [ ] 탭 선택 시 해당 탭의 안읽음 뱃지가 클리어됨
-- [ ] 키보드 단축키가 모두 정상 작동
-- [ ] 최소 해상도 1280×720에서 레이아웃 깨짐 없음
-- [ ] 성능: 종목 전환 100ms 이내, 틱 처리 및 UI 갱신 비용 16ms 이내 (60fps 프레임 버짓 이내)
-- [ ] StockListPanel: 가격 미변동 행은 매 틱 갱신 skip (dirty flag 동작 확인)
-- [ ] 각 서브컴포넌트 파일의 메서드 중 40줄 초과 없음
+- [ ] 종목 리스트 클릭 시 차트 + 주문 패널이 해당 종목으로 전환됨 — S10-12 매뉴얼 QA 대기
+- [ ] 상태 바에 시즌/주차/요일/틱/배속/총자산이 정확히 표시됨 — S10-12 매뉴얼 QA 대기
+- [ ] 주문 패널에서 시장가/지정가 주문이 정상 제출됨 — S10-12 매뉴얼 QA 대기
+- [ ] 미해금 주문 유형에 자물쇠 아이콘이 표시됨 — S10-12 매뉴얼 QA 대기
+- [ ] 체결 시 시각/청각 피드백이 즉각 제공됨 — S10-12 매뉴얼 QA 대기
+- [ ] 주문 거부 시 에러 메시지가 인라인 표시됨 — S10-12 매뉴얼 QA 대기
+- [ ] 일시정지 시 오버레이 표시 + UI 조작 가능 + 시간 정지 — S10-12 매뉴얼 QA 대기
+- [ ] PRE_MARKET에서 프리마켓 뉴스 + "장 시작" 버튼 표시 — S10-12 매뉴얼 QA 대기
+- [ ] MARKET_CLOSED에서 주문 비활성화 + 정산 리포트 표시 — S10-12 매뉴얼 QA 대기
+- [ ] 하단 패널에서 뉴스↔VI/CB↔포트폴리오 탭 전환 정상 작동 — S10-12 매뉴얼 QA 대기
+- [ ] 비활성 탭에 미확인 이벤트 발생 시 안읽음 뱃지(카운트 또는 ●)가 표시됨 — S10-12 매뉴얼 QA 대기
+- [ ] 탭 선택 시 해당 탭의 안읽음 뱃지가 클리어됨 — S10-12 매뉴얼 QA 대기
+- [ ] 키보드 단축키가 모두 정상 작동 — S10-12 매뉴얼 QA 대기
+- [ ] 최소 해상도 1280×720에서 레이아웃 깨짐 없음 — S10-12 매뉴얼 QA 대기
+- [ ] 성능: 종목 전환 100ms 이내, 틱 처리 및 UI 갱신 비용 16ms 이내 — S10-12 프로파일러 검증 대기
+- [x] StockListPanel: 가격 미변동 행은 매 틱 갱신 skip (dirty flag 동작 확인)
+- [ ] 각 서브컴포넌트 파일의 메서드 중 40줄 초과 없음 — S10-12 코드 리뷰 검증 대기
 
 ## Open Questions
 
@@ -555,12 +555,12 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 | 서브컴포넌트 | 파일 | 상태 |
 |------------|------|------|
-| StockListPanel | `src/ui/stock_list_panel.gd` | ⬜ |
-| StatusBar | `src/ui/status_bar.gd` | ⬜ |
-| OrderPanel | `src/ui/order_panel.gd` | ⬜ |
-| SettlementReporter | `src/ui/settlement_reporter.gd` | ⬜ |
-| ToastManager | `src/ui/toast_manager.gd` | ⬜ |
-| TradingScreen 리팩터 | `src/ui/trading_screen.gd` | ⬜ |
+| StockListPanel | `src/ui/stock_list_panel.gd` | ✅ |
+| StatusBar | `src/ui/status_bar.gd` | ✅ |
+| OrderPanel | `src/ui/order_panel.gd` | ✅ |
+| SettlementReporter | `src/ui/settlement_reporter.gd` | ✅ |
+| ToastManager | `src/ui/toast_manager.gd` | ✅ |
+| TradingScreen 리팩터 | `src/ui/trading_screen.gd` | ✅ (586줄, 기존 1930줄 → 70% 감소) |
 
 ### 빌드 검증
 

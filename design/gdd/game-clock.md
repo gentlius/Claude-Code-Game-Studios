@@ -265,7 +265,7 @@ total_season_days = weeks_per_season * 5
 - [x] `on_season_start` 시그널이 새 시즌 진입 시 정확히 1회 발행된다
 - [x] `get_current_tick()`이 MARKET_OPEN 상태에서 0~1559 범위의 정확한 값을 반환한다
 - [x] SEASON_END 확인 후 새 시즌의 PRE_MARKET으로 정상 전환된다
-- [ ] 모든 튜닝 상수(BASE_TICK_INTERVAL, TICKS_PER_DAY 등)가 GDScript const 또는 외부 data 파일에 정의되어 있으며 소스 코드 내 하드코딩이 없음
+- [x] 모든 튜닝 상수(BASE_TICK_INTERVAL, TICKS_PER_DAY 등)가 GDScript const 또는 외부 data 파일에 정의되어 있으며 소스 코드 내 하드코딩이 없음
 
 ---
 
@@ -317,3 +317,16 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 ### 빌드 검증
 
 - [x] 바이너리 실행 확인: QA Lead 서명 Eric (2026-04-07)
+
+---
+
+## DLC 확장성 — MarketProfile 추상화
+
+> 한국 시장 Approved 조건과 별개. DLC 그린라이트 시 구현. tech-debt TD-DR-08 참조.  
+> 근거: [ADR-021](../../docs/architecture/021-market-profile-data-driven.md) / 감사 항목: **C-01**
+
+- [ ] `MINUTES_PER_DAY = 390` 상수 → `_profile.trading_minutes` 동적 로드로 교체
+- [ ] `TICKS_PER_DAY` 등 파생 상수 전부 연쇄 갱신: `TICKS_PER_DAY = TICKS_PER_MINUTE * _profile.trading_minutes`
+- [ ] `assets/data/market_profiles/market_kr.json` — `"trading_minutes": 390` 등록
+- [ ] MarketProfile 로드 진입점: `GameClock._ready()` → `MarketProfile.load(active_market_id)`
+- [ ] 테스트: `test_game_clock.gd` — `test_trading_minutes_loaded_from_market_profile()` 추가

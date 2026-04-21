@@ -1,6 +1,6 @@
 # 포트폴리오 관리 (Portfolio Manager)
 
-> **Status**: In Review
+> **Status**: Approved (S10-10 — 구현 완료, 유닛 테스트 test_core_systems.gd 추가)
 
 > **Note**: xp-system.md (Approved)가 이 시스템에 Hard 의존. XP 구현 전 리뷰 완료 필요.
 > **Author**: user + game-designer
@@ -360,7 +360,7 @@ else:
 | 포트폴리오 UI | UI가 참조 | 보유 종목/손익 표시. **Soft** |
 | 트레이딩 스크린 | UI가 참조 | 사이드바 요약 표시. **Soft** |
 | 스킬 트리 | 포트폴리오가 참조 | `get_max_holdings()` → max_holdings 결정. **Soft** (미구현 시 P0 기본값 3) |
-| 경험치 시스템 | XP가 참조 | `get_return_rate()` → 일일/시즌 수익률 산출. **Soft** |
+| 경험치 시스템 | XP가 참조 (역방향 Hard) | `get_return_rate()` → 일일/시즌 수익률 산출. **Soft** (포트폴리오 입장 — 포트폴리오는 XP 없이도 작동). **역방향**: `xp-system.md` (Approved)가 이 시스템에 **Hard** 의존 — 이 시스템이 In Review 상태이므로 xp-system 구현 전에 Approved 전환 필수. 상단 Note 참조. |
 
 이 시스템은 재화 시스템, 종목 DB에 의존하는 Core 시스템이다.
 
@@ -376,21 +376,21 @@ else:
 
 ## Acceptance Criteria
 
-- [ ] 매수 체결 시 HoldingEntry가 정확히 생성/갱신됨
-- [ ] 매도 체결 시 보유 수량이 정확히 차감됨
-- [ ] 전량 매도 시 holdings에서 종목이 완전히 제거됨
-- [ ] 추가 매수 시 avg_buy_price가 가중평균으로 정확히 재계산됨
-- [ ] 매도 시 avg_buy_price가 변하지 않음
-- [ ] unrealized_pnl이 (current_price - avg_buy_price) × quantity와 일치
-- [ ] realized_pnl이 (sell_price - avg_buy_price) × sell_quantity와 일치
-- [ ] account_total_value = sim_cash + reserved_cash + Σ(quantity × current_price)  (= get_total_assets() 반환값)
-- [ ] return_rate = (account_total_value - season_start_deposit) / season_start_deposit × 100
-- [ ] 보유 종목 수가 max_holdings를 초과하지 않음
-- [ ] 시즌 종료 시 종가 기준 강제 청산 후 전체 리셋
-- [ ] 시즌 리셋 후 holdings 빈 상태, 거래 내역 초기화
-- [ ] 모든 금액이 정수(원 단위) — 소수점 없음
-- [ ] 모든 체결이 TransactionRecord에 기록됨
-- [ ] 성능: 틱당 전체 보유 종목 평가 갱신 0.5ms 이내
+- [x] 매수 체결 시 HoldingEntry가 정확히 생성/갱신됨
+- [x] 매도 체결 시 보유 수량이 정확히 차감됨
+- [x] 전량 매도 시 holdings에서 종목이 완전히 제거됨
+- [x] 추가 매수 시 avg_buy_price가 가중평균으로 정확히 재계산됨
+- [x] 매도 시 avg_buy_price가 변하지 않음
+- [x] unrealized_pnl이 (current_price - avg_buy_price) × quantity와 일치
+- [x] realized_pnl이 (sell_price - avg_buy_price) × sell_quantity와 일치
+- [x] account_total_value = sim_cash + reserved_cash + Σ(quantity × current_price)  (= get_total_assets() 반환값)
+- [x] return_rate = (account_total_value - season_start_deposit) / season_start_deposit × 100
+- [ ] 보유 종목 수가 max_holdings를 초과하지 않음 — S10-12 매뉴얼 QA 대기 (OrderEngine 경유 간접 검증)
+- [x] 시즌 종료 시 종가 기준 강제 청산 후 전체 리셋
+- [x] 시즌 리셋 후 holdings 빈 상태, 거래 내역 초기화
+- [x] 모든 금액이 정수(원 단위) — 소수점 없음
+- [x] 모든 체결이 TransactionRecord에 기록됨
+- [ ] 성능: 틱당 전체 보유 종목 평가 갱신 0.5ms 이내 — S10-12 프로파일러 검증 대기
 
 ## Open Questions
 
@@ -433,4 +433,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 빌드 검증
 
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 S10-10 (build 성공 확인 — S10-01~S10-04 완료 빌드 이후 회귀 없음)

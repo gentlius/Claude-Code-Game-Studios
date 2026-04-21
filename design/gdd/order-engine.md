@@ -505,6 +505,9 @@ fee = floor(trade_value × fee_rate)
 | PRE_MARKET 시장가 매수 → 버퍼 초과 급등 (15%+) | 예약금 범위 초과 → REJECTED ("개장 가격 급변으로 체결 불가") + 예약금 전액 복원. 극히 드문 케이스 (15% 버퍼는 야간 복수 이벤트에도 대응) | 버퍼 초과 시 안전 거절. 복수 주문도 예약금이 각각 선차감되므로 자원 충돌 없음 |
 | PRE_MARKET 복수 시장가 매수 → 잔액 부족 | 각 주문마다 예약금이 제출 시점에 선차감되므로, 잔액 부족 시 **제출 시점에** REJECTED. 틱 1이 아닌 주문 제출 시 즉시 차단됨 | 예약 방식으로 기존 "틱 1 서프라이즈 거절" 문제 해결 |
 | PRE_MARKET에서 슬롯 한도까지 신규 종목 주문 제출 후 추가 신규 종목 주문 | PRE_MARKET 주문 제출 시 `effective_holding_count`로 슬롯 검증 — 큐 내 미체결 신규 종목도 카운트에 포함. 예: max_holdings=3, 현재 보유 1종목, 큐에 신규 2종목 → effective=3 → 추가 신규 종목 REJECTED. 이미 큐에 있는 종목의 추가 매수는 슬롯 면제 | 큐 반영 슬롯 검증. 체결 시점 서프라이즈 방지 |
+| **ETF 종목 주문 — P3 미해금** | REJECTED + "섹터 ETF 미해금" | P3 스킬 해금 게이팅 |
+| **ETF 종목 주문 — P3 해금, 시장가** | 슬리피지 없음. 즉시 체결 (현재가 = 체결가). 지정가/손절익절 주문도 허용하나 ETF는 PriceEngine이 직접 가격 결정하므로 슬리피지 개념 없음 | ETF는 실물 지수 추종 상품 — 가격 왜곡 없음 |
+| **ETF 종목 주문 — TR3(공매도) 또는 TR4(레버리지) 시도** | REJECTED + "ETF는 공매도/레버리지 불가" | ETF 상품 특성상 단순 매수/매도만 허용 |
 | VI 발동 중 해당 종목 지정가 체결 | VI 정지 기간 동안 해당 종목 가격이 동결되므로 지정가 조건 체크는 계속하되, 가격 변동이 없어 새로운 체결은 사실상 없음. VI 해제 후 첫 틱에 가격이 갱신되면 조건 재평가 | 가격 동결 = 체결 조건 변화 없음 |
 | CB Stage 1 정지 중 PRE_MARKET 큐 및 지정가 처리 | CB 발동 시 Order Engine은 ACCEPTING 상태를 유지하나, 가격 엔진이 전 종목 가격을 동결하므로 시장가/지정가 모두 **체결 유예**. 정지 해제 후 첫 틱에 가격 갱신 → 큐 순서대로 처리 재개. 단, CB가 틱 0에 발동되는 경우(극히 드문 케이스): pre_market_queue는 가격 엔진 갱신 후 처리되므로, 갱신된 가격으로 체결 시도 → CB 발동으로 가격 동결 → 다음 틱으로 이월 | CB는 가격 엔진 레벨에서 동결. 주문 엔진은 간접적으로 유예됨 |
 | CB Stage 2 (조기 마감) 시 미체결 주문 | 즉시 장 마감 처리: 전체 미체결 지정가 EXPIRED + 예약/잠금 복원. pre_market_queue에 잔여 주문이 있으면 REJECTED ("장 조기 마감") + 예약금 복원 | Stage 2 = 당일 거래 종료. 정산 안전 우선 |
@@ -524,6 +527,8 @@ fee = floor(trade_value × fee_rate)
 | 오디오 시스템 | 오디오가 참조 | on_order_filled 이벤트. **Soft** |
 | 포트폴리오 UI | 간접 참조 | `get_total_reserved_cash()` → PortfolioManager 캐시 경유로 예약금 표시. **Soft** |
 | 시즌/대회 관리 | 시즌이 참조 | `expire_all_pending()` — 시즌 종료 강제 청산 시퀀스 Step ①. **Soft** (V-Slice) |
+| 뉴스/이벤트 시스템 | 설계 참조 (런타임 의존 없음) | `pre_market_buffer_pct = 0.15`는 `news-events.md`의 MEGA 이벤트 `max_single_impact = 0.15` (15%)에 맞춰 설계됨. 런타임 API 호출 없음. `max_single_impact` 변경 시 `pre_market_buffer_pct`도 동일하게 갱신 필요. **Design-time Soft** |
+| 세이브/로드 | 설계 참조 | 예약금·잠금 수량은 장 마감 시 전량 초기화되므로 시즌 간 저장 불필요. `save-load.md §3-4` 협의 결과. **Design-time Note** |
 
 ## Tuning Knobs
 
@@ -537,21 +542,21 @@ fee = floor(trade_value × fee_rate)
 
 ## Acceptance Criteria
 
-- [ ] 시장가 매수 시 current_price × quantity가 sim_cash에서 정확히 차감됨
-- [ ] 시장가 매도 시 current_price × quantity가 sim_cash에 정확히 추가됨
-- [ ] 지정가 매수 제출 시 limit_price × quantity가 선차감됨
-- [ ] 지정가 체결 시 유리한 가격 차액이 정확히 환불됨
-- [ ] 지정가 만료/취소 시 예약 금액이 전액 복원됨
-- [ ] 지정가 매도 제출 시 수량이 잠금 처리됨
-- [ ] 잠금 수량이 다른 매도 주문에서 가용 수량에서 제외됨
-- [ ] 잔액 부족 시 REJECTED 처리되고 잔액 불변
-- [ ] 보유 한도 초과 시 REJECTED (이미 보유 종목 추가 매수는 허용)
-- [ ] 장 마감 시 전체 미체결 주문 EXPIRED + 예약/잠금 복원
-- [ ] PAUSED 중 주문 접수 → 재개 후 첫 틱에 정상 체결
-- [ ] PRE_MARKET 주문 → 장 시작 첫 틱(틱 0)에 정상 체결되며, 예약금 차액이 정확히 환불됨
-- [ ] 체결 시 포트폴리오에 정확히 반영 (add_holding / remove_holding)
-- [ ] 모든 금액이 정수 (원 단위)
-- [ ] 성능: 10개 종목 전체 지정가 체크 + 체결 처리 1ms 이내
+- [x] 시장가 매수 시 current_price × quantity가 sim_cash에서 정확히 차감됨
+- [x] 시장가 매도 시 current_price × quantity가 sim_cash에 정확히 추가됨
+- [x] 지정가 매수 제출 시 limit_price × quantity가 선차감됨
+- [ ] 지정가 체결 시 유리한 가격 차액이 정확히 환불됨 — S10-12 매뉴얼 QA 대기
+- [x] 지정가 만료/취소 시 예약 금액이 전액 복원됨
+- [x] 지정가 매도 제출 시 수량이 잠금 처리됨
+- [x] 잠금 수량이 다른 매도 주문에서 가용 수량에서 제외됨
+- [x] 잔액 부족 시 REJECTED 처리되고 잔액 불변
+- [ ] 보유 한도 초과 시 REJECTED (이미 보유 종목 추가 매수는 허용) — S10-12 매뉴얼 QA 대기
+- [ ] 장 마감 시 전체 미체결 주문 EXPIRED + 예약/잠금 복원 — S10-12 매뉴얼 QA 대기
+- [x] PAUSED 중 주문 접수 → 재개 후 첫 틱에 정상 체결
+- [ ] PRE_MARKET 주문 → 장 시작 첫 틱(틱 0)에 정상 체결되며, 예약금 차액이 정확히 환불됨 — S10-12 매뉴얼 QA 대기
+- [x] 체결 시 포트폴리오에 정확히 반영 (add_holding / remove_holding)
+- [x] 모든 금액이 정수 (원 단위)
+- [ ] 성능: 10개 종목 전체 지정가 체크 + 체결 처리 1ms 이내 — S10-12 프로파일러 검증 대기
 
 ## Open Questions
 

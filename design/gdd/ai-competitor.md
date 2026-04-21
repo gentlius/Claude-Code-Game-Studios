@@ -424,8 +424,9 @@ participant_rng_seed = (season_seed × 1000003) XOR (participant_id × 998244353
 ### AC-02 티어 단조성 (글로벌 순위 공정성)
 
 ```
-테스트: 전 11개 티어에 대해 get_all_return_pcts 호출 후
+테스트: 전 11개 티어에 대해 get_eod_snapshot 호출 후
         각 티어의 중앙값(median) 비교
+(주의: API는 get_all_return_pcts → get_eod_snapshot으로 변경됨. ADR 기준 현행 API 사용)
 기대: median(tier T+1) > median(tier T) — 모든 인접 티어 쌍에서 성립
       (샘플 크기 N=1000, season_seed=42 기준)
 ```
@@ -544,17 +545,17 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 호출 경로
 
-- [ ] `SeasonManager.start_season()` → `AiCompetitor.init_season(player_tier, participant_counts, seed)` 존재 확인
-- [ ] `GameClock.on_tick` 시그널 → `AiCompetitor._on_tick(tick, day, week)` 구독 — 틱 분산 계산
-- [ ] `GameClock.on_market_close` 시그널 → `AiCompetitor._on_market_close()` 구독 — snapshot swap + 정렬
-- [ ] `AiCompetitor.get_eod_snapshot(tier) -> Array[float]` 공개 API 존재
-- [ ] `AiCompetitor.get_sorted_indices(tier) -> Array[int]` 공개 API 존재
-- [ ] `AiCompetitor.estimate_player_rank(player_return_pct: float) -> int` 공개 API 존재
-- [ ] `AiCompetitor.get_participant_meta(tier, id) -> Dictionary` → `{display_name, is_master_of_investment}` 반환
-- [ ] `AiCompetitor.get_save_data()` → `{season_seed, participant_counts, eod_snapshots}` 직렬화
-- [ ] `AiCompetitor.load_save_data(data)` → `eod_snapshot` 직접 복원, `target_r` 재생성, `sorted_indices` 재정렬
-- [ ] `AiCompetitor.reset()` 존재 (테스트 격리)
-- [ ] `SeasonManager.get_leaderboard()` — `get_all_return_pcts()` 대신 `get_eod_snapshot()` / `get_sorted_indices()` 호출로 전환
+- [x] `SeasonManager.start_season()` → `AiCompetitor.init_season(player_tier, participant_counts, seed)` 존재 확인
+- [x] `GameClock.on_tick` 시그널 → `AiCompetitor._on_tick(tick, day, week)` 구독 — 틱 분산 계산
+- [x] `GameClock.on_market_close` 시그널 → `AiCompetitor._on_market_close()` 구독 — snapshot swap + 정렬
+- [x] `AiCompetitor.get_eod_snapshot(tier) -> Array[float]` 공개 API 존재
+- [x] `AiCompetitor.get_sorted_indices(tier) -> Array[int]` 공개 API 존재
+- [x] `AiCompetitor.estimate_player_rank(player_return_pct: float) -> int` 공개 API 존재
+- [x] `AiCompetitor.get_participant_meta(tier, id) -> Dictionary` → `{display_name, is_master_of_investment}` 반환
+- [x] `AiCompetitor.get_save_data()` → `{season_seed, participant_counts, eod_snapshots}` 직렬화
+- [x] `AiCompetitor.load_save_data(data)` → `eod_snapshot` 직접 복원, `target_r` 재생성, `sorted_indices` 재정렬
+- [x] `AiCompetitor.reset()` 존재 (테스트 격리)
+- [x] `SeasonManager.get_leaderboard()` — `get_eod_snapshot()` / `get_sorted_indices()` / `estimate_player_rank()` 호출 전환 완료 (ADR-008)
 
 ### AC → 테스트 매핑
 
@@ -577,6 +578,17 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 ### 빌드 검증
 
 - [x] 바이너리 실행 확인: QA Lead 서명 — 내부 감사 2026-04-15 (Alpha 완료 빌드, SCRIPT ERROR 없음)
+
+### DLC 확장성 — MarketProfile 추상화 (Sprint 10)
+
+> AI 경쟁자 수익률 분포가 한국 시장 변동성 기준으로 고정된 부분을 MarketProfile로 분리한다.  
+> 근거: [ADR-021](../../docs/architecture/021-market-profile-data-driven.md) / 감사 항목: **M-02**
+
+- [ ] 티어별 수익률 정규분포 파라미터 (`mean`, `std_dev`) → `_profile.ai_return_distribution` 딕셔너리 로드로 교체
+- [ ] `assets/data/market_profiles/market_kr.json` — `"ai_return_distribution": {"BRONZE": {"mean": 0.03, "std": 0.08}, ...}` 등록
+- [ ] 시즌 길이(`season-manager.md` M-01)가 변경될 때 수익률 분포도 재조정되어야 함 — 연동 확인
+- [ ] `AiCompetitor.init_season()` 에서 MarketProfile 파라미터 수신 경로 설계: `SeasonManager` 경유 또는 직접 로드
+- [ ] 테스트: `test_ai_competitor.gd` — `test_return_distribution_loaded_from_market_profile()` 추가
 
 ---
 

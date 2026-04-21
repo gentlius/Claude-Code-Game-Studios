@@ -2,7 +2,7 @@
 
 > **Status**: Approved (구현 완료 2026-04-17 — 빌드 검증 대기)
 > **Author**: game-designer
-> **Last Updated**: 2026-04-17
+> **Last Updated**: 2026-04-20
 > **Implements Pillar**: 판단이 곧 실력 (Judgment is King), 체감있는 성장 (Feel the Growth)
 > **Skill Gate**: TR3 (선행 조건: TR2 손절/익절 + A2 보조지표)
 > **See**: design/gdd/skill-tree.md, design/gdd/order-engine.md, design/gdd/portfolio-manager.md
@@ -356,6 +356,63 @@ account_total_value = sim_cash + reserved_cash
 숏 포지션 수가 `max_short_positions`에 도달한 상태에서 SELL_SHORT 제출 시:
 REJECTED ("숏 포지션 한도 초과 (최대 {max_short_positions}개)")
 
+### 규칙 12. 대차 풀 (Borrow Pool)
+
+각 종목에는 공매도 가능 물량 풀이 존재하며, `ShortSellingSystem`이 독립 관리한다.
+
+#### 풀 초기화
+
+시즌 시작 시 모든 종목의 풀을 초기화한다. `max_pool`은 종목의 `listed_shares`와
+`VolatilityProfile`에 따른 `borrowable_ratio`로 산출한다:
+
+```
+max_pool   = floor(listed_shares × borrowable_ratio)
+current_pool = max_pool   ## 시즌 시작 시 만충
+```
+
+`VolatilityProfile → borrowable_ratio` 매핑 (config 외부화):
+
+| VolatilityProfile | 종목 성격 | borrowable_ratio | 설계 의도 |
+|-------------------|----------|-----------------|----------|
+| LOW | 대형 우량주 | 12% | 사실상 무제한. 마음껏 공매도 가능 |
+| MEDIUM | 중형주 | 5% | 적당한 제약. 소수 플레이어가 몰리면 고갈 |
+| HIGH | 소형주 | 2% | 체감되는 제약. 전략적 선점 필요 |
+| EXTREME | 소형 테마주 | 1% | 조금만 몰려도 고갈. 급등주 무지성 공매도 차단 |
+
+#### 풀 차감 (SELL_SHORT 체결 시)
+
+SELL_SHORT 주문 검증에 **4-S5** 단계를 추가한다:
+
+```
+4-S5. 대차 풀 잔량 검증
+    - ShortSellingSystem.get_borrow_pool(stock_id) < quantity
+      → REJECTED ("대여 가능 물량 부족 (잔량: {current_pool}주)")
+    - 통과 시: current_pool -= quantity  (체결과 동시에 차감)
+```
+
+부분 체결 없음: 잔량이 요청 수량 미만이면 전량 거부한다.
+
+#### 풀 반환 (포지션 청산 시)
+
+포지션이 닫힐 때마다 차감된 수량을 즉시 풀에 반환한다:
+
+```
+on BUY_TO_COVER FILLED | on_forced_liquidation | on_season_end liquidation:
+    current_pool = min(current_pool + position.quantity, max_pool)
+```
+
+반환 즉시 다른 플레이어가 진입 가능하다 — 숏 스퀴즈 감각의 핵심.
+
+#### AI 경쟁자 풀 미차감
+
+AI 경쟁자(ADR-004 통계 시뮬레이션)는 풀을 소비하지 않는다. 이유: AI는 실매매 없는
+통계 시뮬레이션 구조이므로 풀 연동 시 AI 아키텍처 전면 수정이 필요하다. 플레이어 전용 풀로 운영.
+
+#### 풀 상태 공개 (UI)
+
+대차 풀 잔량(`current_pool`, `max_pool`)은 트레이딩 화면 공매도 패널에 표시한다:
+`대여 가능: 1,200주 / 15,000주`
+
 ---
 
 ## 4. Formulas
@@ -468,6 +525,29 @@ margin_rate = 1.40이면 `open_price × 0.40`이 주당 예수금 감소.
 - 주당 증거금 추가 부담 = 175,000 × 0.40 = 70,000원
 - `max_short_qty = floor(3,000,000 / 70,000) = 42주`
 
+### F6. 대차 풀 초기화 (Borrow Pool)
+
+```
+max_pool     = floor(listed_shares × borrowable_ratio)
+current_pool = max_pool   ## 시즌 시작 시 만충
+```
+
+| Variable | Type | Range | Source | Description |
+|----------|------|-------|--------|-------------|
+| `listed_shares` | int | 1+ | StockDatabase | 종목 상장주식수 (stocks.json에서 로드) |
+| `borrowable_ratio` | float | 0.01 ~ 0.15 | config | VolatilityProfile별 대여 비율 |
+| `max_pool` | int | 1+ | calculated | 시즌 내 최대 공매도 가능 물량 |
+| `current_pool` | int | [0, max_pool] | ShortSellingSystem | 현재 잔여 대차 물량 |
+
+**예시 (EXTREME 소형 테마주)**: listed_shares=150,000, borrowable_ratio=0.01
+- `max_pool = floor(150,000 × 0.01) = 1,500주`
+- 플레이어가 1,000주 숏 → `current_pool = 500주`
+- 남은 500주 이상 요청 시 REJECTED
+
+**예시 (LOW 대형 우량주)**: listed_shares=2,500,000, borrowable_ratio=0.12
+- `max_pool = floor(2,500,000 × 0.12) = 300,000주`
+- 사실상 무제한 수준
+
 ---
 
 ## 5. Edge Cases
@@ -479,6 +559,7 @@ margin_rate = 1.40이면 `open_price × 0.40`이 주당 예수금 감소.
 | 시즌 종료 시 숏 포지션이 수익 상태 | 수익이더라도 자동 청산. realized_pnl > 0. sim_add = margin_deposited + pnl > margin_deposited. 수익은 예수금을 통해 현금 자산으로 이월 | 시즌 종료는 모든 포지션을 청산 |
 | 시즌 종료 시 숏 포지션이 손실 상태 | 자동 청산. realized_pnl < 0. 손실은 증거금에서 차감. margin_ratio ≥ 0.2 보장으로 증거금은 partial 환원 | 강제청산과 동일 메커니즘 |
 | SELL_SHORT 후 해당 종목 상한가 도달 (+30%) | 가격 엔진이 일별 ±30% 상한을 적용. 이 범위 내에서는 강제청산 임계값(개시가 +120%) 도달 불가. 상한가 연속 발생 시 다음 날 margin_ratio 재평가 | 가격 엔진의 일별 상한 참조 |
+| 상한가 3연속 시 margin_ratio 변화 | 일별 +30% 상한 3일 연속 시 가격 = open_price × 1.3³ ≈ open_price × 2.197. 이 시점 margin_ratio ≈ 1.40 − 1.197 = 0.203으로 강제청산 임계값(0.2)에 근접. 4일 연속 상한가(×1.3⁴ ≈ ×2.856)에 도달하면 임계값 하회 → 강제청산 발동. 실제 발동은 틱 단위 감시 기준이며, 상한가 당일 시가부터 가격 엔진 상한이 적용되므로 청산은 다음 영업일 첫 틱 이전에는 발생하지 않음 | 극단 이벤트 범위 내이나 실현 가능. forced_liquidation_warning_ratio 설정 시 3일 연속 상한가 시점에서 경고가 표시되도록 튜닝 권장 |
 | SELL_SHORT 후 해당 종목 VI 발동 | 가격 동결. margin_ratio 변화 없음. VI 해제 후 가격 갱신 시 margin_ratio 재평가. 강제청산 위험은 VI 해제 틱에서 처리 | 가격 동결 = margin_ratio 동결 |
 | SELL_SHORT 후 해당 종목 CB(서킷브레이커) | CB Stage 1: 가격 동결, margin_ratio 변화 없음. CB Stage 2(조기 마감): 시즌 종료 청산 시퀀스 동일하게 적용 (숏 자동 청산 후 롱 청산) | CB 처리는 시즌 종료와 동일 시퀀스 |
 | 예수금이 증거금보다 적은 상태에서 SELL_SHORT | 4-S4 증거금 검증에서 REJECTED. 예수금 불변 | 사전 차단 |
@@ -488,6 +569,12 @@ margin_rate = 1.40이면 `open_price × 0.40`이 주당 예수금 감소.
 | BUY_TO_COVER를 PRE_MARKET에 제출 | REJECTED ("공매도는 장 중에만 가능합니다"). PRE_MARKET에서는 숏 관련 주문 일체 불가 | 규칙 4-S2 |
 | 세이브/로드 반복으로 증거금 조작 시도 | 저장 시점의 margin_deposited가 그대로 복원. 로드 후 첫 틱에 현재가 기준으로 unrealized_pnl과 margin_ratio 재계산. 세이브/로드로 포지션 상태 유리하게 변경 불가 | 익스플로잇 방어 |
 | 숏 포지션 중 동일 종목 일반 BUY 시도 | REJECTED ("해당 종목의 숏 포지션을 먼저 청산하세요"). 롱/숏 동시 보유 불가 | 규칙 3 |
+| 대차 풀 잔량 = 0 상태에서 SELL_SHORT | REJECTED ("대여 가능 물량 부족 (잔량: 0주)"). 예수금 불변, 포지션 미생성 | 4-S5 |
+| 요청 수량 > 잔여 풀 (부분 가능 상황) | 부분 체결 없음. 전량 거부. 플레이어가 수량을 줄여 재시도해야 함 | 설계 원칙: 단순성 우선 |
+| 강제청산 후 풀 반환 타이밍 | 강제청산 발동 틱 내에서 즉시 반환. 동일 틱 내 다른 플레이어가 진입 가능 (GDScript 단일 스레드이므로 실제 동일 틱 경합 없음) | "틱이 진실" 원칙 |
+| 시즌 종료 시 풀 반환 | 시즌 종료 청산(Step ①-A) 완료 후 모든 풀이 0→max_pool로 자동 리셋. 다음 시즌 시작 시 재초기화와 동일 | 시즌 시작 시 `_init_pools()` 재호출 |
+| 세이브/로드 후 풀 상태 복원 | `current_pool` 전체를 세이브 데이터에 직렬화. 로드 후 동일 잔량 복원. 로드/세이브 반복으로 풀 조작 불가 (보유 포지션과 차감량이 연동) | 익스플로잇 방어 |
+| borrowable_ratio 변경 시 진행 중 풀 처리 | 시즌 중 config 변경은 다음 시즌 시작 시 `_init_pools()` 재호출로 반영. 현재 시즌은 변경 없음 | 튜닝 안정성 |
 
 ---
 
@@ -505,13 +592,23 @@ margin_rate = 1.40이면 `open_price × 0.40`이 주당 예수금 감소.
 | **TradingScreen** | UI가 참조 | 숏 포지션 패널 표시. `ShortSellingSystem.get_all_short_positions()` 조회. 강제청산 알림 수신. **Soft** |
 | **XPSystem** | XP가 참조 | `on_short_position_closed(stock_id, pnl)` — 숏 청산 시 XP 산출 (수익 청산 시 추가 XP). **Soft** |
 | **AudioSystem** | 오디오가 참조 | `on_order_filled` (SELL_SHORT/BUY_TO_COVER), `on_forced_liquidation` — 효과음 재생. **Soft** |
-| **SaveLoad** | 세이브/로드가 참조 | `ShortPosition` 배열 직렬화/역직렬화 대상 추가 필요. **Hard** |
+| **SaveLoad** | 세이브/로드가 참조 | `ShortPosition` 배열 + `borrow_pool` dict 직렬화/역직렬화 대상 추가 필요. **Hard** |
+| **StockDatabase** | 공매도 시스템이 의존 | `get_stock(stock_id).listed_shares` — 대차 풀 초기화 시 상장주식수 조회. `get_stock(stock_id).volatility_profile` — borrowable_ratio 결정. **Hard** |
 
 > **역방향 의존성 알림**:
 > - `PortfolioManager.update_valuation()`은 `ShortSellingSystem.get_short_net_value()`를 호출하도록 수정 필요
 > - `SeasonManager`의 시즌 종료 청산 시퀀스에 Step ①-A 삽입 필요 (season-manager.md 갱신 대상)
 > - `OrderEngine`의 주문 검증 10단계에 SELL_SHORT/BUY_TO_COVER 분기 추가 필요 (order-engine.md 갱신 대상)
 > - `save-load.md`의 직렬화 대상 표에 `ShortPosition[]` 추가 필요
+>
+> **대차 풀 설계 결정 (2026-04-20)**:
+> - **주식 차입(Locate) 구현**: 규칙 12 대차 풀로 구현. `listed_shares × borrowable_ratio`로 종목별 공매도 가능 물량을 제한한다.
+>   PriceEngine과 호가창을 건드리지 않는 독립 레이어로 구현하여 원래 제외 이유(유동성 모델 충돌)를 해소.
+>   AI 경쟁자는 풀 미차감 (ADR-004 통계 시뮬레이션 아키텍처 유지).
+>
+> **TR2 연동 상태**: `StopTakeSystem`이 숏 포지션을 지원한다. 가격 방향 역전 조건으로
+> 자동 BUY_TO_COVER를 발동하며, `on_short_position_closed` 수신 시 설정이 자동 삭제된다.
+> 상세: `design/gdd/stop-loss-take-profit.md` §규칙 4, AC-S01~S06 참조.
 
 ---
 
@@ -519,17 +616,38 @@ margin_rate = 1.40이면 `open_price × 0.40`이 주당 예수금 감소.
 
 | Parameter | Current Value | Safe Range | Category | Effect of Increase | Effect of Decrease |
 |-----------|--------------|------------|----------|-------------------|-------------------|
-| `margin_rate` | 1.40 (140%) | 1.10 ~ 2.00 | Curve | 공매도 진입 장벽 상승. 소규모 계좌 진입 어려움. 강제청산 버퍼 증가 | 진입 장벽 감소. 소규모 계좌도 공매도 가능. 강제청산 리스크 증가 |
+| `borrowable_ratio_low` | 0.12 (12%) | 0.05 ~ 0.20 | Gate | 대형주 공매도 가능 물량 증가. 사실상 무제한에 가까워짐 | 대형주도 물량 제약 체감 |
+| `borrowable_ratio_medium` | 0.05 (5%) | 0.02 ~ 0.10 | Gate | 중형주 공매도 여유 증가 | 중형주 진입 경쟁 심화 |
+| `borrowable_ratio_high` | 0.02 (2%) | 0.01 ~ 0.05 | Gate | 소형주 여유 확대. 전략적 선점 의미 약화 | 소형주 소수 진입 시 고갈. 경쟁 극대화 |
+| `borrowable_ratio_extreme` | 0.01 (1%) | 0.005 ~ 0.03 | Gate | 테마주 여유 확대. 급등주 공매도 진입 허용 범위 확대 | 1~2명만 숏 쳐도 즉시 고갈. 선점 압박 극대화 |
+| `margin_rate` | 1.40 (140%) | **1.20 ~ 2.00** | Curve | 공매도 진입 장벽 상승. 소규모 계좌 진입 어려움. 강제청산 버퍼 증가 | 진입 장벽 감소. 소규모 계좌도 공매도 가능. 강제청산 리스크 증가 |
 | `margin_call_threshold` | 0.20 (20%) | 0.05 ~ 0.40 | Gate | 강제청산 발동 빨라짐 (더 작은 가격 상승에서 청산). 플레이어 보호 강화 | 강제청산 늦어짐. 더 큰 손실 허용. 리스크 허용도 증가 |
 | `max_short_positions` | 3 | 1 ~ 5 | Gate | 동시 공매도 포지션 증가. 전략 다양성 증가 | 공매도 집중도 강제. 분산 공매도 불가 |
 | `forced_liquidation_warning_ratio` | 0.35 (35%) | `margin_call_threshold` ~ 0.60 | Feel | 경고 UI 더 일찍 표시. 플레이어 대응 시간 증가 | 경고 늦게 표시. 긴장감 증가 |
 
 > **margin_rate 근거**: 한국 실제 공매도 증거금은 120~140% 수준. 140%는 게임 내 리스크
-> 의식 유도를 위한 하한 설정. 낮추면 레버리지에 가까워지므로 TR4와의 차별화가 흐려진다.
+> 의식 유도를 위한 기본값. **하한 1.20(120%)**: FSC 규정 최저 증거금률. 이 아래로 낮추면
+> 레버리지 매수에 가까워지므로 TR4와의 기능적 차별화가 흐려진다. 1.20 미만 설정 금지.
 >
 > **margin_call_threshold 근거**: 0.2 = 증거금이 초기 포지션 가치의 20%만 남은 상태.
-> 즉, 개시가 대비 ~120% 상승 시 강제청산. 20거래일 시즌에서 극단적 이벤트에만 도달하는 수준.
 > F3 강제청산 발동가 역산: `open_price × (1 + margin_rate - margin_call_threshold) = open_price × 2.20`
+> 즉, 개시가 대비 120% 상승 시 강제청산. 일별 ±30% 상한 하에서 이 가격에 도달하려면
+> **3일 연속 상한가(×1.3³ ≈ ×2.197)**가 필요하며, 4일 연속(×1.3⁴ ≈ ×2.856)에 임계값을 하회한다.
+> 실제 공매도(30~40% 상승 시 청산)와 비교해 게임 내 임계값이 관대한 이유: 게임 플로우 상
+> 조기 강제청산은 플레이어 경험을 저해한다. 20거래일 시즌에서 3연속 상한가는 극단적 이벤트
+> 수준이므로 의도적으로 이 범위를 허용 구간으로 유지한다.
+>
+> **forced_liquidation_warning_ratio 조정 검토**: 현재값 0.35는 강제청산 임계값(0.2) 대비
+> margin_ratio 버퍼가 0.15(=15%p)에서 경고를 표시한다. 3연속 상한가 시점(margin_ratio ≈ 0.203)에서
+> 경고가 이미 활성화되도록 하려면 **0.50 이상**으로 상향 조정이 권장된다. 0.50이면
+> 2연속 상한가(×1.3² ≈ ×1.69, margin_ratio ≈ 0.71) 이후부터 경고가 시작되어
+> 플레이어에게 충분한 대응 시간을 제공한다.
+>
+> **대차 수수료(Borrow Fee) 미적용 근거**: 실제 공매도에서 차입 기간에 비례하는 대차 수수료가
+> 발생한다. 게임에서는 이를 제외한다. 이유: (1) 일별 수수료 과금은 "보유 기간 페널티"로 작동하여
+> 장기 숏 전략보다 단기 트레이딩을 강제하게 됨 — 전략 다양성 저해, (2) 수수료 계산이 복잡도를
+> 높이고 초보 플레이어에게 설명 부담이 큼. 대신, 증거금 140%와 max_short_positions 3개 제한으로
+> 공매도 규모를 간접 제어한다.
 
 ---
 
@@ -553,6 +671,11 @@ margin_rate = 1.40이면 `open_price × 0.40`이 주당 예수금 감소.
 | AC-14 | 증거금 부족 시 SELL_SHORT REJECTED, 예수금 불변 | 단위 테스트: sim_cash < margin_deposited 조건에서 제출 |
 | AC-15 | 강제청산 후 BUY_TO_COVER 제출 시 REJECTED ("청산할 숏 포지션이 없습니다") | 단위 테스트: 강제청산 실행 후 BUY_TO_COVER 제출 |
 | AC-16 | 세이브/로드 후 ShortPosition 상태 완전 복구, 로드 후 첫 틱에 margin_ratio 재계산 | 통합 테스트: 숏 포지션 보유 중 세이브 → 로드 → 포지션 확인 |
+| AC-17 | 시즌 시작 시 모든 종목 풀이 `floor(listed_shares × borrowable_ratio)`로 초기화 | 단위 테스트: 시즌 시작 후 get_borrow_pool(stock_id) == max_pool |
+| AC-18 | SELL_SHORT 체결 시 `current_pool -= quantity` | 단위 테스트: 체결 전후 pool 차분 검증 |
+| AC-19 | `current_pool < quantity` 시 SELL_SHORT REJECTED ("대여 가능 물량 부족") | 단위 테스트: 풀 고갈 후 SELL_SHORT 제출 → REJECTED |
+| AC-20 | BUY_TO_COVER / 강제청산 시 `current_pool += quantity` (max_pool 초과 불가) | 단위 테스트: 청산 후 pool 반환 검증 |
+| AC-21 | 세이브/로드 후 `current_pool` 복원 | 통합 테스트: 풀 차감 상태 세이브 → 로드 → pool 값 동일 확인 |
 
 ---
 
@@ -569,6 +692,8 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | 매 틱 margin_ratio 감시 | `game_clock.gd._process_tick()` → `ShortSellingSystem.update_and_check_margin(tick)` (틱 순서: 가격 엔진 갱신 → 숏 감시 → 주문 처리) |
 | 시즌 종료 자동청산 | `season_manager.gd._on_season_end()` → `ShortSellingSystem.liquidate_all_for_season_end(price_provider)` (Step ①-A) |
 | 총 자산 반영 | `portfolio_manager.gd.update_valuation()` → `ShortSellingSystem.get_short_net_value()` |
+| 대차 풀 초기화 | `GameClock.on_season_start` → `ShortSellingSystem._init_pools()` _(TD-DR-06, 미구현)_ |
+| 대차 풀 잔량 조회 (UI) | `trading_screen.gd` → `ShortSellingSystem.get_borrow_pool(stock_id) -> Dictionary` (`{current, max}`) _(TD-DR-06, 미구현)_ |
 
 ### 호출 경로
 
@@ -589,6 +714,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `assets/data/short_selling_config.json` 에 margin_rate, margin_call_threshold, max_short_positions 정의
 - [x] `SaveSystem`: `get_save_data()` + `load_save_data()` 에 `short_positions` 키 추가
 - [x] `ShortSellingSystem` autoload `project.godot` 등록
+- [x] `StockDatabase.get_stock(stock_id)` 에서 `listed_shares`, `volatility_profile` 접근 확인
 
 ### AC → 테스트 매핑
 
@@ -610,8 +736,45 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | AC-14 | `tests/unit/test_short_selling.gd` | `test_sell_short_rejected_insufficient_margin()` |
 | AC-15 | `tests/unit/test_short_selling.gd` | `test_buy_to_cover_rejected_after_forced_liq()` |
 | AC-16 | `tests/integration/test_short_selling_save_load.gd` | `test_short_position_survives_save_load()` |
+| AC-17 | `tests/unit/test_short_selling.gd` | `test_borrow_pool_initialized_on_season_start()` |
+| AC-18 | `tests/unit/test_short_selling.gd` | `test_borrow_pool_decrements_on_sell_short()` |
+| AC-19 | `tests/unit/test_short_selling.gd` | `test_sell_short_rejected_when_pool_exhausted()` |
+| AC-20 | `tests/unit/test_short_selling.gd` | `test_borrow_pool_restored_on_cover()` |
+| AC-21 | `tests/integration/test_short_selling_save_load.gd` | `test_borrow_pool_survives_save_load()` |
 | API 계약 | `tests/unit/test_api_contracts.gd` | `test_short_selling_system_api()` |
 
 ### 빌드 검증
 
 - [x] 바이너리 실행 확인: QA Lead 서명 — S9 완료 빌드 (2026-04-17, SCRIPT ERROR 없음)
+
+---
+
+## 미구현 — 대차 풀 시스템 (TD-DR-06, Sprint 11)
+
+> 핵심 공매도 기능(증거금/청산)과 별개. Sprint 11 구현 예정. tech-debt TD-DR-06 참조.
+
+- [ ] `assets/data/short_selling_config.json` 에 `borrowableRatioByVolatility` 추가 (LOW/MEDIUM/HIGH/EXTREME → ratio)
+- [ ] `SaveSystem`: `borrow_pool` dict 직렬화 추가 (`short_selling_config.json`의 `borrow_pool` 키)
+- [ ] `ShortSellingSystem._init_pools()` — 시즌 시작 시 종목별 max_pool 계산 및 current_pool 초기화
+- [ ] `ShortSellingSystem.get_borrow_pool(stock_id) -> Dictionary` — `{current, max}` 반환
+- [ ] `OrderEngine` SELL_SHORT 검증 4-S5 단계 추가 (pool 잔량 체크 → REJECTED)
+- [ ] `GameClock.on_season_start` → `ShortSellingSystem._init_pools()` 연결
+- [ ] 빌드 재검증: QA Lead 서명 (대차 풀 구현 완료 후)
+
+## DLC 확장성 — MarketProfile 추상화
+
+> 한국 시장 Approved 조건과 별개. DLC 그린라이트 시 구현. tech-debt TD-DR-06 참조.  
+> 근거: [ADR-021](../../docs/architecture/021-market-profile-data-driven.md) / 감사 항목: **H-01, H-02**
+
+**H-01. 공매도 증거금 비율**
+- [ ] `margin_rate = 1.40` (140%, FSC 기준) → `_profile.short_margin_rate` 로드로 교체
+- [ ] `margin_call_threshold` → `_profile.short_margin_call_threshold` 로드로 교체
+- [ ] `assets/data/market_profiles/market_kr.json` — `"short_margin_rate": 1.40`, `"short_margin_call_threshold": 0.20` 등록
+- [ ] 강제청산 임계값이 `PriceEngine.daily_limit_pct`(C-03)와 연동되는 부분 재검토 — 상한가 변경 시 청산 조건 자동 반영 확인
+- [ ] 테스트: `test_short_selling.gd` — `test_margin_rate_loaded_from_market_profile()` 추가
+
+**H-02. 대차 풀 비율**
+- [ ] `borrowable_ratio` (LARGE 12% 등) → `_profile.borrow_pool_ratios` 딕셔너리 로드로 교체
+- [ ] `assets/data/market_profiles/market_kr.json` — `"borrow_pool_ratios": {"LARGE": 0.12, "MEDIUM": 0.05, "SMALL": 0.02, "VOLATILE": 0.01}` 등록
+- [ ] `market_us.json`에는 `"borrow_pool_enabled": false` 플래그로 시스템 전체 비활성화 경로 설계
+- [ ] 테스트: `test_short_selling.gd` — `test_borrow_pool_ratios_from_market_profile()` 추가

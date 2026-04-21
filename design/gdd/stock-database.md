@@ -308,6 +308,8 @@ season_base_price = original_base_price * season_theme_modifier
 | 주문 처리 엔진 | 주문이 이 시스템에 의존 | 종목 존재 확인. **Hard** |
 | 포트폴리오 관리 | 포트폴리오가 이 시스템에 의존 | 종목 표시 정보. **Soft** |
 | 스킬 트리 | 스킬이 이 시스템에 의존 | 섹터 ETF 해금. **Soft** |
+| EtfManager | EtfManager가 이 시스템에 의존 | `get_sector_stocks(sector)` — 섹터 구성 종목 목록 조회. `get_sector_sensitivity(stock_id)` — 종목별 섹터 감도 조회. SECTOR_ROTATION 영향 분배에 사용. **Hard** |
+| SectorComparison | SectorComparison이 이 시스템에 의존 | 섹터별 종목 목록 및 감도 조회. **Hard** |
 
 이 시스템은 다른 시스템에 의존하지 않는 Foundation 시스템이다.
 
@@ -388,3 +390,17 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 ### 빌드 검증
 
 - [x] 바이너리 실행 확인: QA Lead 서명 — 내부 감사 2026-04-15 (Alpha 완료 빌드, SCRIPT ERROR 없음)
+
+---
+
+## DLC 확장성 — 종목 데이터 시장별 분리
+
+> 한국 시장 Approved 조건과 별개. DLC 그린라이트 시 구현. tech-debt TD-DR-07 참조.  
+> 근거: [ADR-021](../../docs/architecture/021-market-profile-data-driven.md) / 감사 항목: **L-04**
+
+- [ ] `stocks.json` → `stocks_kr.json`으로 이름 변경
+- [ ] `StockData._ready()` — `"stocks_%s.json" % active_market_id` 동적 경로로 로드
+- [ ] `stocks_us.json`, `stocks_jp.json` 스텁 파일 생성 (빈 배열 `[]`) — DLC 번들 슬롯 확보
+- [x] 섹터 목록도 `market_kr.json`에 `"sectors": ["반도체", "2차전지", ...]`로 등록 — 하드코딩된 섹터 상수 제거
+- [ ] 기존 `stocks.json` 참조 전체 검색 후 `stocks_kr.json`으로 교체 (`grep -r "stocks.json" src/`)
+- [ ] 테스트: `test_stock_database.gd` — `test_stock_data_loaded_by_market_id()` 추가

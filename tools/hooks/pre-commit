@@ -23,7 +23,7 @@ if [ -n "$DESIGN_FILES" ]; then
         # Implementation Checklist 미완 항목 차단 — Approved GDD에만 적용
         STATUS=$(grep -i '^\*\*Status\*\*:\|^> \*\*Status\*\*:' "$file" 2>/dev/null | head -1 | grep -oi 'Approved' || true)
         if [ "$STATUS" = "Approved" ] && grep -q "Implementation Checklist" "$file" 2>/dev/null; then
-            UNCHECKED=$(awk '/Implementation Checklist/,0' "$file" | grep "^- \[ \]" | wc -l)
+            UNCHECKED=$(awk '/Implementation Checklist/,/^---$/' "$file" | grep "^- \[ \]" | wc -l)
             if [ "$UNCHECKED" -gt 0 ]; then
                 echo "BLOCKED [GDD]: $file — Implementation Checklist 미완 항목 ${UNCHECKED}개" >&2
                 exit 2

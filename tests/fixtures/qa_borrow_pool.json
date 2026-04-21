@@ -1,0 +1,108 @@
+{
+  "_description": "공매도 대차 풀 테스트 픽스처 (TD-DR-06). BPH 풀 잔량 3주 고의 설정 — 3주까지 공매도 성공, 4주 이상 시도 시 '대여 가능 물량 부족' 오류 확인용. 나머지 종목은 정상 풀 사이즈.",
+  "save_version": 4,
+  "timestamp": 1745000000,
+
+  "xp": {
+    "total_xp": 9999,
+    "available_skill_points": 99,
+    "level": 20,
+    "weekly_xp": 0
+  },
+
+  "skill_tree": {
+    "unlocked_skills": ["A1", "A2", "A3", "A4", "S1", "S2", "S3", "TR1", "TR2", "TR3", "TR4", "P1", "P2", "P3"]
+  },
+
+  "season": {
+    "current_tier": 3,
+    "current_season_index": 4,
+    "is_free_market": false,
+    "season_active": true
+  },
+
+  "currency": {
+    "cash_assets": 100000000,
+    "sim_cash": 100000000,
+    "reserved_cash": 0,
+    "season_active": true
+  },
+
+  "portfolio": {
+    "holdings": {},
+    "transaction_history": [],
+    "season_start_value": 100000000
+  },
+
+  "clock": {
+    "season_active": true,
+    "current_day": 1,
+    "current_week": 1,
+    "current_tick": 200
+  },
+
+  "prices": {},
+  "ai": {},
+  "news": {},
+  "stop_take": [],
+  "lifestyle": {},
+  "short_positions": [],
+  "leverage_positions": [],
+  "ohlcv_history": {},
+  "etf": {},
+  "financial_report": {},
+
+  "borrow_pool": {
+    "_comment": "EXTREME 풀(1%), HIGH 풀(2%), MEDIUM 풀(5%), LOW 풀(12%). BPH는 current=3으로 고의 설정.",
+
+    "ECM": { "current": 4000,  "max": 4000  },
+    "PBT": { "current": 10000, "max": 10000 },
+    "BPH": { "current": 3,     "max": 1500  },
+    "MDG": { "current": 2000,  "max": 2000  },
+    "HLB": { "current": 5000,  "max": 5000  },
+    "EVN": { "current": 3000,  "max": 3000  },
+    "PRL": { "current": 4000,  "max": 4000  },
+
+    "SKL": { "current": 50000, "max": 50000 },
+    "STC": { "current": 30000, "max": 30000 },
+    "HNX": { "current": 24000, "max": 24000 },
+    "SLW": { "current": 16000, "max": 16000 },
+    "LEB": { "current": 10000, "max": 10000 },
+    "CGP": { "current": 20000, "max": 20000 },
+    "YBT": { "current": 8000,  "max": 8000  },
+    "NXE": { "current": 12000, "max": 12000 },
+    "JYM": { "current": 7000,  "max": 7000  },
+    "BGF": { "current": 6000,  "max": 6000  },
+    "DWE": { "current": 60000, "max": 60000 },
+    "KFT": { "current": 12000, "max": 12000 },
+    "NXG": { "current": 16000, "max": 16000 },
+    "HPC": { "current": 12000, "max": 12000 },
+    "DGT": { "current": 10000, "max": 10000 },
+    "HBE": { "current": 8000,  "max": 8000  },
+
+    "DSE": { "current": 30000, "max": 30000 },
+    "SDC": { "current": 35000, "max": 35000 },
+    "HMC": { "current": 90000, "max": 90000 },
+    "KAM": { "current": 75000, "max": 75000 },
+    "MSC": { "current": 30000, "max": 30000 },
+    "SMC": { "current": 25000, "max": 25000 },
+    "KSF": { "current": 40000, "max": 40000 },
+    "CPG": { "current": 75000, "max": 75000 },
+    "HEC": { "current": 60000, "max": 60000 },
+    "PSC": { "current": 40000, "max": 40000 },
+    "NCW": { "current": 25000, "max": 25000 },
+    "SKI": { "current": 40000, "max": 40000 },
+    "GRC": { "current": 60000, "max": 60000 },
+    "PLT": { "current": 45000, "max": 45000 },
+    "LPM": { "current": 50000, "max": 50000 },
+
+    "MBP": { "current": 96000,  "max": 96000  },
+    "KRB": { "current": 240000, "max": 240000 },
+    "SSL": { "current": 144000, "max": 144000 },
+    "HNF": { "current": 180000, "max": 180000 },
+    "EMT": { "current": 60000,  "max": 60000  },
+    "DHI": { "current": 120000, "max": 120000 },
+    "KEP": { "current": 360000, "max": 360000 },
+    "KTN": { "current": 180000, "max": 180000 }
+  }
+}

@@ -488,3 +488,47 @@ msgstr "클릭하여 계속"
 # Skip button label. Max ~6 chars.
 msgid "건너뛰기"
 msgstr "건너뛰기"
+
+# ── MarketProfile KR 로테이션 헤드라인 (S10-07, ADR-021 Phase 4) ──
+# 런타임: tr(key).format({"sector": sector_display_name})
+
+msgid "ROTATION_KR_INFLOW_0"
+msgstr "{sector} 섹터 수급 개선 — 기관 비중 확대"
+
+msgid "ROTATION_KR_INFLOW_1"
+msgstr "{sector} 업종 강세 전환, 외국인 순매수"
+
+msgid "ROTATION_KR_INFLOW_2"
+msgstr "{sector} 섹터 로테이션 유입 — 자금 이동 포착"
+
+msgid "ROTATION_KR_OUTFLOW_0"
+msgstr "{sector} 섹터 이탈 매물 — 차익실현 압박"
+
+msgid "ROTATION_KR_OUTFLOW_1"
+msgstr "{sector} 업종 약세 전환, 외국인 순매도"
+
+# ── MarketProfile KR 엔딩 텍스트 키 (S10-07, ADR-021) ──
+
+msgid "ENDING_KR_BANKRUPTCY_NAME"
+msgstr "한강이 부른다"
+
+msgid "ENDING_KR_BANKRUPTCY_BODY"
+msgstr "자산이 바닥났다.\n\n10,000원. 그 숫자가 한 사람의 가능성을 닫는다.\n\n한강 다리에 서면 모든 게 잘 보인다고 했다.\n\n새로 시작할 수 있다."
+
+msgid "ENDING_KR_LEVERAGE_NAME"
+msgstr "사채업자의 방문"
+
+msgid "ENDING_KR_LEVERAGE_BODY"
+msgstr "빌린 돈으로 판을 키웠다.\n\n그 판이 뒤집혔다.\n\n이자가 원금을 삼키고, 원금이 당신을 삼켰다.\n\n문 앞에 낯선 사람이 서 있다."
+
+msgid "ENDING_KR_WIN_NAME"
+msgstr "투자의 거장"
+
+msgid "ENDING_KR_WIN_BODY"
+msgstr "1,000억.\n\n아무나 닿지 못하는 숫자다.\n\n쪽방에서 수평선까지.\n\n당신이 해냈다."
+
+msgid "ENDING_ACTION_NEW_GAME"
+msgstr "새 게임 시작"
+
+msgid "ENDING_ACTION_CONTINUE"
+msgstr "계속 플레이"

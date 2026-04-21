@@ -1,6 +1,6 @@
 # TR4 레버리지 거래 (Leverage Trading)
 
-> **Status**: In Review (게임플레이 시스템 구현 완료 2026-04-17 — UI 기능 미구현: UI 스프린트 예정, 빌드 검증 대기)
+> **Status**: In Review (게임플레이 시스템 구현 완료 2026-04-17 — S10-03 UI 완료: 포지션 패널·마진콜 팝업·엔딩 연결 — 빌드 검증 대기)
 > **Author**: user + game-designer
 > **Last Updated**: 2026-04-17
 > **Implements Pillar**: 판단이 곧 실력 (Judgment is King), 체감있는 성장 (Feel the Growth)
@@ -189,13 +189,16 @@ on_forced_liquidation(position):
     net_proceeds = proceeds - position.borrowed - position.accrued_interest
 
     if net_proceeds > 0:
-        CurrencySystem.cash_add(net_proceeds)   # 잔여 equity 환원
+        CurrencySystem.sim_add(net_proceeds)    # 잔여 equity 환원
     else:
         # net_proceeds ≤ 0 → 잔여 손실은 sim_cash에서 추가 차감
-        # sim_cash가 부족하면 0으로 클램프 (빚은 게임 내 탕감)
         loss = abs(net_proceeds)
         available = CurrencySystem.get_sim_cash()
-        CurrencySystem.cash_deduct(min(loss, available))
+        CurrencySystem.sim_deduct(min(loss, available))  # 가용 현금 전액 차감
+        if loss > available:
+            # 초과 손실 — 채무 상환 불능 → 사채업자 엔딩 즉시 발동
+            emit on_loan_shark_ending_triggered(position.stock_id, net_proceeds)
+            return  # 게임오버 처리는 연결된 핸들러(GameMain/MainScreen)가 담당
 
     PortfolioManager.remove_leverage_holding(position.stock_id, position.quantity)
     emit leverage_forced_liquidation(position.stock_id, net_proceeds)
@@ -320,6 +323,41 @@ daily_interest = floor(borrowed × daily_rate)
 
 ---
 
+### F2b. 이자 현금 부족 시 차입금 누적 (복리 효과)
+
+이자 납부 시 가용 현금이 부족하면 부족분이 차입금에 가산된다. 이자가 원금화(capitalised)되어
+다음 날 이자 계산 기준이 증가한다.
+
+```
+available_cash = CurrencySystem.get_sim_cash()
+
+if daily_interest ≤ available_cash:
+    # 정상 이자 차감
+    CurrencySystem.cash_deduct(daily_interest)
+    position.accrued_interest += daily_interest
+else:
+    # 현금 부족 → 가용 전액 차감 + 부족분 차입금 가산
+    shortage = daily_interest - available_cash
+    CurrencySystem.cash_deduct(available_cash)
+    position.borrowed        += shortage  # 원금화: 다음 날 이자 계산 기준 증가
+    position.accrued_interest += daily_interest
+```
+
+| 변수 | 타입 | 범위 | 출처 | 설명 |
+|------|------|------|------|------|
+| `available_cash` | int | 0+ | CurrencySystem | 납부 시점 가용 예수금 |
+| `shortage` | int | 0+ | calculated | 이자 미납분. `position.borrowed`에 가산 |
+| `position.borrowed` | int | 0+ | 포지션 데이터 | 가산 후 다음 틱 이자 계산 기준 증가 |
+| `position.accrued_interest` | int | 0+ | 포지션 데이터 | 누적 이자 — 청산 시 상환 기준 |
+
+**예시 (5× 배율, borrowed=5,200,000, 현금 3,000원만 보유)**:
+- `daily_interest = 5,200원`, `available_cash = 3,000원`
+- `shortage = 2,200원` → `borrowed = 5,202,200원`
+- Day+1 이자 = `floor(5,202,200 × 0.001) = 5,202원` (Day 대비 2원 증가)
+- 고액·장기 포지션에서 복리 부담이 누적됨
+
+---
+
 ### F3. Equity 및 마진콜 조건
 
 ```
@@ -374,7 +412,8 @@ net_proceeds     = proceeds - partial_borrowed - partial_interest
 |---------|----------|------|
 | **이자 > 현금 잔고** | 가용 현금 전액 차감 후 부족분을 `borrowed`에 가산. UI 경고 토스트 표시. | 빚이 빚을 낳는 복리 메커니즘으로 위험 실감. 강제청산은 equity_ratio로 별도 판단. |
 | **시즌 종료 시 레버리지 포지션 보유** | 종가 기준 강제청산 → 차입금·이자 상환 → 잔여 proceeds(또는 손실)를 sim_cash 반영 후 SeasonManager Step ②(일반 보유 청산) 진행. | 시즌 정산 전 레버리지 청산 완료 보장. |
-| **강제청산 후 net_proceeds < 0 (초과 손실)** | `|net_proceeds|`를 sim_cash에서 추가 차감. sim_cash < 0이 될 경우 0으로 클램프(게임 내 부채 탕감). | 실제 빚 발생 방지. 게임 밸런스: 바닥까지 떨어지면 프리마켓 진입 가능성 존재. |
+| **강제청산 후 net_proceeds < 0 — 손실 ≤ 가용 현금** | 손실분을 sim_cash에서 차감. sim_cash = 0이 됨. 이후 프리마켓에서 한강 엔딩 가능. | 점진적 파산 경로. 한강 엔딩과 동일한 결말로 수렴. |
+| **강제청산 후 net_proceeds < 0 — 손실 > 가용 현금 (채무 상환 불능)** | 가용 현금 전액 차감 후 `on_loan_shark_ending_triggered` 발동 → 즉각 게임오버 (사채업자 엔딩). 시즌 종료까지 기다리지 않음. | 레버리지 청산으로 채무 상환 불능 시 더 가혹한 결과. 한강 엔딩(점진적 자산 소진)과 다른 경로. |
 | **복수 레버리지 포지션 동일 종목 (다른 배율)** | 각 `LeveragePosition`을 독립 관리. 마진콜·강제청산은 포지션별 독립 계산. 매도 시 FIFO 순서로 포지션 선택. | 복잡도 감소. FIFO는 선입선출로 예측 가능한 동작 보장. |
 | **복수 레버리지 포지션 동일 종목 (동일 배율)** | 동일 배율이면 기존 포지션에 `borrowed`·`quantity`·`accrued_interest` 누적. 별도 포지션 추가 없음. | UI 단순화. |
 | **마진콜 상태에서 장 마감** | 마진콜 경고 유지. 강제청산 조건 미달이면 다음 거래일에 포지션 유지. 장 마감 전 플레이어가 미조치한 경우 알림 보존. | 강제청산 조건은 별도 임계값. 마진콜은 경고이지 강제청산 아님. |
@@ -440,7 +479,8 @@ net_proceeds     = proceeds - partial_borrowed - partial_interest
 | AC-04 | 이자 > 현금 잔고 시: 가용 현금 전액 차감 + 부족분이 `borrowed`에 가산됨 | 단위 테스트: 잔고 부족 케이스 |
 | AC-05 | `equity_ratio < margin_call_threshold` 조건에서 마진콜 경고 UI 발동 | 플레이테스트: 마진콜 시나리오 수동 확인 |
 | AC-06 | `equity ≤ 0 OR equity_ratio < forced_liq_threshold` 조건에서 강제청산 실행 및 proceeds 정확히 정산 | 단위 테스트: 강제청산 후 현금 잔고 검증 |
-| AC-07 | 강제청산 후 `net_proceeds < 0`인 경우 초과 손실분이 `sim_cash`에서 추가 차감되고, `sim_cash`는 0 미만이 되지 않음 | 단위 테스트: 음수 클램프 검증 |
+| AC-07 | 강제청산 후 `net_proceeds < 0`이고 손실 ≤ 가용 현금인 경우 손실분이 `sim_cash`에서 차감되어 0이 됨 | 단위 테스트: 손실 ≤ 현금 케이스 |
+| AC-17 | 강제청산 후 `net_proceeds < 0`이고 손실 > 가용 현금인 경우 가용 현금 전액 차감 후 `on_loan_shark_ending_triggered` 시그널 발동 | 단위 테스트: 시그널 수신 + sim_cash == 0 확인 |
 | AC-08 | 시즌 종료 시 전체 레버리지 포지션이 종가 기준으로 청산되고 차입금·이자 상환 후 잔여 proceeds가 `sim_cash`에 반영됨 | 단위 테스트: 시즌 종료 후 포지션 0개 확인 |
 | AC-09 | TR4 미해금 상태에서 레버리지 주문 시 REJECTED ("레버리지 거래가 해금되지 않았습니다") | 단위 테스트: 스킬 미해금 케이스 |
 | AC-10 | 유효하지 않은 배율(예: 4×) 요청 시 REJECTED | 단위 테스트: 유효성 검증 |
@@ -487,12 +527,20 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `LeverageManager` autoload 등록 (project.godot)
 - [x] `SaveSystem` save/load에 leverage_positions 직렬화 추가
 - [x] `GameMain` 신규 게임 리셋 시 `LeverageManager.reset()` 추가
-- [ ] 트레이딩 스크린 레버리지 포지션 섹션 UI 추가 (UI 스프린트 예정)
-- [ ] 배율 선택 콤보박스: TR4 미해금 시 잠금 처리 (UI 스프린트 예정)
-- [ ] 마진콜 경고 팝업 구현 (UI 스프린트 예정)
-- [ ] 강제청산 알림 토스트 구현 (UI 스프린트 예정)
+- [x] `LeverageManager.on_loan_shark_ending_triggered` 시그널 추가 (사채업자 엔딩)
+- [x] `LeverageManager._forced_liquidation()` — 0-클램프 제거 + 초과 손실 시 시그널 발동
+- [x] GameMain — `on_loan_shark_ending_triggered` 연결 → `EndingScreen.show_ending("leverage_crash")` (S10-03)
+- [x] `src/ui/portfolio_view.gd` — TR4 레버리지 포지션 섹션 (배율·손익·증거금비율 실시간 표시)
+- [x] `src/ui/margin_call_popup.gd` — 마진콜 경고 팝업 (CanvasLayer layer=6, 자동 숨김 6초)
+- [x] TradingScreen — `MarginCallPopup` 인스턴스화 (LeverageManager.on_margin_call 자체 연결)
+- [ ] Steam 업적 "빚의 무게" 등록 (숨겨진 업적, Polish 스프린트)
+- [ ] 배율 선택 콤보박스: TR4 미해금 시 잠금 처리 (Polish 스프린트)
+- [ ] 강제청산 알림 토스트 구현 (Polish 스프린트)
 
 ### AC → 테스트 매핑
+
+> **AC-17 사채업자 엔딩 상세 명세**: UX·Steam 업적·미구현 항목은
+> [endings-achievements.md](endings-achievements.md) §3-2 및 §8을 참조한다.
 
 | AC | 테스트 파일 | 테스트 함수 |
 |----|------------|------------|
@@ -502,7 +550,8 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | AC-04 | `tests/unit/test_leverage_trading.gd` | `test_interest_exceeds_cash_adds_to_borrowed()` |
 | AC-05 | `tests/unit/test_leverage_trading.gd` | `test_margin_call_triggered_below_threshold()` |
 | AC-06 | `tests/unit/test_leverage_trading.gd` | `test_forced_liquidation_on_zero_equity()` |
-| AC-07 | `tests/unit/test_leverage_trading.gd` | `test_forced_liquidation_net_loss_clamped_at_zero()` |
+| AC-07 | `tests/unit/test_leverage_trading.gd` | `test_forced_liquidation_net_loss_within_cash()` |
+| AC-17 | `tests/unit/test_leverage_trading.gd` | `test_forced_liquidation_excess_loss_triggers_loan_shark_ending()` |
 | AC-08 | `tests/unit/test_leverage_trading.gd` | `test_season_end_liquidates_all_positions()` |
 | AC-09 | `tests/unit/test_leverage_trading.gd` | `test_leverage_rejected_without_tr4_skill()` |
 | AC-10 | `tests/unit/test_leverage_trading.gd` | `test_invalid_multiplier_rejected()` |

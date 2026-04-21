@@ -555,3 +555,5 @@ func test_market_profile_api():
 	assert_true(MarketProfile.has_method("get_ending_param"),         "get_ending_param 존재")
 	assert_true(MarketProfile.has_method("get_ending_ids"),           "get_ending_ids 존재")
 	assert_true(MarketProfile.has_method("get_dlc_achievements"),     "get_dlc_achievements 존재")
+	assert_true(MarketProfile.has_method("apply_macro_context"),      "apply_macro_context 존재")
+	assert_true(MarketProfile.has_method("reset_macro_context"),      "reset_macro_context 존재")

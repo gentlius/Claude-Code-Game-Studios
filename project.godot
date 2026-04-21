@@ -43,6 +43,9 @@ MarketConfig="*res://src/core/market_config.gd"
 ShortSellingSystem="*res://src/gameplay/short_selling_system.gd"
 LeverageManager="*res://src/gameplay/leverage_manager.gd"
 OhlcvHistory="*res://src/gameplay/ohlcv_history.gd"
+EtfManager="*res://src/gameplay/etf_manager.gd"
+FinancialReportSystem="*res://src/gameplay/financial_report_system.gd"
+MarketProfile="*res://src/gameplay/market_profile.gd"
 
 [display]
 

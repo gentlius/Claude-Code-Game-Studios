@@ -5,6 +5,9 @@
 > **Skill ID**: A3
 > **Prerequisite**: A2 해금
 > **Owner**: game-designer + gameplay-programmer
+>
+> **연동**: ROE/PER/PBR 갱신 주체는 이 파일이 아님 — [financial-report-system.md](financial-report-system.md) 참조.
+> 이 GDD는 A3 패널 **표시 UI** 전용. 데이터 소유는 StockData, 갱신 트리거는 FinancialReportSystem.
 
 ---
 

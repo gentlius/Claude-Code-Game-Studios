@@ -227,22 +227,56 @@ func test_forced_liquidation_on_zero_equity() -> void:
 	assert_eq(CurrencySystem.get_sim_cash(), cash_before + expected_net, "잔여 equity 환원")
 
 
-# ── AC-07: 강제청산 후 net_proceeds < 0 → sim_cash 0 클램프 ──────────
+# ── AC-07: 강제청산 후 net_proceeds < 0, 손실 ≤ 가용 현금 → sim_cash 0 ─
 
-func test_forced_liquidation_net_loss_clamped_at_zero() -> void:
-	# Force a scenario where proceeds < borrowed → negative net
-	# Use 5×: equity_used=1_300_000, borrowed=5_200_000
-	# At price 10_000: market_val=1_000_000, net=1_000_000-5_200_000=-4_200_000
+func test_forced_liquidation_net_loss_within_cash() -> void:
+	# Arrange: 5× position. At price 10_000: net = 1_000_000 - 5_200_000 = -4_200_000
+	# sim_cash = 5_000_000 (loss ≤ available) → should deduct 4_200_000, NO ending signal
 	_inject_leverage_position(MOCK_STOCK, 100, MOCK_PRICE, 5)
 	_set_mock_price(MOCK_STOCK, 10_000)
-	# Ensure sim_cash < |net_proceeds| to hit the clamp
 	CurrencySystem.reset()
-	CurrencySystem.init_first_season(500_000)  ## less than the 4_200_000 loss
+	CurrencySystem.init_first_season(5_000_000)
 
+	var signal_fired: bool = false
+	LeverageManager.on_loan_shark_ending_triggered.connect(
+		func(_sid: String, _net: int) -> void: signal_fired = true
+	)
+
+	# Act
 	LeverageManager.check_margin_calls()
 
-	assert_eq(CurrencySystem.get_sim_cash(), 0, "sim_cash 0 클램프 — 음수 불가 (GDD §5)")
+	# Assert
+	assert_eq(CurrencySystem.get_sim_cash(), 5_000_000 - 4_200_000,
+		"가용 현금에서 손실분 차감 (GDD AC-07)")
+	assert_false(signal_fired, "손실 ≤ 현금이므로 사채업자 엔딩 미발동")
 	assert_eq(LeverageManager.get_all_positions().size(), 0, "포지션 제거됨")
+
+
+# ── AC-17: 강제청산 후 손실 > 가용 현금 → 사채업자 엔딩 시그널 ──────────
+
+func test_forced_liquidation_excess_loss_triggers_loan_shark_ending() -> void:
+	# Arrange: 5× position. At price 10_000: net = 1_000_000 - 5_200_000 = -4_200_000
+	# sim_cash = 500_000 (loss > available) → sim_cash → 0, signal fires
+	_inject_leverage_position(MOCK_STOCK, 100, MOCK_PRICE, 5)
+	_set_mock_price(MOCK_STOCK, 10_000)
+	CurrencySystem.reset()
+	CurrencySystem.init_first_season(500_000)
+
+	var signal_fired: bool = false
+	var captured_stock: String = ""
+	LeverageManager.on_loan_shark_ending_triggered.connect(
+		func(sid: String, _net: int) -> void:
+			signal_fired = true
+			captured_stock = sid
+	)
+
+	# Act
+	LeverageManager.check_margin_calls()
+
+	# Assert
+	assert_true(signal_fired, "초과 손실 시 on_loan_shark_ending_triggered 발동 (GDD AC-17)")
+	assert_eq(captured_stock, MOCK_STOCK, "올바른 stock_id로 시그널 발동")
+	assert_eq(CurrencySystem.get_sim_cash(), 0, "가용 현금 전액 차감 후 sim_cash == 0")
 
 
 # ── AC-08: 시즌 종료 — 전체 포지션 청산 ─────────────────────────────

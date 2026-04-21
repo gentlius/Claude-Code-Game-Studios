@@ -322,6 +322,8 @@ exit_proceeds = investment_amount × exit_multiplier
 | `PROPERTY_PRICE_VARIANCE` | 0.10 | 0~0.30 | 부동산 매각 시 가격 변동 범위 (±10%) |
 | `DEPRECIATION_RATE` | 0.0 | 0.0~0.05/시즌 | 유형자산 감가상각률 (현재 없음) |
 
+> **DLC 확장 시**: `OFFICETEL_RENTAL_RATE`, `SANGGA_RENTAL_RATE`, `BUILDING_RENTAL_RATE`, `STARTUP_IPO_PROB`, `STARTUP_MA_PROB`, `STARTUP_FAIL_PROB`는 시장별 부동산·투자 문화에 따라 달라질 수 있다. US·JP DLC 구현 시 `market_us.json` / `market_jp.json`에 해당 파라미터를 추가하고 `MarketProfile.get_trading_param()`으로 로드한다. (ADR-021)
+
 ---
 
 ## 8. Acceptance Criteria

@@ -104,6 +104,31 @@ capital_gains  = max(0, realized_profit) × cg_rate
 net_proceeds   = gross × (1 - sell_tax - commission) - capital_gains
 ```
 
+### 변수 정의 (매도 수령액 공식)
+
+| 변수 | 타입 | 현재값 (KR) | 출처 | 설명 |
+|------|------|------------|------|------|
+| `gross` | int | — | 체결 | 매도 체결금액 = quantity × price |
+| `realized_profit` | int | — | PortfolioManager | 실현이익 = gross − (avg_buy_price × quantity). 음수 가능 |
+| `sell_tax` | float | 0.002 (0.20%) | market_config.json | 매도 거래세율 |
+| `commission` | float | 0.00015 (0.015%) | market_config.json | 증권사 수수료율 (매수/매도 공통) |
+| `holding_days` | int | **0 (MVP)** | PortfolioManager | 보유일 수. KR `capital_gains=0`이므로 MVP에서는 상수 0 전달. 비KR 시장(DLC) 구현 시 FIFO 가중평균 계산 필요 (§9 미체크 항목). |
+| `cg_rate` | float | 0.0 (KR 단기·장기 동일) | market_config.json | 양도소득세율. `holding_days < threshold_days → short_term_rate` |
+| `capital_gains` | int | **0 (KR)** | calculated | 양도소득세 = max(0, realized_profit) × cg_rate |
+| `net_proceeds` | int | — | calculated | 실제 수령액 = gross × (1 − sell_tax − commission) − capital_gains |
+
+> **MVP 단순화**: KR 시장은 `short_term_rate = long_term_rate = 0.0`이므로 `capital_gains = 0` 항상 성립.
+> OrderEngine은 MVP 기간 `holding_days = 0`을 `get_fee_breakdown()`에 전달한다.
+> 비KR 시장(DLC) 구현 시 PortfolioManager의 FIFO 가중평균 보유일 계산이 필요하다 (§9 미체크 항목).
+
+### 변수 정의 (매수 비용 공식)
+
+| 변수 | 타입 | 현재값 (KR) | 출처 | 설명 |
+|------|------|------------|------|------|
+| `buy_tax` | float | 0.0 (KR 면제) | market_config.json | 매수 거래세율 |
+| `commission` | float | 0.00015 (0.015%) | market_config.json | 증권사 수수료율 |
+| `buy_cost` | int | — | calculated | 실제 차감액 = quantity × price × (1 + buy_tax + commission) |
+
 ### 수수료·세금 내역 반환 구조체
 
 ```gdscript

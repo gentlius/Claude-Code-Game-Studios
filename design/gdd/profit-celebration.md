@@ -1,6 +1,6 @@
 # 수익 실현 팡파레 이펙트 (Profit Celebration)
 
-> **Status**: Draft
+> **Status**: In Review
 > **Author**: user + agents
 > **Last Updated**: 2026-04-14
 > **Target Milestone**: Beta
@@ -238,16 +238,16 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - `PortfolioManager.holding_removed` 시그널 → `TradingScreen._on_holding_removed(stock_id, qty, price, realized_pnl)` → `realized_pnl > 0` 확인 → `cost_basis` 계산 → `ProfitCelebration.play(realized_pnl, pnl_pct)`
 
 ### 호출 경로
-- [ ] `profit_celebration.gd`: 신규 작성. CanvasLayer(layer=5). `play(realized_pnl, pnl_pct)` 공개 메서드
-- [ ] `profit_celebration.gd`: `_calc_grade(pnl_pct) -> int` 내부 메서드
-- [ ] `profit_celebration.gd`: `GPUParticles2D` 설정 — `coin_gold.png` 스프라이트, 등급별 파티클 수
-- [ ] `profit_celebration.gd`: 숫자 롤업 `Label` + `Tween` easeOut 구현
-- [ ] `profit_celebration.gd`: 골드 테두리 플래시 `ColorRect` 구현
-- [ ] `profit_celebration.gd`: JACKPOT 배너 + 화면 shake 구현
-- [ ] `profit_celebration.gd`: `_cancel_current()` — 진행 중 이펙트 강제 종료
-- [ ] `profit_celebration.gd`: `GameClock.on_market_state_changed` 구독 → MARKET_CLOSED 시 취소
-- [ ] `trading_screen.gd`: `PortfolioManager.holding_removed` 구독 → `_on_holding_removed()` 에서 `cost_basis` 계산 + `ProfitCelebration.play()` 호출
-- [ ] `audio.gd` (audio.md): SFX 4종 등록 — `sfx_profit_small`, `sfx_profit_medium`, `sfx_profit_large`, `sfx_profit_jackpot`
+- [x] `profit_celebration.gd`: 신규 작성. CanvasLayer(layer=5). `play(realized_pnl, pnl_pct)` 공개 메서드
+- [x] `profit_celebration.gd`: `_calc_grade(pnl_pct) -> int` 내부 메서드
+- [x] `profit_celebration.gd`: `CPUParticles2D` 설정 — `coin_gold.png` 스프라이트(경로 존재 시 로드), 등급별 파티클 수
+- [x] `profit_celebration.gd`: 숫자 롤업 `Label` + `Tween` easeOut 구현
+- [x] `profit_celebration.gd`: 골드 테두리 플래시 `ColorRect` 구현
+- [x] `profit_celebration.gd`: JACKPOT 배너 + 화면 shake 구현
+- [x] `profit_celebration.gd`: `_cancel_current()` — 진행 중 이펙트 강제 종료
+- [x] `profit_celebration.gd`: `GameClock.on_market_state_changed` 구독 → MARKET_CLOSED 시 취소
+- [x] `trading_screen.gd`: `PortfolioManager.holding_removed` 구독 → `_on_holding_removed()` 에서 `cost_basis` 계산 + `ProfitCelebration.play()` 호출
+- [ ] `audio.gd` (audio.md): SFX 4종 등록 — `sfx_profit_small`, `sfx_profit_medium`, `sfx_profit_large`, `sfx_profit_jackpot` (에셋 확보 후 등록)
 
 ### 에셋 수급
 - [ ] `assets/art/vfx/coin_gold.png` — 금화 스프라이트 확보 (Kenney.nl UI Pack CC0 또는 Figma 원형+골드그라디언트 직접 제작, 32×32 또는 64×64 PNG 투명)
@@ -258,7 +258,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### 의존하는 외부 메서드 존재 확인
 - [x] `PortfolioManager.holding_removed(stock_id, quantity, price, realized_pnl)` 시그널 존재 확인 (portfolio_manager.gd L9)
-- [ ] `AudioManager.play_sfx(sfx_id: String)` 존재 확인
+- [x] `AudioManager.play_sfx(sfx_id: String)` 존재 확인 (audio_manager.gd L278)
 
 ### AC → 테스트 매핑
 | AC | 테스트 파일 | 테스트 함수 |

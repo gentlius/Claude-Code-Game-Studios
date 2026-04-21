@@ -1,0 +1,43 @@
+{
+  "version": "1.0",
+  "description": "FinancialReportSystem tuning constants. See design/gdd/financial-report-system.md §7",
+
+  "reportCycleSeasons": 3,
+  "fiscalYearStartSeason": 1,
+  "reportTypeSequence": ["Q1", "H1", "Q3", "Annual"],
+
+  "preliminaryEarnings": {
+    "enabled": true,
+    "dayOffset": 3,
+    "probabilityByProfile": {
+      "LOW":    0.90,
+      "MEDIUM": 0.70,
+      "HIGH":   0.30,
+      "EXTREME": 0.00
+    }
+  },
+
+  "newsStockMin": 8,
+  "newsStockMax": 12,
+  "reportDayMin": 5,
+  "reportDayMax": 18,
+  "analystDayMin": 3,
+  "analystDayMax": 10,
+  "rumorFireTickInDay": 40,
+  "rumorFakerate": 0.30,
+
+  "roeNewsThreshold": 0.03,
+  "surpriseThreshold": 0.05,
+  "shockThreshold": 0.05,
+  "consensusUncertaintyMax": 0.08,
+  "uncertaintyDecay": 8.0,
+  "sectorRippleRatio": 0.30,
+  "sectorNoise": 0.03,
+  "stockNoise": 0.02,
+  "roeMin": -0.30,
+  "roeMax": 0.50,
+  "perNegativeSentinel": -1.0,
+  "roeDriftScale": 0.04,
+  "sectorRippleImpact": 0.06,
+  "sectorRippleDecayTicks": 4
+}

@@ -252,6 +252,7 @@ equity_ratio  = (position_market_value - borrowed - accrued_interest) / position
 | AC-9 | 포인트 0에서 해금 시도 시 거부 | 유닛 테스트 |
 | AC-10 | P3(섹터 ETF) 해금 시 섹터 단위 투자 가능 | 유닛 테스트: P3 해금 → 섹터 ETF 매매 허용, P3 미해금 → 섹터 ETF 매매 거부 |
 | AC-11 | `has_rumor_channel()` = S3 해금 시 true 반환, 미해금 시 false | 유닛 테스트 |
+| AC-12 | 크로스 브랜치 선행 조건 미충족 스킬 클릭 시 `PREREQ_MISSING` 상태가 표시되며, 필요한 선행 스킬 명칭이 UI에 노출됨 | E2E 시각 검증: TR3 시도 시 "A2(보조지표) 선행 필요" 안내 텍스트 확인 |
 
 ## Open Questions
 

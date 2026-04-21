@@ -1,0 +1,108 @@
+{
+  "version": "1.0",
+  "market_id": "US",
+  "display_name_ko": "미국 나스닥",
+  "display_name_en": "US NASDAQ",
+  "description": "US NASDAQ stub profile for DLC expansion testing. See docs/architecture/ADR-021.",
+
+  "trading": {
+    "commission": 0.0005,
+    "sell_tax": 0.0,
+    "buy_tax": 0.0,
+    "capital_gains_rate_short": 0.22,
+    "capital_gains_rate_long": 0.15,
+    "capital_gains_threshold_days": 365,
+    "margin_rate_min": 1.25,
+    "daily_limit_pct": null,
+    "short_margin_rate": 1.50,
+    "short_margin_call_threshold": 0.25,
+    "short_forced_liquidation_ratio": 0.40,
+    "max_short_positions": 5
+  },
+
+  "calendar": {
+    "ticks_per_day": 390,
+    "days_per_season": 20,
+    "fiscal_year_start_season": 1,
+    "report_cycle_seasons": 3,
+    "report_type_sequence": ["Q1", "Q2", "Q3", "Q4"],
+    "preliminary_earnings": {
+      "enabled": false,
+      "day_offset": 0,
+      "probability_by_profile": {
+        "LOW": 0.0, "MEDIUM": 0.0, "HIGH": 0.0, "EXTREME": 0.0
+      }
+    },
+    "report_day_min": 5,
+    "report_day_max": 18,
+    "analyst_day_min": 3,
+    "analyst_day_max": 10
+  },
+
+  "sectors": [
+    "Tech", "Healthcare", "Finance", "Energy", "Consumer"
+  ],
+
+  "etfs": {
+    "ETF_Tech":       { "sector": "Tech",       "base_price": 50000, "name_ko": "테크 ETF" },
+    "ETF_Healthcare": { "sector": "Healthcare", "base_price": 50000, "name_ko": "헬스케어 ETF" },
+    "ETF_Finance":    { "sector": "Finance",    "base_price": 50000, "name_ko": "금융 ETF" },
+    "ETF_Energy":     { "sector": "Energy",     "base_price": 50000, "name_ko": "에너지 ETF" },
+    "ETF_Consumer":   { "sector": "Consumer",   "base_price": 50000, "name_ko": "소비재 ETF" }
+  },
+
+  "sector_archetypes": {
+    "Tech":       "GROWTH",
+    "Healthcare": "DEFENSIVE",
+    "Finance":    "CYCLICAL",
+    "Energy":     "CYCLICAL",
+    "Consumer":   "DEFENSIVE"
+  },
+
+  "rivalry_weights": {
+    "GROWTH":    { "DEFENSIVE": 0.5, "CYCLICAL": 0.5 },
+    "DEFENSIVE": { "GROWTH": 0.6,    "CYCLICAL": 0.4 },
+    "CYCLICAL":  { "GROWTH": 0.5,    "DEFENSIVE": 0.5 }
+  },
+
+  "rotation_params": {
+    "flow_sensitivity": 0.4,
+    "flow_decay": 0.12,
+    "threshold": 0.04,
+    "cooldown_ticks": 6,
+    "inflow_impact": [0.03, 0.06],
+    "outflow_impact": [0.02, 0.04],
+    "decay_ticks": 10,
+    "lookback_ticks": 5
+  },
+
+  "rotation_headline_keys": {
+    "inflow":  ["ROTATION_US_INFLOW_0", "ROTATION_US_INFLOW_1"],
+    "outflow": ["ROTATION_US_OUTFLOW_0"]
+  },
+
+  "source_locale": "en",
+
+  "endings": {
+    "bankruptcy": {
+      "threshold":  1000,
+      "name_key":   "ENDING_US_BANKRUPTCY_NAME",
+      "body_key":   "ENDING_US_BANKRUPTCY_BODY",
+      "sfx_key":    "sfx_ending_bankruptcy",
+      "visual":     "res://assets/endings/us_bankruptcy.png",
+      "action_label_key": "ENDING_ACTION_NEW_GAME",
+      "is_bad_ending": true
+    },
+    "win": {
+      "threshold":  10000000000,
+      "name_key":   "ENDING_US_WIN_NAME",
+      "body_key":   "ENDING_US_WIN_BODY",
+      "sfx_key":    "sfx_ending_win",
+      "visual":     "res://assets/art/housing/grandmaster_ending.png",
+      "action_label_key": "ENDING_ACTION_CONTINUE",
+      "is_bad_ending": false
+    }
+  },
+
+  "achievements": []
+}

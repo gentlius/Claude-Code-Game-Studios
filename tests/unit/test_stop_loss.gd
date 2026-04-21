@@ -292,3 +292,123 @@ func test_setting_cleared_if_skill_not_unlocked_on_load() -> void:
 	SkillTree._unlocked_skills.erase("TR2")
 	StopTakeSystem.load_save_data(saved)
 	assert_null(StopTakeSystem.get_setting(MOCK_STOCK_ID), "TR2 미해금 로드 시 설정 삭제되어야 한다")
+
+
+# ── 숏 포지션 손절/익절 테스트 ──
+
+func _add_mock_short(stock_id: String, quantity: int, open_price: int) -> void:
+	## Inject a short position directly for test isolation.
+	var initial_value: int = open_price * quantity
+	ShortSellingSystem._positions[stock_id] = {
+		"stock_id":           stock_id,
+		"quantity":           quantity,
+		"open_price":         open_price,
+		"initial_value":      initial_value,
+		"margin_deposited":   ceili(initial_value * 1.40),
+		"open_tick":          0,
+		"open_day":           0,
+		"unrealized_pnl":     0,
+		"unrealized_pnl_pct": 0.0,
+		"margin_ratio":       1.40,
+	}
+
+
+func _unlock_tr1_tr2_tr3() -> void:
+	SkillTree._unlocked_skills["TR1"] = true
+	SkillTree._unlocked_skills["TR2"] = true
+	SkillTree._unlocked_skills["TR3"] = true
+
+
+# ── 숏 AC-S01: 숏 포지션에 set_condition 성공 ──
+
+func test_short_set_condition_succeeds_with_short_position() -> void:
+	_unlock_tr1_tr2_tr3()
+	_add_mock_short(MOCK_STOCK_ID, 10, 10000)
+	var ok: bool = StopTakeSystem.set_condition(MOCK_STOCK_ID, 13000, 7000, 10)
+	assert_true(ok, "숏 포지션에 set_condition은 true를 반환해야 한다")
+	var setting: Variant = StopTakeSystem.get_setting(MOCK_STOCK_ID)
+	assert_not_null(setting, "설정이 저장되어야 한다")
+	assert_true((setting as Dictionary).get("is_short", false), "is_short 플래그가 true여야 한다")
+
+
+# ── 숏 AC-S02: 롱·숏 포지션 모두 없을 때 set_condition 실패 ──
+
+func test_short_set_condition_fails_without_any_position() -> void:
+	_unlock_tr1_tr2_tr3()
+	var ok: bool = StopTakeSystem.set_condition(MOCK_STOCK_ID, 13000, 7000, 10)
+	assert_false(ok, "롱·숏 포지션 모두 없으면 set_condition은 false를 반환해야 한다")
+
+
+# ── 숏 AC-S03: 가격 상승 → 손절 BUY_TO_COVER 발동 ──
+
+func test_short_stop_loss_triggers_when_price_rises() -> void:
+	_unlock_tr1_tr2_tr3()
+	_add_mock_short(MOCK_STOCK_ID, 10, 10000)
+	_set_mock_price(MOCK_STOCK_ID, 10000)
+	StopTakeSystem.set_condition(MOCK_STOCK_ID, 13000, null, 10)
+
+	## 가격 상승 → 손절 임계값(13000) 돌파
+	_set_mock_price(MOCK_STOCK_ID, 13500)
+
+	var triggered: Array[String] = []
+	var cb: Callable = func(id: String, reason: String, _p: int) -> void:
+		if reason == "STOP_LOSS":
+			triggered.append(id)
+	StopTakeSystem.on_stop_take_triggered.connect(cb)
+	StopTakeSystem.check_and_trigger(GameClock.MarketState.MARKET_OPEN)
+	StopTakeSystem.on_stop_take_triggered.disconnect(cb)
+	assert_true(triggered.has(MOCK_STOCK_ID), "가격 상승 시 숏 손절 on_stop_take_triggered 발행 필요")
+
+
+# ── 숏 AC-S04: 가격 하락 → 익절 BUY_TO_COVER 발동 ──
+
+func test_short_take_profit_triggers_when_price_falls() -> void:
+	_unlock_tr1_tr2_tr3()
+	_add_mock_short(MOCK_STOCK_ID, 10, 10000)
+	_set_mock_price(MOCK_STOCK_ID, 10000)
+	StopTakeSystem.set_condition(MOCK_STOCK_ID, null, 7000, 10)
+
+	## 가격 하락 → 익절 임계값(7000) 하회
+	_set_mock_price(MOCK_STOCK_ID, 6500)
+
+	var triggered: Array[String] = []
+	var cb: Callable = func(id: String, reason: String, _p: int) -> void:
+		if reason == "TAKE_PROFIT":
+			triggered.append(id)
+	StopTakeSystem.on_stop_take_triggered.connect(cb)
+	StopTakeSystem.check_and_trigger(GameClock.MarketState.MARKET_OPEN)
+	StopTakeSystem.on_stop_take_triggered.disconnect(cb)
+	assert_true(triggered.has(MOCK_STOCK_ID), "가격 하락 시 숏 익절 on_stop_take_triggered 발행 필요")
+
+
+# ── 숏 AC-S05: 조건 미충족 시 발동 없음 ──
+
+func test_short_no_trigger_when_condition_not_met() -> void:
+	_unlock_tr1_tr2_tr3()
+	_add_mock_short(MOCK_STOCK_ID, 10, 10000)
+	_set_mock_price(MOCK_STOCK_ID, 10000)
+	StopTakeSystem.set_condition(MOCK_STOCK_ID, 13000, 7000, 10)
+
+	## 가격이 설정 범위 내
+	_set_mock_price(MOCK_STOCK_ID, 11000)
+	var fired: Array[bool] = [false]
+	var cb: Callable = func(_a: String, _b: String, _c: int) -> void: fired[0] = true
+	StopTakeSystem.on_stop_take_triggered.connect(cb)
+	StopTakeSystem.check_and_trigger(GameClock.MarketState.MARKET_OPEN)
+	StopTakeSystem.on_stop_take_triggered.disconnect(cb)
+	assert_false(fired[0], "조건 미충족 시 발동 없어야 한다")
+	assert_not_null(StopTakeSystem.get_setting(MOCK_STOCK_ID), "설정 유지되어야 한다")
+
+
+# ── 숏 AC-S06: 숏 청산 시 설정 자동 삭제 ──
+
+func test_short_setting_cleared_on_position_close() -> void:
+	_unlock_tr1_tr2_tr3()
+	_add_mock_short(MOCK_STOCK_ID, 10, 10000)
+	StopTakeSystem.set_condition(MOCK_STOCK_ID, 13000, null, 10)
+	assert_not_null(StopTakeSystem.get_setting(MOCK_STOCK_ID), "설정이 존재해야 한다")
+
+	## 숏 포지션 수동 청산 시뮬레이션
+	ShortSellingSystem._positions.erase(MOCK_STOCK_ID)
+	ShortSellingSystem.on_short_position_closed.emit(MOCK_STOCK_ID, 50000)
+	assert_null(StopTakeSystem.get_setting(MOCK_STOCK_ID), "숏 청산 후 설정이 삭제되어야 한다")

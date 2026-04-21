@@ -430,6 +430,7 @@ candle_end_tick = candle_start_tick + timeframe_ticks - 1
 | 스킬 트리 | 차트가 참조 | `is_skill_unlocked("A1"/"A2")` 해금 여부. **Soft** (미구현 시 기본 차트) |
 | 게임 시계 | 차트가 의존 | 시장 상태, 배속 정보. **Hard** |
 | OhlcvHistory | 차트가 의존 | W1/MN 타임프레임 캔들 집계. `get_candles(stock_id, "W1"/"MN")`. **Hard** (W1/MN 타임프레임 한정) |
+| 재무제표 시스템 | 차트가 참조 | A3 해금 시 PER/PBR/ROE 데이터 표시. `FinancialReportSystem.get_report(stock_id)`. **Soft** (A3 미해금 시 패널 숨김) |
 
 ## Tuning Knobs
 
@@ -475,7 +476,7 @@ candle_end_tick = candle_start_tick + timeframe_ticks - 1
 | Godot 웹 export에서 캔들차트 렌더링 성능 검증 | engine-programmer | 프로토타입 | /prototype chart-renderer로 검증 |
 | Canvas 2D vs Control 노드 기반 렌더링 결정 | technical-artist | 엔진 설정 후 | 성능 프로토타입 결과로 결정 |
 | 다크 모드/라이트 모드 색상 테마 | art-director | Alpha | 미정 |
-| 기업 재무제표(PER/PBR) A3 표시 위치 — 차트 내 vs 별도 패널 | ux-designer | V-Slice | 미정 |
+| 기업 재무제표(PER/PBR) A3 표시 위치 — 차트 내 vs 별도 패널 | ux-designer | V-Slice | 확정: 차트 패널과 분리된 별도 종목 정보 패널 구현 (financial-statements.md §9 참조) |
 
 ---
 

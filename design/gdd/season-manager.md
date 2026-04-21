@@ -439,6 +439,11 @@ daily_xp_granted = base_daily_xp × (FREE_MARKET_XP_RATE if is_free_market else 
 - [x] AC-19: 프리마켓 참가자도 수익률 ≥ 0% AND 체결 ≥ 5회 충족 시 완주 보너스 20 XP를 받는다 (패널티 없음)
 - [x] AC-20: 프리마켓에서 `cash_assets ≥ 1,000,000` 달성 시 다음 시즌 시작 버튼 시점에 브론즈로 배정된다
 
+#### E2E 시나리오
+
+- [ ] AC-21 (E2E): 공식 리그 참가 중 손실로 `cash_assets < 1,000,000` 도달 → 다음 시즌 시작 버튼 시점에 프리마켓 진입 → 프리마켓 시즌 수익으로 `cash_assets ≥ 1,000,000` 달성 → 다음 시즌 시작 버튼 시 브론즈 티어 배정 + `auto_deposit_to_sim(1,000,000)` 정확히 실행
+- [ ] AC-22 (E2E): 프리마켓 중 `sim_cash < 10,000` AND 보유 주식 0 상태 → 한강 엔딩 즉시 발동 → 이후 100만원 재시작 시 브론즈 진입 가능 (`cash_assets = 1,000,000` 초기화 확인)
+
 ---
 
 ## 9. Implementation Checklist
@@ -468,6 +473,9 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 ### AC → 테스트 매핑
 
+> **엔딩 통합 명세**: AC-03(거장), AC-05(한강) 상세 조건·UX·Steam 업적·미구현 항목은
+> [endings-achievements.md](endings-achievements.md) §8을 참조한다.
+
 | AC | 테스트 파일 | 테스트 함수 | 상태 |
 |----|------------|------------|------|
 | AC-01 티어 배정 | `tests/unit/test_season_manager.gd` | `test_tier_assignment_*` | ✅ 구현됨 |
@@ -491,3 +499,15 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 ### 빌드 검증
 
 - [x] 바이너리 실행 확인: QA Lead 서명 — 내부 감사 2026-04-06 (build/windows/SeedMoney.exe, Apr 6)
+
+### DLC 확장성 — MarketProfile 추상화 (Sprint 10)
+
+> 시즌 길이와 주간 정산 구조가 한국 시장 기준으로 고정된 부분을 MarketProfile로 분리한다.  
+> 근거: [ADR-021](../../docs/architecture/021-market-profile-data-driven.md) / 감사 항목: **M-01**
+
+- [ ] `WEEKS_PER_SEASON = 4` → `_profile.season_length_weeks` 로드로 교체
+- [ ] 시즌 길이 변경 시 파생 상수(`TRADING_DAYS_PER_SEASON = WEEKS_PER_SEASON * 5`) 연쇄 갱신
+- [ ] 주간 상금(`on_week_end`) 트리거가 `season_length_weeks` 기반으로 자동 조정되는지 확인
+- [ ] `assets/data/market_profiles/market_kr.json` — `"season_length_weeks": 4` 등록
+- [ ] AI 수익률 재조정 필요 여부 확인 — 시즌 길이가 바뀌면 `ai-competitor.md` M-02 파라미터와 연동
+- [ ] 테스트: `test_season_manager.gd` — `test_season_length_from_market_profile()` 추가

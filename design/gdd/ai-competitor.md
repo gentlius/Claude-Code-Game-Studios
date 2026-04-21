@@ -579,8 +579,11 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 
 - [x] 바이너리 실행 확인: QA Lead 서명 — 내부 감사 2026-04-15 (Alpha 완료 빌드, SCRIPT ERROR 없음)
 
-### DLC 확장성 — MarketProfile 추상화 (Sprint 10)
+---
 
+## DLC 확장성 — MarketProfile 추상화
+
+> 한국 시장 Approved 조건과 별개. DLC 그린라이트 시 구현. tech-debt TD-DR-09 참조.  
 > AI 경쟁자 수익률 분포가 한국 시장 변동성 기준으로 고정된 부분을 MarketProfile로 분리한다.  
 > 근거: [ADR-021](../../docs/architecture/021-market-profile-data-driven.md) / 감사 항목: **M-02**
 

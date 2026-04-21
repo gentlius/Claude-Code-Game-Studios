@@ -250,8 +250,8 @@ else:
 52주 최고 78,500 (+4.8%)  │  52주 최저 58,000
 ```
 - `StockData.week52_high`, `StockData.week52_low` 필드 필요
-- 현재 StockData 미구현 → **Sprint 9 구현 예정** (이 행은 Sprint 9까지 숨김)
-- stocks.json에 `week52_high`, `week52_low` 필드 추가 필요
+- 현재 StockData 미구현. Sprint 9 대상이었으나 미구현 — Sprint 10 이후 구현 대상. 이 행은 구현 전까지 숨김
+- stocks.json에 `week52_high`, `week52_low` 필드 추가 필요 (미등록)
 
 ---
 
@@ -386,7 +386,7 @@ lower_limit = PriceEngine.round_to_tick(prev_day_close * 0.70)
 | AC-17 | 매도/매수 총잔량 합계 행이 5단 잔량 합산값과 일치한다 | E2E 시각 검증 |
 | AC-18 | 매도 바는 오른쪽 정렬, 매수 바는 왼쪽 정렬로 표시되고 매 틱 갱신된다 | E2E 시각 검증 |
 | AC-19 | 체결강도가 매수/매도 총잔량 비율로 계산되어 바+퍼센트로 표시된다 | E2E 시각 검증 |
-| AC-20 | (Sprint 9) 52주 최고/최저가 하단에 표시된다 | `StockData.week52_high/low` 구현 후 E2E |
+| AC-20 | 52주 최고/최저가 하단에 표시된다 | `PriceEngine.get_week52_high/low()` 구현 완료 — E2E 시각 검증 |
 
 ---
 
@@ -416,7 +416,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
   - [x] 현재가 구분행: 강조 배경 + 등락폭/률
   - [x] 매수 총잔량 합계 행 (블록 4)
   - [x] 체결강도 행 (블록 5): 바 + 퍼센트 + 매수/매도우위 텍스트
-  - [ ] 52주 행 (블록 6): Sprint 9까지 숨김
+  - [x] 52주 행 (블록 6): `PriceEngine.get_week52_high/low()` — ohlcv_daily 전 회차 + 오늘 장중값 스캔. stocks.json 필드 추가 불필요 (동적 계산)
 - [x] `OrderPanel._refresh_order_book()` — anchor 기반 바 너비 정규화, 매 틱 갱신
 - [x] `OrderPanel._refresh_ohlcv()` — 시/고/저/거래량 레이블 매 틱 갱신
 - [x] `OrderPanel._refresh_fill_strength()` — 체결강도 바+텍스트 매 틱 갱신
@@ -445,7 +445,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | AC-17 | E2E 시각 검증 | — |
 | AC-18 | E2E 시각 검증 | — |
 | AC-19 | E2E 시각 검증 | — |
-| AC-20 | E2E 시각 검증 (Sprint 9) | — |
+| AC-20 | E2E 시각 검증 | — |
 
 ### 빌드 검증
 - [x] 바이너리 실행 확인: QA Lead 서명 — S8 완료 빌드 (2026-04-17, SCRIPT ERROR 없음)

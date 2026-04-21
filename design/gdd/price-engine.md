@@ -1,6 +1,6 @@
 # 가격 엔진 (Price Engine)
 
-> **Status**: Approved
+> **Status**: In Review (Sprint 10 — MarketProfile tick_size/daily_limit 마이그레이션 미완)
 > **Author**: user + game-designer
 > **Last Updated**: 2026-04-03
 > **Implements Pillar**: 판단이 곧 실력 (Judgment is King), 읽는 재미 (Read the Market)
@@ -701,14 +701,33 @@ event_delta = sum(actual_impact_i for all events i in this tick)
 이면 BREAKOUT 상태로 강제 전환하고 `current_state_duration = 0`으로 리셋하며,
 `forced_transition_this_tick = true` 플래그를 설정한다.
 
+**Step 4-c — 루머 압력 (Rumor Pressure, S3 스킬)**
+
+```
+# _rumor_pressure: Dictionary — stock_id → { "delta_per_tick": float, "ticks_remaining": int }
+# on_rumor_hint 시그널 수신 시 주입. 장 마감 시 해당 종목 항목 삭제.
+if _rumor_pressure.has(stock_id):
+    rumor_delta = _rumor_pressure[stock_id]["delta_per_tick"]
+    _rumor_pressure[stock_id]["ticks_remaining"] -= 1
+    if _rumor_pressure[stock_id]["ticks_remaining"] <= 0:
+        _rumor_pressure.erase(stock_id)
+else:
+    rumor_delta = 0.0
+```
+
+루머 발화(stated direction 기준, 실제 방향과 무관) 시 `RUMOR_PRESSURE_STRENGTH × direction`을
+60틱 동안 매 틱 적용한다. S3 미해금 또는 루머 없는 종목은 `rumor_delta = 0.0`.
+상세 설계: [rumor-channel.md §3-5, F3](rumor-channel.md)
+
 **Step 5 — 레이어 합산 (가법 결합)**
 
 ```
-total_delta_ratio = pattern_delta + drift_delta + event_delta
+total_delta_ratio = pattern_delta + drift_delta + event_delta + player_delta + rumor_delta
 ```
 
-세 레이어는 **가법(additive)**으로 결합한다. 이벤트가 없을 때 drift와 pattern만으로
+다섯 레이어는 **가법(additive)**으로 결합한다. 이벤트가 없을 때 drift와 pattern만으로
 가격이 결정되어야 하며, 이벤트 임팩트가 "추가적 충격"의 직관에 부합한다.
+`player_delta`(ADR-019)와 `rumor_delta`(S3)는 플레이어 행동·정보 효과로 분리된다.
 
 **Step 6 — 가격 갱신**
 
@@ -884,11 +903,13 @@ Core Rules에서 정의한 공식을 변수 테이블과 함께 정리한다.
 #### F1. 틱 변동률
 
 ```
-total_delta_ratio = pattern_delta + drift_delta + event_delta
+total_delta_ratio = pattern_delta + drift_delta + event_delta + player_delta + rumor_delta
 clamped = clamp(current_price × (1 + total_delta_ratio), min_price, max_price)
 tick_size = get_tick_size(clamped)
 new_price = round(clamped / tick_size) × tick_size
 # 주의: 일일 가격 제한(±30%) 클램프가 하드 클램프보다 먼저 적용됨. 상세 순서는 규칙 5-2 Step 6 참조.
+# player_delta: ADR-019 (플레이어 체결량 → 가격 압력)
+# rumor_delta:  S3 루머 채널 선반영 압력 (rumor-channel.md §3-5)
 ```
 
 #### F2. 패턴 레이어
@@ -924,7 +945,7 @@ event_delta = sum(actual_impact_i)  for all active events this tick
 ```
 # 에너지 기반 거래량 (Rules 4-2 ~ 4-6 곱셈 모델)
 base_vol = uniform(vol_min, vol_max)
-tick_energy = |pattern_delta| + |event_delta|
+tick_energy = |pattern_delta| + |event_delta| + |rumor_delta|  # rumor_delta 포함 (S3)
 energy_multiplier = 1.0 + clamp(tick_energy / ENERGY_THRESHOLD, 0.0, ENERGY_MAX_BOOST)
 proximity_ratio = |current_price - prev_day_close| / (prev_day_close × DAILY_LIMIT_PCT)
 limit_dampen = lerp(1.0, LIMIT_DAMPEN_MIN, t)  if proximity ≥ LIMIT_DAMPEN_START, else 1.0
@@ -1040,11 +1061,12 @@ EXTREME 변동성(메디진, base_price=180,000원) + 대형 이벤트 1회, vol
 |--------|-----------|---------------------|
 | 게임 시계 | 가격 엔진이 의존 | `on_tick` 시그널로 구동. 틱 번호로 장 시작/종료 판별. **Hard** |
 | 종목 DB | 가격 엔진이 의존 | base_price, volatility_profile, sector/macro_sensitivity 조회. **Hard** |
-| 뉴스/이벤트 시스템 | 이벤트가 가격 엔진에 입력 | Event 오브젝트 수신. 없어도 패턴+드리프트로 작동. **Soft** |
+| 뉴스/이벤트 시스템 | 이벤트가 가격 엔진에 입력 | Event 오브젝트 수신. 없어도 패턴+드리프트로 작동. **Soft**. S3 해금 시 `on_rumor_hint` 시그널도 구독 — `_rumor_pressure` 주입. |
 | 차트 렌더러 | 차트가 가격 엔진에 의존 | `get_tick_buffer()` — 시즌 전체 틱 시계열 읽기. **Hard** |
 | 주문 처리 엔진 | 주문이 가격 엔진에 의존 | `get_current_price()` 체결가 조회. **Hard** |
 | 트레이딩 스크린 | UI가 가격 엔진에 의존 | `on_price_updated` 시그널 구독. **Soft** |
 | AI 경쟁자 시스템 | 양방향 | MVP: AI가 가격 데이터 읽기만 함 (단방향, **Soft**). 향후: AI 매매 주문량 + 주문 잔량(매수/매도 대기) 비율이 가격에 영향 → 오더북 레이어 추가 시 **Hard** 양방향 의존. 가격 엔진이 AI 주문 풀을 입력으로 받아 수급 기반 가격 보정 |
+| EtfManager | EtfManager가 이 시스템에 의존 | `get_current_price(etf_id)` — ETF 현재가 조회. `PriceEngine.inject_price(etf_id, price)` — ETF 시가총액 가중 가격 주입 (S10-02 추가 API). **Hard** |
 
 ## Tuning Knobs
 
@@ -1068,6 +1090,7 @@ EXTREME 변동성(메디진, base_price=180,000원) + 대형 이벤트 1회, vol
 | `LIMIT_DAMPEN_START` | 0.7 | 0.5~0.9 | 감쇠 시작 늦춤. 상/하한가 직전까지 거래 활발 | 일찍 감쇠 시작. 점진적 호가 고갈 |
 | `LIMIT_DAMPEN_MIN` | 0.15 | 0.05~0.30 | 상/하한가에서도 거래 약간 유지 | 상/하한가 거래량 거의 0. 극단적 호가 고갈 |
 | `VI_THRESHOLD` | 0.15 (±15%) | 0.10~0.20 | VI 발동 기준 완화. 덜 빈번한 정지 | VI 빈번. 잦은 거래 중단 |
+| `RUMOR_PRESSURE_STRENGTH` | 0.0005 | 0.0002~0.001 | 루머 선반영 강도 증가. 60틱 누적 ±3~6%. 상한: 0.001 (일일 제한폭 내). | 루머 효과 약화. 선반영 거의 없음 |
 | `VI_HALT_TICKS` | 8 | 4~20 | 긴 정지. 냉각 효과 강화 | 짧은 정지. 빠른 재개 |
 | `VI_MAX_PER_DAY` | 1 | 1~3 | 더 많은 VI 허용 | — |
 | `VI_COOLDOWN_TICKS` | 20 | 10~40 | 긴 쿨다운. 재발동 여유 확보 | 짧은 쿨다운. 빠른 재발동 가능 |
@@ -1093,6 +1116,10 @@ EXTREME 변동성(메디진, base_price=180,000원) + 대형 이벤트 1회, vol
 - [ ] 상/하한가 근접(proximity ≥ 0.7) 시 거래량이 감쇠됨
 - [ ] 상/하한가 도달(proximity = 1.0) 시 거래량이 기본의 15%로 감소함
 - [ ] 시즌 초기화 시 모든 종목이 SIDEWAYS, base_price로 리셋됨
+- [ ] S3 루머 발화 후 60틱 동안 해당 종목 가격이 루머 방향으로 완만하게 이동함 (rumor_delta 적용 확인)
+- [ ] 루머 중복 발화 시 `_rumor_pressure` 항목이 덮어쓰기되어 1개만 존재함
+- [ ] 장 마감 시 `_rumor_pressure` 해당 항목이 삭제됨 (다음 거래일 이월 없음)
+- [ ] `PriceEngine.reset()` 시 `_rumor_pressure` 전체 초기화
 - [ ] 이벤트 없이도 패턴+드리프트만으로 의미있는 차트가 생성됨
 - [ ] 성능: 46개 종목 1틱 처리가 4ms 이내
 - [ ] 전일 종가 대비 ±30% 초과 가격이 절대 발생하지 않음
@@ -1111,6 +1138,10 @@ EXTREME 변동성(메디진, base_price=180,000원) + 대형 이벤트 1회, vol
 - [ ] 종합지수가 -20% 도달 시 Stage 2 발동, 즉시 장 마감 처리
 - [ ] 서킷브레이커는 시즌당 0~1회 수준 (발동 자체가 드라마틱 이벤트)
 - [ ] 서킷브레이커 발동 시 `on_circuit_breaker` 시그널 정상 발신
+
+**E2E 시나리오 AC (이벤트 → 가격 → 플레이어 경험)**
+- [ ] E2E-01: INSTANT_SHOCK 이벤트 발생 → 해당 틱에서 가격이 즉시 변동 → 차트 렌더러가 새 캔들 고점/저점에 반영 → 플레이어 화면에 가격 변동이 표시됨. 모든 단계가 동일 틱 내에서 완료
+- [ ] E2E-02: INSTANT_SHOCK으로 가격이 전일 종가 대비 ±15% 초과 → VI 발동 → `on_vi_triggered` 수신한 UI가 해당 종목 "VI 발동" 표시 + 8틱 동안 가격 동결 → VI 해제 후 거래 정상 재개. 플레이어가 VI 시작·종료를 UI로 확인 가능
 
 ## Open Questions
 
@@ -1148,6 +1179,10 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `PriceEngine.on_vi_triggered(stock_id, is_upper, halt_ticks)` 시그널 존재
 - [x] `PriceEngine.on_circuit_breaker(stage, halt_ticks)` 시그널 존재
 - [x] `PriceEngine.reset()` 존재
+- [x] `PriceEngine._rumor_pressure: Dictionary` 상태 추가
+- [x] `PriceEngine._on_rumor_hint(rumor: Dictionary)` 구현 — `on_rumor_hint` 시그널 연결
+- [x] `PriceEngine.process_tick()` Step 4-c rumor_delta 계산 삽입
+- [x] `price_engine_config.json` — `RUMOR_PRESSURE_STRENGTH: 0.0005` 추가
 
 ### AC → 테스트 매핑
 
@@ -1162,3 +1197,21 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 ### 빌드 검증
 
 - [x] 바이너리 실행 확인: QA Lead 서명 — S9 완료 빌드 (2026-04-17, SCRIPT ERROR 없음)
+
+### DLC 확장성 — MarketProfile 추상화 (Sprint 10)
+
+> KRX 호가 단위 테이블과 ±30% 상하한가가 하드코딩된 부분을 MarketProfile로 분리한다.  
+> 근거: [ADR-021](../../docs/architecture/021-market-profile-data-driven.md) / 감사 항목: **C-02, C-03**
+
+**C-02. 호가 단위 테이블**
+- [ ] `get_tick_size(price) -> int` — KRX 7구간 테이블 하드코딩 → `_profile.tick_size_table` 배열 룩업으로 교체
+- [ ] `assets/data/market_profiles/market_kr.json` — `"tick_size_table": [{"threshold": 1000, "tick": 1}, ...]` 등록
+- [ ] OrderEngine, ChartRenderer의 `get_tick_size()` 호출이 MarketProfile 교체 후 자동 반영되는지 확인
+- [ ] 테스트: `test_price_engine.gd` — `test_tick_size_loaded_from_market_profile()` 추가 (기존 `test_tick_size_*` 대체)
+
+**C-03. 상하한가**
+- [ ] `DAILY_PRICE_LIMIT = 0.30` (±30%) 상수 → `_profile.daily_limit_pct` 로드로 교체
+- [ ] `get_daily_limits(stock_id)` 반환값이 `_profile.daily_limit_pct` 기반으로 동적 계산되도록 수정
+- [x] `assets/data/market_profiles/market_kr.json` — `"daily_limit_pct": 0.30` 등록
+- [ ] short-selling.md 강제청산 임계값(120% 상승 = 상한가 4회) 연동 확인 — ShortSellingSystem과 협의
+- [ ] 테스트: `test_price_engine.gd` — `test_daily_limit_loaded_from_market_profile()` 추가

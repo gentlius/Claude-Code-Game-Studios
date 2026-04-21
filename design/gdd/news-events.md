@@ -795,6 +795,80 @@ S3 루머는 슬롯 발생 시각과 Scope/Impact가 확정된 시점에서
 | **트레이딩 스크린** | 트레이딩 스크린이 알림 라우팅 | `on_news_display` 구독 → `is_system_event = true`인 항목을 VI/CB 알림 탭에 표시 (트레이딩 스크린 규칙 9 참조) |
 | **스킬 트리** | 뉴스/이벤트가 참조 | `get_news_delay_ticks()` — 딜레이 틱 수 반환. `has_rumor_channel()` — S3 해금 시 루머 활성화 |
 | **시즌/대회 관리** | 뉴스/이벤트가 참조 | `get_season_theme()` — 활성 시즌 테마 조회. 테마별 이벤트 가중치 적용 |
+| **EtfManager** | EventSource (ADR-022) | `inject_event(SECTOR_ROTATION, ...)` — 섹터 로테이션 이벤트 주입. 뉴스/이벤트 시스템이 PriceEngine 영향 + 뉴스 피드 표시 처리 |
+
+---
+
+### 시스템 생성 이벤트 (System-Injected Events)
+
+템플릿 풀에서 생성되는 일반 이벤트 외에, 외부 시스템이 직접 주입하는 이벤트 타입.
+모든 시스템 주입 이벤트는 ADR-022 EventSource 패턴을 따른다.
+
+#### SECTOR_ROTATION (EtfManager 주입)
+
+**발화 조건**: EtfManager의 `sector_flow_delta`가 `ROTATION_THRESHOLD` 초과 + 쿨다운 경과.
+
+**이벤트 데이터 스키마**:
+
+```gdscript
+{
+    "event_source":    "EtfManager",
+    "scope":           "SECTOR_ROTATION",
+    "sector_in":       String,   # 유입 섹터 (inflow 이벤트)
+    "sector_out":      String,   # 소외 섹터 (outflow 이벤트, 별도 inject)
+    "impact":          float,    # MarketProfile rotation_params 범위 내 랜덤
+    "direction":       int,      # +1 (inflow) / -1 (outflow)
+    "headline_key":    String,   # MarketProfile rotation_headline_keys 중 랜덤 키
+    "visible_to_player": true,
+    "rumor_eligible":  true
+}
+```
+
+**NewsEventSystem 처리 (`scope == "SECTOR_ROTATION"`)**:
+
+1. **가격 영향**: `sector_in`의 구성 종목 전체에 `impact × sector_sensitivity` 분배 적용
+2. **뉴스 피드**: `tr(headline_key).format({"sector": sector_display_name})` → NewsFeedUI 헤드라인
+3. **S3 루머**: `rumor_eligible == true` + S3 해금 시 → RumorChannel이 섹터 이동 루머 생성 가능
+
+**impact 등급 기준 (KR 기본값)**:
+
+| 방향 | impact 범위 | 등급 |
+|------|-----------|------|
+| inflow | 0.04 ~ 0.07 | MEDIUM |
+| outflow | 0.02 ~ 0.03 | MINOR |
+
+**야간 이벤트 제약**: SECTOR_ROTATION은 장중(ACTIVE 상태)에서만 발화. 야간 풀 포함 불가.
+
+#### SECTOR_RIPPLE (FinancialReportSystem 주입 — E-09)
+
+**발화 조건**: LARGE VolatilityProfile 종목에 EARNINGS_SHOCK 분류 시 즉시.
+
+**이벤트 데이터 스키마**:
+
+```gdscript
+{
+    "event_source":    "FinancialReportSystem",
+    "scope":           "SECTOR_RIPPLE",
+    "target_sector":   String,   # 트리거 종목의 섹터
+    "origin_stock_id": String,   # 트리거 종목 ID (이중 충격 방지용)
+    "impact":          float,    # shock_magnitude × SECTOR_RIPPLE_RATIO
+    "direction":       int,      # +1 (서프라이즈) / -1 (쇼크)
+    "visible_to_player": false,  # 개별 어닝 뉴스가 이미 표시됨
+    "rumor_eligible":  false
+}
+```
+
+**NewsEventSystem 처리 (`scope == "SECTOR_RIPPLE"`)**:
+
+1. **가격 영향**: `target_sector` 구성 종목 중 `origin_stock_id` **제외** 후 `impact × sector_sensitivity` 분배
+2. **뉴스 피드**: `visible_to_player == false` → 표시 없음
+3. **S3 루머**: `rumor_eligible == false` → 루머 생성 없음
+
+**야간 이벤트 제약**: overnight_buffer 내에서 발화 (PRE_MARKET 틱 처리 시 반영).
+
+#### FINANCIAL_REPORT (FinancialReportSystem 주입)
+
+FinancialReportSystem.md §3 참조. 분기 보고 이벤트. SECTOR_ROTATION과 동일 inject_event() 경로.
 
 ## Formulas
 
@@ -936,7 +1010,7 @@ rumor_accuracy = 0.70  # 30% 확률로 방향 반전
 - [ ] 같은 mutex_group 이벤트가 같은 거래일에 함께 발생하지 않음
 - [ ] INDIVIDUAL mutex의 {stock_id} 플레이스홀더가 종목별로 독립 동작
 - [ ] (V-Slice) narrative_state TTL이 정확히 감소하고 만료 시 삭제됨
-- [ ] (V-Slice) narrative_weight_boosts가 템플릿 가중치에 정확히 반영됨
+- [ ] (V-Slice) `narrative_weight_boosts` 정량 검증: state 활성 시 boost=1.5인 템플릿의 `effective_weight`가 비활성 대비 정확히 ×1.5 (허용 오차 ±0.001), boost=0.5인 템플릿은 ×0.5인 것을 `test_news_events.gd._calculate_weight()` 단위 테스트로 확인
 - [ ] S1 해금 시 뉴스 딜레이가 T0(20틱)에서 T1(8틱)으로 감소함
 - [ ] S3 해금 시 LARGE/MEGA 이벤트 60틱 전에 루머가 생성되어 표시됨. scheduled_tick < 60인 경우 PRE_MARKET에 루머가 표시됨
 - [ ] 성능: 일일 슬롯 생성 1ms 이내, 틱당 슬롯 체크 0.1ms 이내
@@ -983,3 +1057,17 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 ### 빌드 검증
 
 - [x] 바이너리 실행 확인: QA Lead 서명 — S9 완료 빌드 (2026-04-17, SCRIPT ERROR 없음)
+
+### DLC 확장성 — 로케일 키 인프라 (Sprint 10, Phase 3 — L-03)
+
+> 이벤트 텍스트가 한국어로만 존재하는 `event_pool.json`에 로케일 키 구조를 도입한다.  
+> 콘텐츠 번역은 DLC 그린라이트 시 진행하고, Sprint 10에서는 **인프라만** 구축한다.  
+> 근거: [ADR-021](../../docs/architecture/021-market-profile-data-driven.md) / 감사 항목: **L-03**
+
+- [x] `event_pool.json` 구조에 `"market_id"` 필드 추가 — 이벤트가 어느 시장에서 발생 가능한지 명시
+  ```json
+  { "id": "biotech_trial_success", "market_id": ["KR"], "headline_template": "...", ... }
+  ```
+- [x] `NewsEventSystem` 이벤트 선택 시 `active_market_id` 필터링 로직 추가 — 미매칭 이벤트 제외
+- [x] `event_pool_us.json`, `event_pool_jp.json` 스텁 파일 생성 (빈 배열 `[]`) — DLC 번들 슬롯 확보
+- [x] 테스트: `test_news_events.gd` — `test_event_pool_filtered_by_market_id()` 추가

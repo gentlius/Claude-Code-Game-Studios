@@ -4,6 +4,33 @@
 ## See: .claude/docs/coding-standards.md — Code Review Checklist
 extends GutTest
 
+# ── EndingScreen (S10-03) ─────────────────────────────────────
+## Implements: design/gdd/endings-achievements.md §3 (3종 엔딩 화면)
+
+func test_ending_screen_api():
+	var scr: EndingScreen = EndingScreen.new()
+	add_child_autofree(scr)
+	assert_true(scr.has_method("show_ending"),   "show_ending 존재")
+	assert_true(scr.has_method("is_bad_ending"), "is_bad_ending 존재")
+	assert_true(scr.has_signal("new_game_requested"), "new_game_requested 시그널 존재")
+	assert_true(scr.has_signal("continue_requested"), "continue_requested 시그널 존재")
+	assert_true("_lbl_title" in scr,  "_lbl_title 속성 존재")
+	assert_true("_lbl_body" in scr,   "_lbl_body 속성 존재")
+	assert_true("_btn_action" in scr, "_btn_action 속성 존재")
+
+
+# ── MarginCallPopup (S10-03) ──────────────────────────────────
+## Implements: design/gdd/leverage-trading.md §3-3 마진콜 팝업
+
+func test_margin_call_popup_api():
+	var popup: MarginCallPopup = MarginCallPopup.new()
+	add_child_autofree(popup)
+	assert_true(popup.has_method("show_warning"), "show_warning 존재")
+	assert_true(popup.has_method("cancel"),       "cancel 존재")
+	assert_true("_panel" in popup,          "_panel 속성 존재")
+	assert_true("_lbl_title" in popup,      "_lbl_title 속성 존재")
+	assert_true("_lbl_countdown" in popup,  "_lbl_countdown 속성 존재")
+
 # ── CurrencySystem ──────────────────────────────────────────────────
 
 func test_currency_system_api():
@@ -242,7 +269,10 @@ func test_all_systems_have_reset():
 	assert_true(LifestyleManager.has_method("reset"),   "LifestyleManager.reset 존재")
 	assert_true(ShortSellingSystem.has_method("reset"), "ShortSellingSystem.reset 존재")
 	assert_true(LeverageManager.has_method("reset"),    "LeverageManager.reset 존재")
-	assert_true(OhlcvHistory.has_method("reset"),       "OhlcvHistory.reset 존재")
+	assert_true(EtfManager.has_method("reset"),                "EtfManager.reset 존재")
+	assert_true(OhlcvHistory.has_method("reset"),              "OhlcvHistory.reset 존재")
+	assert_true(FinancialReportSystem.has_method("reset"),     "FinancialReportSystem.reset 존재")
+	assert_true(MarketProfile.has_method("load_market"),       "MarketProfile.load_market 존재")
 
 
 # ── OhlcvHistory (S9-07) ─────────────────────────────────────────────
@@ -290,10 +320,11 @@ func test_short_selling_signals():
 ## Implements: design/gdd/leverage-trading.md §9 Implementation Checklist
 
 func test_leverage_manager_api():
-	assert_true(LeverageManager.has_method("has_leverage_position"),   "has_leverage_position 존재")
-	assert_true(LeverageManager.has_method("get_all_positions"),       "get_all_positions 존재")
-	assert_true(LeverageManager.has_method("is_valid_multiplier"),     "is_valid_multiplier 존재")
-	assert_true(LeverageManager.has_method("get_leverage_net_value"),  "get_leverage_net_value 존재")
+	assert_true(LeverageManager.has_method("has_leverage_position"),      "has_leverage_position 존재")
+	assert_true(LeverageManager.has_method("get_all_positions"),          "get_all_positions 존재")
+	assert_true(LeverageManager.has_method("is_valid_multiplier"),        "is_valid_multiplier 존재")
+	assert_true(LeverageManager.has_method("get_leverage_net_value"),     "get_leverage_net_value 존재")
+	assert_true(LeverageManager.has_method("get_margin_call_threshold"),  "get_margin_call_threshold 존재")
 	assert_true(LeverageManager.has_method("open_position"),           "open_position 존재")
 	assert_true(LeverageManager.has_method("close_position"),          "close_position 존재")
 	assert_true(LeverageManager.has_method("check_margin_calls"),      "check_margin_calls 존재")
@@ -336,3 +367,178 @@ func test_save_system_api():
 	assert_true(SaveSystem.has_method("delete_slot"),        "delete_slot 존재")
 	assert_true(SaveSystem.has_method("rename_slot"),        "rename_slot 존재")
 	assert_true(SaveSystem.has_method("is_slot_valid"),      "is_slot_valid 존재")
+
+
+# ── EtfManager (S10-02) ──────────────────────────────────────────────
+## Implements: design/gdd/sector-etf.md §3-7 Public API
+
+func test_etf_manager_api():
+	assert_true(EtfManager.has_method("get_sector_stocks"),   "get_sector_stocks 존재")
+	assert_true(EtfManager.has_method("get_etf_return"),      "get_etf_return 존재")
+	assert_true(EtfManager.has_method("get_etf_price"),       "get_etf_price 존재")
+	assert_true(EtfManager.has_method("get_etf_open_price"),  "get_etf_open_price 존재")
+	assert_true(EtfManager.has_method("get_sector_flow"),     "get_sector_flow 존재")
+	assert_true(EtfManager.has_method("is_etf"),              "is_etf 존재")
+	assert_true(EtfManager.has_method("get_all_etf_ids"),     "get_all_etf_ids 존재")
+	assert_true(EtfManager.has_method("process_tick"),        "process_tick 존재")
+	assert_true(EtfManager.has_method("get_save_data"),       "get_save_data 존재")
+	assert_true(EtfManager.has_method("load_save_data"),      "load_save_data 존재")
+	assert_true(EtfManager.has_method("reset"),               "reset 존재")
+
+
+# ── PriceEngine.inject_price (S10-02) ────────────────────────────────
+## Implements: design/gdd/sector-etf.md §3-2 ETF price injection API
+
+func test_price_engine_inject_price_api():
+	assert_true(PriceEngine.has_method("inject_price"), "inject_price 존재")
+
+
+# ── NewsEventSystem.inject_event (S10-02 / S10-05) ───────────────────
+## Implements: ADR-022 EventSource pipeline — external injection endpoint
+
+func test_news_event_system_inject_event_api():
+	assert_true(NewsEventSystem.has_method("inject_event"), "inject_event 존재")
+
+
+# ── ProfitCelebration (S10-04) ───────────────────────────────────────
+## Implements: design/gdd/profit-celebration.md §3-7 / §9
+
+func test_profit_celebration_api():
+	var pc: ProfitCelebration = ProfitCelebration.new()
+	add_child_autofree(pc)
+	assert_true(pc.has_method("play"),                   "play 존재")
+	assert_true(pc.has_method("_calc_grade"),            "_calc_grade 존재")
+	assert_true(pc.has_method("_cancel_current"),        "_cancel_current 존재")
+	assert_true(pc.has_method("cancel_from_screen_change"), "cancel_from_screen_change 존재")
+	assert_true("_is_playing" in pc,                     "_is_playing 속성 존재")
+	assert_true("_current_grade" in pc,                  "_current_grade 속성 존재")
+	assert_true("_rollup_label" in pc,                   "_rollup_label 속성 존재")
+	assert_true("_flash_rect" in pc,                     "_flash_rect 속성 존재")
+	assert_true("_banner_label" in pc,                   "_banner_label 속성 존재")
+	assert_true("GRADE_MEDIUM_THRESHOLD" in ProfitCelebration,  "GRADE_MEDIUM_THRESHOLD 상수 존재")
+	assert_true("GRADE_LARGE_THRESHOLD" in ProfitCelebration,   "GRADE_LARGE_THRESHOLD 상수 존재")
+	assert_true("GRADE_JACKPOT_THRESHOLD" in ProfitCelebration, "GRADE_JACKPOT_THRESHOLD 상수 존재")
+
+
+# ── SectorComparisonView (S10-01) ────────────────────────────────────
+## Implements: design/gdd/sector-comparison.md §8 AC-01 ~ AC-09
+
+func test_sector_comparison_view_api():
+	var view: SectorComparisonView = SectorComparisonView.new()
+	add_child_autofree(view)
+	assert_true(view.has_method("refresh"),              "refresh 존재")
+	assert_true(view.has_method("_refresh"),             "_refresh 존재")
+	assert_true(view.has_method("_set_sort_mode"),       "_set_sort_mode 존재")
+	assert_true(view.has_method("_toggle_drilldown"),    "_toggle_drilldown 존재")
+	assert_true(view.has_method("_open_drilldown"),      "_open_drilldown 존재")
+	assert_true(view.has_method("_close_drilldown"),     "_close_drilldown 존재")
+	assert_true(view.has_method("_calc_today_return"),   "_calc_today_return 존재")
+	assert_true(view.has_method("_format_pct"),          "_format_pct 존재")
+	assert_true(view.has_method("_format_price"),        "_format_price 존재")
+	assert_true("_sort_mode" in view,                    "_sort_mode 속성 존재")
+	assert_true("_drilldown_sector" in view,             "_drilldown_sector 속성 존재")
+	assert_true("_rows_container" in view,               "_rows_container 속성 존재")
+	assert_true("_drilldown_panel" in view,              "_drilldown_panel 속성 존재")
+	assert_true("_locked_label" in view,                 "_locked_label 속성 존재")
+	assert_true("_main_panel" in view,                   "_main_panel 속성 존재")
+
+
+# ── FinancialReportSystem (S10-05) ───────────────────────────────────
+## Implements: design/gdd/financial-report-system.md §8 AC-FR-01, AC-FR-02
+
+func test_financial_report_system_api():
+	assert_true(FinancialReportSystem.has_method("is_report_season"),        "is_report_season 존재")
+	assert_true(FinancialReportSystem.has_method("get_report_type"),         "get_report_type 존재")
+	assert_true(FinancialReportSystem.has_method("schedule_quarterly_events"), "schedule_quarterly_events 존재")
+	assert_true(FinancialReportSystem.has_method("get_pending_events"),      "get_pending_events 존재")
+	assert_true(FinancialReportSystem.has_method("reset"),                   "reset 존재")
+	assert_true(FinancialReportSystem.has_method("get_save_data"),           "get_save_data 존재")
+	assert_true(FinancialReportSystem.has_method("load_save_data"),          "load_save_data 존재")
+	assert_true("_pending_events" in FinancialReportSystem,                  "_pending_events 속성 존재")
+	assert_true("_current_season" in FinancialReportSystem,                  "_current_season 속성 존재")
+	assert_true("REPORT_CYCLE_SEASONS" in FinancialReportSystem,             "REPORT_CYCLE_SEASONS 상수 존재")
+	assert_true("REPORT_TYPE_SEQUENCE" in FinancialReportSystem,             "REPORT_TYPE_SEQUENCE 상수 존재")
+	assert_true("PRELIMINARY_PROBABILITY" in FinancialReportSystem,          "PRELIMINARY_PROBABILITY 상수 존재")
+
+
+# ── NewsEventSystem.fire_stock_news (S10-05) ────────────────────────────────
+## Implements: ADR-022 — FinancialReportSystem uses fire_stock_news for earnings cards
+
+func test_news_event_system_fire_stock_news_api():
+	assert_true(NewsEventSystem.has_method("fire_stock_news"), "fire_stock_news 존재")
+	assert_true(NewsEventSystem.has_method("_calc_template_weight"), "_calc_template_weight 존재")
+
+
+# ── ShortSellingSystem.MIN_MARGIN_RATE (S10-06e) ─────────────────────────────
+
+func test_short_selling_min_margin_rate_api():
+	assert_true("MIN_MARGIN_RATE" in ShortSellingSystem, "MIN_MARGIN_RATE 상수 존재")
+
+
+# ── MarketProfile (S10-07) ─────────────────────────────────────────────────
+## Implements: docs/architecture/ADR-021
+
+# ── StockDatabase (S10-08) ──────────────────────────────────────────────────
+## Implements: src/core/stock_database.gd public API
+
+func test_stock_database_api():
+	assert_true(StockDatabase.has_method("get_stock"),              "get_stock 존재")
+	assert_true(StockDatabase.has_method("stock_exists"),           "stock_exists 존재")
+	assert_true(StockDatabase.has_method("get_all_stock_ids"),      "get_all_stock_ids 존재")
+	assert_true(StockDatabase.has_method("get_all_stocks"),         "get_all_stocks 존재")
+	assert_true(StockDatabase.has_method("get_stock_count"),        "get_stock_count 존재")
+	assert_true(StockDatabase.has_method("get_all_sectors"),        "get_all_sectors 존재")
+	assert_true(StockDatabase.has_method("get_stocks_by_sector"),   "get_stocks_by_sector 존재")
+	assert_true(StockDatabase.has_method("get_stock_ids_by_sector"), "get_stock_ids_by_sector 존재")
+
+
+# ── FormatUtils (S10-08) ────────────────────────────────────────────────────
+## FormatUtils는 static class_name (autoload 아님) — 동작 테스트는 test_core_systems.gd에 위임.
+## API contracts 파일은 autoload 공개 API 계약만 검증한다.
+## 관련 테스트: tests/unit/test_core_systems.gd func test_format_utils_*
+
+
+# ── PortfolioManager (S10-08) ──────────────────────────────────────────────
+## Implements: src/gameplay/portfolio_manager.gd public API
+
+func test_portfolio_manager_extended_api():
+	assert_true(PortfolioManager.has_method("get_holding_count"),       "get_holding_count 존재")
+	assert_true(PortfolioManager.has_method("get_total_assets"),        "get_total_assets 존재")
+	assert_true(PortfolioManager.has_method("get_account_total_value"), "get_account_total_value 존재")
+	assert_true(PortfolioManager.has_method("get_return_rate"),         "get_return_rate 존재")
+	assert_true(PortfolioManager.has_method("get_transaction_history"), "get_transaction_history 존재")
+	assert_true(PortfolioManager.has_method("update_valuation"),        "update_valuation 존재")
+	assert_true(PortfolioManager.has_method("get_save_data"),           "get_save_data 존재")
+	assert_true(PortfolioManager.has_method("load_save_data"),          "load_save_data 존재")
+	assert_true(PortfolioManager.has_method("reset"),                   "reset 존재")
+
+
+# ── CurrencySystem (S10-08) ────────────────────────────────────────────────
+## Implements: src/core/currency_system.gd public API
+
+func test_currency_system_extended_api():
+	assert_true(CurrencySystem.has_method("get_cash_assets"),      "get_cash_assets 존재")
+	assert_true(CurrencySystem.has_method("auto_deposit_to_sim"),  "auto_deposit_to_sim 존재")
+	assert_true(CurrencySystem.has_method("get_save_data"),        "get_save_data 존재")
+	assert_true(CurrencySystem.has_method("load_save_data"),       "load_save_data 존재")
+
+
+# ── MarketProfile (S10-07) ─────────────────────────────────────────────────
+## Implements: docs/architecture/ADR-021
+
+func test_market_profile_api():
+	assert_true(MarketProfile.has_method("load_market"),              "load_market 존재")
+	assert_true(MarketProfile.has_method("get_active_market_id"),     "get_active_market_id 존재")
+	assert_true(MarketProfile.has_method("get_active"),               "get_active 존재")
+	assert_true(MarketProfile.has_method("get_sectors"),              "get_sectors 존재")
+	assert_true(MarketProfile.has_method("get_etfs"),                 "get_etfs 존재")
+	assert_true(MarketProfile.has_method("get_archetype"),            "get_archetype 존재")
+	assert_true(MarketProfile.has_method("get_sectors_in_archetype"), "get_sectors_in_archetype 존재")
+	assert_true(MarketProfile.has_method("get_rivalry_weights"),      "get_rivalry_weights 존재")
+	assert_true(MarketProfile.has_method("get_rotation_params"),      "get_rotation_params 존재")
+	assert_true(MarketProfile.has_method("get_rotation_headline"),    "get_rotation_headline 존재")
+	assert_true(MarketProfile.has_method("get_trading_param"),        "get_trading_param 존재")
+	assert_true(MarketProfile.has_method("get_calendar_param"),       "get_calendar_param 존재")
+	assert_true(MarketProfile.has_method("get_ending_param"),         "get_ending_param 존재")
+	assert_true(MarketProfile.has_method("get_ending_ids"),           "get_ending_ids 존재")
+	assert_true(MarketProfile.has_method("get_dlc_achievements"),     "get_dlc_achievements 존재")

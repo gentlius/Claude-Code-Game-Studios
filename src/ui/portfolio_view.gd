@@ -25,6 +25,11 @@ var _holding_rows: Dictionary = {}
 var _trigger_badge: Label
 var _badge_tween: Tween
 
+## TR4 레버리지 포지션 패널 — GDD leverage-trading.md, S10-03.
+## TR4 해금 시 표시. 매 틱 갱신.
+var _leverage_section: VBoxContainer
+var _leverage_rows_container: VBoxContainer
+
 # ── Lifecycle ──
 
 func _ready() -> void:
@@ -34,6 +39,7 @@ func _ready() -> void:
 	PortfolioManager.holding_removed.connect(_on_holding_removed)
 	SkillTree.on_skill_unlocked.connect(_on_skill_unlocked_refresh_slots)
 	StopTakeSystem.on_stop_take_triggered.connect(_on_stop_take_triggered)
+	PriceEngine.on_price_updated.connect(_on_tick_refresh_leverage)
 	tree_exiting.connect(_disconnect_signals)
 	# Initial render — valuation_updated may have fired during load_slot() before
 	# this node existed, so explicitly refresh on entry.
@@ -46,6 +52,7 @@ func _build_ui() -> void:
 	_build_trigger_badge()
 	var scroll_vbox: VBoxContainer = _build_scroll_area()
 	_build_holdings_section(scroll_vbox)
+	_build_leverage_section(scroll_vbox)
 	_build_transactions_section(scroll_vbox)
 
 
@@ -118,6 +125,42 @@ func _build_holdings_section(parent: VBoxContainer) -> void:
 	parent.add_child(_holdings_container)
 
 
+## TR4 레버리지 포지션 섹션 — 증거금 비율·손익 실시간 표시. GDD leverage-trading.md §3-1.
+## TR4 해금 전에는 visible=false. 해금 후 _on_skill_unlocked_refresh_slots()에서 show.
+func _build_leverage_section(parent: VBoxContainer) -> void:
+	_leverage_section = VBoxContainer.new()
+	_leverage_section.add_theme_constant_override("separation", 4)
+	_leverage_section.visible = SkillTree.is_skill_unlocked("TR4")
+	parent.add_child(_leverage_section)
+
+	_leverage_section.add_child(HSeparator.new())
+
+	var header: HBoxContainer = HBoxContainer.new()
+	header.add_theme_constant_override("separation", 8)
+	_leverage_section.add_child(header)
+
+	var title: Label = Label.new()
+	title.text = tr("레버리지 포지션")
+	title.add_theme_font_size_override("font_size", 13)
+	ThemeSetup.style_label_secondary(title)
+	header.add_child(title)
+
+	# Column header row
+	var col_header: HBoxContainer = HBoxContainer.new()
+	col_header.add_theme_constant_override("separation", 8)
+	_leverage_section.add_child(col_header)
+	for col: String in [tr("종목"), tr("배율"), tr("미실현손익"), tr("증거금비율")]:
+		var lbl: Label = Label.new()
+		lbl.text = col
+		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ThemeSetup.style_label_dim(lbl)
+		col_header.add_child(lbl)
+
+	_leverage_rows_container = VBoxContainer.new()
+	_leverage_rows_container.add_theme_constant_override("separation", 2)
+	_leverage_section.add_child(_leverage_rows_container)
+
+
 func _build_transactions_section(parent: VBoxContainer) -> void:
 	parent.add_child(HSeparator.new())
 	var tx_title: Label = Label.new()
@@ -130,6 +173,10 @@ func _build_transactions_section(parent: VBoxContainer) -> void:
 
 
 # ── Signal Handlers ──
+
+func _on_tick_refresh_leverage(_tick: int) -> void:
+	_refresh_leverage_section()
+
 
 func _on_holding_added(_s: String, _q: int, _p: int) -> void:
 	_refresh()
@@ -150,6 +197,8 @@ func _disconnect_signals() -> void:
 		SkillTree.on_skill_unlocked.disconnect(_on_skill_unlocked_refresh_slots)
 	if StopTakeSystem.on_stop_take_triggered.is_connected(_on_stop_take_triggered):
 		StopTakeSystem.on_stop_take_triggered.disconnect(_on_stop_take_triggered)
+	if PriceEngine.on_price_updated.is_connected(_on_tick_refresh_leverage):
+		PriceEngine.on_price_updated.disconnect(_on_tick_refresh_leverage)
 
 
 ## Refreshes slot counter when P1 or P2 is unlocked; enables S/T buttons when TR2 unlocked.
@@ -157,6 +206,9 @@ func _disconnect_signals() -> void:
 func _on_skill_unlocked_refresh_slots(skill_id: String) -> void:
 	if skill_id == "P1" or skill_id == "P2" or skill_id == "TR2":
 		_refresh()
+	elif skill_id == "TR4":
+		_leverage_section.visible = true
+		_refresh_leverage_section()
 
 
 func _on_valuation_updated(_total: int, _rate: float) -> void:
@@ -246,6 +298,7 @@ func _add_holding_row(sid: String) -> void:
 	var row: HBoxContainer = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	row.mouse_filter = Control.MOUSE_FILTER_STOP
+	row.focus_mode = Control.FOCUS_ALL  # TD-CR-02: gamepad D-pad 홀딩스 탐색
 
 	var lbl_stock: Label = Label.new()
 	lbl_stock.text = sid_data.get_display_name() if sid_data != null else sid
@@ -305,6 +358,83 @@ func _update_holding_values(holdings: Array[Dictionary]) -> void:
 		else:
 			refs["lbl_rate"].add_theme_color_override("font_color", ThemeSetup.NEUTRAL_GRAY)
 		refs["lbl_value"].text = FormatUtils.currency(h.get("current_value", 0))
+
+
+## Refresh leverage position rows. Called every tick when TR4 is unlocked. GDD leverage-trading.md §3-1.
+func _refresh_leverage_section() -> void:
+	if not SkillTree.is_skill_unlocked("TR4"):
+		return
+	if _leverage_rows_container == null:
+		return
+
+	for child: Node in _leverage_rows_container.get_children():
+		child.queue_free()
+
+	var positions: Array[Dictionary] = LeverageManager.get_all_positions()
+	if positions.is_empty():
+		var empty: Label = Label.new()
+		empty.text = tr("레버리지 포지션 없음")
+		ThemeSetup.style_label_dim(empty)
+		_leverage_rows_container.add_child(empty)
+		return
+
+	for pos: Dictionary in positions:
+		var row: HBoxContainer = HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		_leverage_rows_container.add_child(row)
+
+		# Stock name
+		var stock_id: String = pos["stock_id"]
+		var stock_data: StockData = StockDatabase.get_stock(stock_id)
+		var lbl_name: Label = Label.new()
+		lbl_name.text = stock_data.get_display_name() if stock_data != null else stock_id
+		lbl_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ThemeSetup.style_label_primary(lbl_name)
+		row.add_child(lbl_name)
+
+		# Multiplier (e.g. "×2배")
+		var lbl_mult: Label = Label.new()
+		lbl_mult.text = tr("×%d배") % pos["multiplier"]
+		lbl_mult.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ThemeSetup.style_label_secondary(lbl_mult)
+		row.add_child(lbl_mult)
+
+		# Unrealized PnL = market_val − entry_val
+		var qty: int = pos["quantity"]
+		var current_price: int = PriceEngine.get_current_price(stock_id)
+		var market_val: int = current_price * qty
+		var entry_val: int = pos["entry_price"] * qty
+		var unrealized_pnl: int = market_val - entry_val
+		var lbl_pnl: Label = Label.new()
+		lbl_pnl.text = ("%+d" % unrealized_pnl)
+		lbl_pnl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if unrealized_pnl > 0:
+			lbl_pnl.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
+		elif unrealized_pnl < 0:
+			lbl_pnl.add_theme_color_override("font_color", ThemeSetup.LOSS_BLUE)
+		else:
+			lbl_pnl.add_theme_color_override("font_color", ThemeSetup.NEUTRAL_GRAY)
+		row.add_child(lbl_pnl)
+
+		# Margin ratio = equity / market_val × 100%
+		# equity = market_val − borrowed − accrued_interest
+		var lbl_margin: Label = Label.new()
+		lbl_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if market_val > 0:
+			var equity: int = market_val - pos["borrowed"] - pos["accrued_interest"]
+			var margin_ratio: float = float(equity) / float(market_val) * 100.0
+			lbl_margin.text = "%.1f%%" % margin_ratio
+			# Warn colour when below margin_call threshold (~20%)
+			var mc_threshold: float = LeverageManager.get_margin_call_threshold(
+					pos["multiplier"]) * 100.0
+			if margin_ratio < mc_threshold:
+				lbl_margin.add_theme_color_override("font_color", Color(0.95, 0.60, 0.10))
+			else:
+				ThemeSetup.style_label_primary(lbl_margin)
+		else:
+			lbl_margin.text = "—"
+			ThemeSetup.style_label_dim(lbl_margin)
+		row.add_child(lbl_margin)
 
 
 func _refresh_transactions() -> void:

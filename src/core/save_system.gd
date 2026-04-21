@@ -186,6 +186,10 @@ func _restore_season_systems(data: Dictionary, season_active: bool) -> void:
 	LeverageManager.load_save_data(data.get("leverage_positions", []))
 	# OHLCV 시즌 간 누적 히스토리 복원 (S9-07)
 	OhlcvHistory.load_save_data(data.get("ohlcv_history", {}))
+	# P3 ETF 가격/플로우 복원 (S10-02)
+	EtfManager.load_save_data(data.get("etf", {}))
+	# S10-05 분기 실적 스케줄러 복원
+	FinancialReportSystem.load_save_data(data.get("financial_report", {}))
 
 
 ## Save all system state to save_slot_{id}.json and update index metadata.
@@ -213,6 +217,8 @@ func save_slot(id: int) -> bool:
 		"short_positions": ShortSellingSystem.get_save_data(),
 		"leverage_positions": LeverageManager.get_save_data(),
 		"ohlcv_history": OhlcvHistory.get_save_data(),
+		"etf": EtfManager.get_save_data(),
+		"financial_report": FinancialReportSystem.get_save_data(),
 	}
 
 	var path: String = "user://save_slot_%d.json" % id
@@ -340,6 +346,9 @@ func _compute_portfolio_value() -> int:
 		if stock_id.is_empty():
 			continue
 		total += h.get("quantity", 0) * PriceEngine.get_current_price(stock_id)
+	# TR3/TR4 포지션 net equity 포함 — 슬롯 메타데이터 총자산 정확도
+	total += ShortSellingSystem.get_short_net_value()
+	total += LeverageManager.get_leverage_net_value()
 	return total
 
 

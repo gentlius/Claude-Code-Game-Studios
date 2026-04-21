@@ -11,6 +11,7 @@ var _main_screen: Control = null
 var _intro: Control = null
 var _lifestyle_screen: Control = null
 var _saving_overlay: Node = null
+var _ending_screen: Node = null
 
 ## Track whether the current MainScreen was created via new game (needs initial save).
 var _pending_initial_save: bool = false
@@ -84,6 +85,8 @@ func _on_new_game_confirmed(slot_id: int) -> void:
 	LeverageManager.reset()
 	CurrencySystem.reset()
 	OhlcvHistory.reset()
+	EtfManager.reset()
+	FinancialReportSystem.reset()
 
 	# 모든 autoload 리셋 완료 — 가격 데이터를 DB에서 로드해 UI 생성 전에 유효 상태로 만든다.
 	# 이후 get_current_price()는 언제나 base_price를 반환하므로 UI fallback 불필요.
@@ -119,6 +122,23 @@ func _load_main_screen() -> void:
 	# directly in TradingScreen, so the clock only advances after the player closes the screen.
 	# GDD: lifestyle-spending.md §3-1, trading-screen.md §규칙 6
 	_main_screen.spending_screen_requested.connect(_on_spending_screen_requested)
+
+	# ── Ending screens (S10-03) — GDD endings-achievements.md §3-1~3-3 ──
+	# Single EndingScreen instance shared across all 3 endings.
+	_ending_screen = load("res://src/ui/ending_screen.gd").new()
+	add_child(_ending_screen)
+	_ending_screen.new_game_requested.connect(_on_ending_new_game_requested)
+	_ending_screen.continue_requested.connect(_on_ending_continue_requested)
+
+	SeasonManager.on_hangang_ending_triggered.connect(
+		func() -> void: _show_ending("bankruptcy")
+	)
+	SeasonManager.on_master_ending_triggered.connect(
+		func() -> void: _show_ending("win")
+	)
+	LeverageManager.on_loan_shark_ending_triggered.connect(
+		func(_stock_id: String, _net: int) -> void: _show_ending("leverage_crash")
+	)
 
 	# 새 게임: MainScreen 준비 완료 후 초기 상태 1회 저장 (GDD §3-5 Step 6)
 	if _pending_initial_save and SaveSystem.get_active_slot_id() >= 0:
@@ -160,6 +180,53 @@ func _on_lifestyle_screen_closed() -> void:
 	# Advance the clock now that the spending window is closed (GDD: trading-screen.md §규칙 6).
 	# This was previously called directly in TradingScreen on settlement_confirmed.
 	GameClock.confirm_transition()
+
+
+# ── Ending Screens ──
+
+## Shows EndingScreen for [param ending_id]. Pauses the game clock during display.
+## Called from SeasonManager / LeverageManager signal handlers. GDD endings-achievements.md.
+func _show_ending(ending_id: String) -> void:
+	GameClock.pause_request("ending_screen")
+	_ending_screen.show_ending(ending_id)
+
+
+## Player confirmed bad ending — delete save, return to StartScreen.
+func _on_ending_new_game_requested() -> void:
+	GameClock.release()
+	var slot_id: int = SaveSystem.get_active_slot_id()
+	if slot_id >= 0:
+		SaveSystem.delete_slot(slot_id)
+
+	# Tear down current session
+	if _lifestyle_screen != null:
+		_lifestyle_screen.queue_free()
+		_lifestyle_screen = null
+	if _ending_screen != null:
+		_ending_screen.queue_free()
+		_ending_screen = null
+	if _main_screen != null:
+		_main_screen.queue_free()
+		_main_screen = null
+
+	_show_start_screen()
+
+
+## Player confirmed win ending — dismiss and resume (StartScreen or continue).
+func _on_ending_continue_requested() -> void:
+	GameClock.release()
+	# Resume game after win ending: return to start screen (player may start a new run).
+	if _lifestyle_screen != null:
+		_lifestyle_screen.queue_free()
+		_lifestyle_screen = null
+	if _ending_screen != null:
+		_ending_screen.queue_free()
+		_ending_screen = null
+	if _main_screen != null:
+		_main_screen.queue_free()
+		_main_screen = null
+
+	_show_start_screen()
 
 
 func _on_exit_to_start_requested() -> void:

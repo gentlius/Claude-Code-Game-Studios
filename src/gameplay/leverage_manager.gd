@@ -16,6 +16,11 @@ signal on_leverage_forced_liquidation(stock_id: String, multiplier: int, net_pro
 ## Emitted when any leverage position closes (manual, forced, or season-end).
 signal on_leverage_position_closed(stock_id: String, multiplier: int, net_proceeds: int)
 
+## Emitted when forced liquidation produces a loss exceeding available sim_cash.
+## Connect from GameMain / MainScreen to trigger the loan-shark bad ending screen.
+## GDD §3-3, §5 "채무 상환 불능", AC-17.
+signal on_loan_shark_ending_triggered(stock_id: String, net_proceeds: int)
+
 # ── Config ──
 
 const CONFIG_PATH: String = "res://assets/data/leverage_config.json"
@@ -87,6 +92,13 @@ func get_all_positions() -> Array[Dictionary]:
 ## True if multiplier is in the configured available set.
 func is_valid_multiplier(multiplier: int) -> bool:
 	return _available_multipliers.has(multiplier)
+
+
+## Returns the margin-call equity ratio threshold for the given multiplier.
+## UI should use this instead of accessing _margin_call_thresholds directly.
+## Returns 0.20 as a safe default when multiplier is not in config.
+func get_margin_call_threshold(multiplier: int) -> float:
+	return _margin_call_thresholds.get(str(multiplier), 0.20)
 
 
 ## Net leverage contribution to total assets.
@@ -312,7 +324,11 @@ func _forced_liquidation(pos: Dictionary) -> void:
 	else:
 		var loss: int = -net_proceeds
 		var available: int = CurrencySystem.get_sim_cash()
-		CurrencySystem.sim_deduct(mini(loss, available))
+		CurrencySystem.sim_deduct(mini(loss, available))  # 가용 현금 전액 차감
+		if loss > available:
+			# 초과 손실 — 채무 상환 불능 → 사채업자 엔딩 (GDD §3-3, AC-17)
+			on_loan_shark_ending_triggered.emit(pos["stock_id"], net_proceeds)
+			return  # 게임오버 처리는 GameMain/MainScreen이 담당
 
 	var surviving: Array[Dictionary] = []
 	for p: Dictionary in _positions:

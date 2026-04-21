@@ -176,7 +176,7 @@ if [ -n "$TEST_FILES_STAGED" ]; then
             | grep -oE '"[a-z][a-z0-9_]+"' | tr -d '"')
         while IFS= read -r method; do
             [ -z "$method" ] && continue
-            if ! grep -rq "^func $method\b" src/ --include='*.gd' 2>/dev/null; then
+            if ! grep -rqE "^(static )?func $method\b" src/ --include='*.gd' 2>/dev/null; then
                 PHANTOM_METHODS="$PHANTOM_METHODS\n  - $method  (in $file)"
             fi
         done <<< "$TESTED"

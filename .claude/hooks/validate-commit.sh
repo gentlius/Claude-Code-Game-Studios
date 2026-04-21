@@ -55,6 +55,26 @@ if [ -n "$DESIGN_FILES" ]; then
     done <<< "$DESIGN_FILES"
 fi
 
+# ── Check D: src/ 커밋 시 Approved GDD 체크리스트 동기화 강제 ─────────────────
+# src/ 파일이 staged될 때 모든 Approved GDD를 스캔해 [ ] 항목이 있으면 차단.
+# GDD Status가 Approved인데 미완 항목이 있다는 것은 구현 완료 후 체크를 빠뜨렸다는 뜻.
+# 해결: 해당 항목 [x]로 체크하거나, 아직 미구현이면 GDD Status를 In Review로 내릴 것.
+SRC_STAGED=$(echo "$STAGED" | grep -E '^src/')
+if [ -n "$SRC_STAGED" ]; then
+    while IFS= read -r gdd; do
+        [ -f "$gdd" ] || continue
+        STATUS=$(grep -i '^\*\*Status\*\*:\|^> \*\*Status\*\*:' "$gdd" 2>/dev/null | head -1 | grep -oi 'Approved' || true)
+        if [ "$STATUS" = "Approved" ] && grep -q "Implementation Checklist" "$gdd" 2>/dev/null; then
+            UNCHECKED=$(awk '/Implementation Checklist/,/^---$/' "$gdd" | grep "^- \[ \]" | wc -l)
+            if [ "$UNCHECKED" -gt 0 ]; then
+                echo "BLOCKED [D] $gdd — Approved GDD에 미완 항목 ${UNCHECKED}개." >&2
+                echo "  구현 완료 항목은 [x]로 체크, 미구현 항목은 GDD Status를 In Review로 내릴 것." >&2
+                exit 2
+            fi
+        fi
+    done <<< "$(find design/gdd -name '*.md' ! -name 'systems-index.md' 2>/dev/null)"
+fi
+
 # Validate JSON data files -- block invalid JSON
 DATA_FILES=$(echo "$STAGED" | grep -E '^assets/data/.*\.json$')
 if [ -n "$DATA_FILES" ]; then

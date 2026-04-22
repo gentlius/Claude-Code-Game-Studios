@@ -570,6 +570,7 @@ func test_m1_cache_manager_api():
 	assert_true(M1CacheManager.has_method("reset"),              "reset 존재")
 	assert_true(M1CacheManager.has_method("clear_slot_cache"),   "clear_slot_cache 존재")
 	assert_true(M1CacheManager.has_method("is_cache_ready"),     "is_cache_ready 존재")
+	assert_true(M1CacheManager.has_method("is_batch_done"),      "is_batch_done 존재")
 	assert_true(M1CacheManager.has_method("get_aggregated_m1"),  "get_aggregated_m1 존재")
 	assert_true(M1CacheManager.has_method("get_aggregated_d1"),  "get_aggregated_d1 존재")
 	assert_true(M1CacheManager.has_method("get_d1_candles"),     "get_d1_candles 존재")

@@ -51,6 +51,7 @@ var _d1_count: Dictionary = {}
 # ── Thread State ───────────────────────────────────────────────────────────────
 
 var _thread: Thread = null
+var _batch_done: bool = false
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
@@ -59,7 +60,13 @@ var _thread: Thread = null
 ## [param history_seed]: OhlcvHistory.history_seed.
 ## 디스크 캐시가 유효하면 (버전·시드 일치) 재생성 없이 디스크에서 로드.
 ## 완료 시 batch_complete emit. 진행 중 batch_progress(done, total) emit.
+## 배치 생성이 완료됐는지 반환. batch_complete 이미 emit된 경우 true.
+func is_batch_done() -> bool:
+	return _batch_done
+
+
 func generate_all(stocks: Array, history_seed: int) -> void:
+	_batch_done = false
 	_cancel_thread()
 	_ensure_cache_dir()
 	_thread = Thread.new()
@@ -70,6 +77,7 @@ func generate_all(stocks: Array, history_seed: int) -> void:
 ## 슬롯 전환 또는 새 게임 시작 시 reset() 전에 호출.
 func reset() -> void:
 	_cancel_thread()
+	_batch_done = false
 	_m1_ohlc.clear()
 	_m1_vol.clear()
 	_d1_ohlc.clear()
@@ -182,6 +190,7 @@ func _on_batch_done(results: Dictionary) -> void:
 		_m1_count[stock_id] = data.get("m1_count", 0)
 		_d1_count[stock_id] = data.get("d1_count", 0)
 
+	_batch_done = true
 	batch_complete.emit()
 
 

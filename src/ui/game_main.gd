@@ -12,6 +12,7 @@ var _intro: Control = null
 var _lifestyle_screen: Control = null
 var _saving_overlay: Node = null
 var _ending_screen: Node = null
+var _cache_loading: CanvasLayer = null
 
 ## Track whether the current MainScreen was created via new game (needs initial save).
 var _pending_initial_save: bool = false
@@ -66,10 +67,10 @@ func _on_slot_selected(id: int) -> void:
 
 	# ADR-024: 로드 후 M1 프리히스토리 캐시 복구.
 	# 디스크 캐시가 유효(버전·시드 일치)하면 재생성 없이 로드, 아니면 재생성.
+	# 완료 전 메인 화면 진입 차단 — _show_cache_loading()이 batch_complete를 기다린다.
 	M1CacheManager.reset()
 	M1CacheManager.generate_all(StockDatabase.get_all_stocks(), OhlcvHistory.history_seed)
-
-	_load_main_screen()
+	_show_cache_loading()
 
 
 func _on_new_game_confirmed(slot_id: int) -> void:
@@ -119,6 +120,62 @@ func _on_new_game_confirmed(slot_id: int) -> void:
 func _on_intro_finished() -> void:
 	_intro.queue_free()
 	_intro = null
+	# 인트로 종료 시 배치 생성이 완료됐으면 바로 진입, 아직이면 로딩 화면 대기.
+	if M1CacheManager.is_batch_done():
+		_load_main_screen()
+	else:
+		_show_cache_loading()
+
+
+# ── Cache Loading Screen ──
+
+## 전 종목 M1 배치 생성 완료 전까지 진입을 막는 심플 로딩 화면.
+## batch_complete 수신 즉시 자신을 제거하고 _load_main_screen()을 호출한다.
+func _show_cache_loading() -> void:
+	_cache_loading = CanvasLayer.new()
+	_cache_loading.layer = 5
+	add_child(_cache_loading)
+
+	var bg := ColorRect.new()
+	bg.color = Color(0.07, 0.07, 0.07, 1.0)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_cache_loading.add_child(bg)
+
+	var vbox := VBoxContainer.new()
+	vbox.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	vbox.custom_minimum_size = Vector2(400, 80)
+	vbox.offset_left   = -200
+	vbox.offset_top    = -40
+	vbox.offset_right  = 200
+	vbox.offset_bottom = 40
+	_cache_loading.add_child(vbox)
+
+	var label := Label.new()
+	label.text = tr("시장 데이터 준비 중...")
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(label)
+
+	var bar := ProgressBar.new()
+	bar.min_value = 0.0
+	bar.max_value = 1.0
+	bar.value = 0.0
+	bar.custom_minimum_size.y = 12
+	vbox.add_child(bar)
+
+	# 진행률 업데이트
+	M1CacheManager.batch_progress.connect(
+		func(done: int, total: int) -> void:
+			if is_instance_valid(bar):
+				bar.value = float(done) / float(total) if total > 0 else 0.0
+	)
+	# 완료 → 로딩 화면 제거 후 메인 화면 진입
+	M1CacheManager.batch_complete.connect(_on_cache_loading_done, CONNECT_ONE_SHOT)
+
+
+func _on_cache_loading_done() -> void:
+	if is_instance_valid(_cache_loading):
+		_cache_loading.queue_free()
+	_cache_loading = null
 	_load_main_screen()
 
 

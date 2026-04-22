@@ -5,7 +5,10 @@
 
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
+#include <godot_cpp/variant/string.hpp>
 #include <cstdint>
+#include <string>
+#include <unordered_map>
 
 namespace godot {
 
@@ -66,7 +69,7 @@ class MarkovGenerator : public RefCounted {
 
     // ── Live config (populated by set_config) ──
     double _sp[7][5]  = {};
-    double _tm[7][7]  = {};    // base transition matrix (MEDIUM baseline)
+    double _tm[7][7]  = {};    // base transition matrix (default fallback)
     double _vss[4]    = {};    // vol_self_scale
     double _vbs[4]    = {};    // vol_breakout_scale
     double _vps[4]    = {};    // vol_pattern_scale
@@ -75,9 +78,16 @@ class MarkovGenerator : public RefCounted {
     double _svm[7]    = {};
     bool   _cfg_loaded = false;
 
+    // ── Per-archetype matrices (ADR-025) ──
+    // Keyed by archetype string (e.g. "GROWTH"). Loaded from archetypeMatrices in config.
+    struct ArchMatrix { double tm[7][7]; };
+    std::unordered_map<std::string, ArchMatrix> _archetype_matrices;
+
     // ── Internal helpers ──
     void _copy_defaults();
-    void _build_scaled_matrix(int vol_profile, double out_m[7][7]) const;
+    // base_tm: if non-null, used as the source matrix instead of _tm.
+    void _build_scaled_matrix(int vol_profile, double out_m[7][7],
+                               const double (*base_tm)[7] = nullptr) const;
 
     static void _bind_methods();
 
@@ -89,19 +99,21 @@ public:
     void set_config(Dictionary cfg);
 
     // Generate M1 + D1 rolling cache for one stock.
-    // vol_profile : 0=LOW, 1=MEDIUM, 2=HIGH, 3=EXTREME
-    // base_price  : stock base price (KRW integer)
-    // n_days      : total simulation days (history_seasons * DAYS_PER_SEASON)
-    // m1_capacity : M1 ring-buffer size in bars (M1CacheManager.M1_CACHE_BARS)
-    // d1_capacity : D1 ring-buffer size in bars (M1CacheManager.D1_CACHE_BARS)
-    // seed        : (history_seed ^ hash(stock_id)) & 0x7FFFFFFF  (pre-computed by caller)
+    // vol_profile   : 0=LOW, 1=MEDIUM, 2=HIGH, 3=EXTREME
+    // base_price    : stock base price (KRW integer)
+    // n_days        : total simulation days (history_seasons * DAYS_PER_SEASON)
+    // m1_capacity   : M1 ring-buffer size in bars (M1CacheManager.M1_CACHE_BARS)
+    // d1_capacity   : D1 ring-buffer size in bars (M1CacheManager.D1_CACHE_BARS)
+    // seed          : (history_seed ^ hash(stock_id)) & 0x7FFFFFFF  (pre-computed by caller)
+    // archetype_key : stock archetype string (e.g. "GROWTH"). Empty = default matrix. (ADR-025)
     //
     // Returns the same Dictionary shape as PriceEngine.generate_stock_m1_cache():
     //   m1_ohlc(PackedInt32Array), m1_vol(PackedFloat32Array),
     //   d1_ohlc(PackedInt32Array), d1_vol(PackedFloat32Array),
     //   m1_count(int), d1_count(int)
     Dictionary generate_stock_m1(int vol_profile, int base_price, int n_days,
-                                  int m1_capacity, int d1_capacity, int64_t seed) const;
+                                  int m1_capacity, int d1_capacity, int64_t seed,
+                                  String archetype_key = String()) const;
 };
 
 } // namespace godot

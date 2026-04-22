@@ -138,6 +138,37 @@ void MarkovGenerator::set_config(Dictionary cfg) {
             _svm[i] = static_cast<double>(svm[i]);
     }
 
+    // archetypeMatrices: Dictionary of named 7×7 matrices (ADR-025).
+    // Keys starting with '_' are comments — skip them.
+    _archetype_matrices.clear();
+    if (cfg.has("archetypeMatrices")) {
+        Dictionary arch_dict = cfg["archetypeMatrices"];
+        Array keys = arch_dict.keys();
+        for (int k = 0; k < keys.size(); ++k) {
+            String key = keys[k];
+            std::string key_str = key.utf8().get_data();
+            if (key_str.empty() || key_str[0] == '_') continue;  // skip comment keys
+
+            Variant entry_v = arch_dict[key];
+            if (entry_v.get_type() != Variant::DICTIONARY) continue;
+            Dictionary arch_entry = entry_v;
+            if (!arch_entry.has("transitionMatrix")) continue;
+
+            Array tm = arch_entry["transitionMatrix"];
+            ArchMatrix am;
+            for (int i = 0; i < 7; ++i)
+                for (int j = 0; j < 7; ++j)
+                    am.tm[i][j] = DEFAULT_TM[i][j];  // safe default before overwrite
+
+            for (int i = 0; i < 7 && i < tm.size(); ++i) {
+                Array row = tm[i];
+                for (int j = 0; j < 7 && j < row.size(); ++j)
+                    am.tm[i][j] = static_cast<double>(row[j]);
+            }
+            _archetype_matrices[key_str] = am;
+        }
+    }
+
     _cfg_loaded = true;
 }
 
@@ -145,15 +176,18 @@ void MarkovGenerator::set_config(Dictionary cfg) {
 // Mirrors _build_transition_matrix(vol_profile, SeasonBias.NEUTRAL) in GDScript.
 // With NEUTRAL bias, up_bonus and down_penalty are both 0.0 — season step is a no-op.
 // Steps: (1) scale self-transition, (2) scale breakout transitions, (3) redistribute.
+// base_tm: if non-null, used as the source matrix instead of _tm (ADR-025 archetype support).
 
-void MarkovGenerator::_build_scaled_matrix(int vp, double out_m[7][7]) const {
+void MarkovGenerator::_build_scaled_matrix(int vp, double out_m[7][7],
+                                            const double (*base_tm)[7]) const {
     double self_scale    = _vss[vp];
     double breakout_scale= _vbs[vp];
+    const double (*src)[7] = (base_tm != nullptr) ? base_tm : _tm;
 
     for (int i = 0; i < 7; ++i) {
-        // Copy base row
+        // Copy base row from selected source matrix
         double row[7];
-        for (int j = 0; j < 7; ++j) row[j] = _tm[i][j];
+        for (int j = 0; j < 7; ++j) row[j] = src[i][j];
 
         // Step 1: scale self-transition
         double adj_self = std::min(row[i] * self_scale, 0.98);
@@ -205,18 +239,29 @@ void MarkovGenerator::_build_scaled_matrix(int vp, double out_m[7][7]) const {
 
 // ── generate_stock_m1 ─────────────────────────────────────────────────────────
 // Algorithm mirrors PriceEngine.generate_stock_m1_cache() line-for-line.
+// archetype_key selects a per-archetype base matrix (ADR-025). Empty = default _tm.
 
 Dictionary MarkovGenerator::generate_stock_m1(
         int vol_profile, int base_price, int n_days,
-        int m1_capacity, int d1_capacity, int64_t seed) const
+        int m1_capacity, int d1_capacity, int64_t seed,
+        String archetype_key) const
 {
     const int VP    = std::max(0, std::min(vol_profile, 3));
     const double BP = static_cast<double>(base_price);
     const double NT = static_cast<double>(TICKS_PER_MINUTE);  // 4.0
 
+    // Select archetype base matrix (ADR-025). Falls back to _tm if key not found.
+    const double (*base_tm)[7] = nullptr;
+    if (!archetype_key.is_empty()) {
+        std::string key = archetype_key.utf8().get_data();
+        auto it = _archetype_matrices.find(key);
+        if (it != _archetype_matrices.end())
+            base_tm = it->second.tm;
+    }
+
     // Build vol-scaled transition matrix (NEUTRAL season bias — identity op)
     double matrix[7][7];
-    _build_scaled_matrix(VP, matrix);
+    _build_scaled_matrix(VP, matrix, base_tm);
 
     // Initialise PCG32
     Pcg32 rng;
@@ -404,8 +449,9 @@ void MarkovGenerator::_bind_methods() {
                          &MarkovGenerator::set_config);
     ClassDB::bind_method(
         D_METHOD("generate_stock_m1", "vol_profile", "base_price", "n_days",
-                 "m1_capacity", "d1_capacity", "seed"),
-        &MarkovGenerator::generate_stock_m1);
+                 "m1_capacity", "d1_capacity", "seed", "archetype_key"),
+        &MarkovGenerator::generate_stock_m1,
+        DEFVAL(String()));
 }
 
 } // namespace godot

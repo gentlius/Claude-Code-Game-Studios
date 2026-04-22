@@ -223,6 +223,7 @@ var _cb_halt_remaining: int = 0  ## Stage 1 remaining halt ticks
 var _player_pressure: Dictionary = {}  ## stock_id -> float; pending price delta from player fills (ADR-019)
 var _rumor_pressure: Dictionary = {}   ## stock_id -> {delta_per_tick: float, ticks_remaining: int} (TD-DR-04)
 var _old_prices: Dictionary = {}       ## pre-allocated: stock_id -> int. Reused each tick (TD-CR-07)
+var _season_count: int = 0  ## Seasons started since new-game/load. 0=uninitialised; 1=first season. (ADR-025)
 
 # ── Config (loaded in _ready) ──
 
@@ -392,6 +393,7 @@ func _reseed_session() -> void:
 
 
 func _on_season_start() -> void:
+	_season_count += 1  # ADR-025: track which season we are entering (1 = first)
 	_reset_season_mechanics()
 
 
@@ -449,10 +451,15 @@ func initialize_for_load(save_data: Dictionary) -> void:
 			if entry is Dictionary:
 				ohlcv_daily.append(entry)
 
+		# ADR-025: Prefer saved base_price (may be drifted from prior seasons).
+		# Fall back to StockData.base_price for saves predating ADR-025.
+		var saved_base: int = int(saved.get("base_price", 0))
+		var base_price_restored: int = saved_base if saved_base > 0 else stock.base_price
+
 		_stock_states[stock_id] = {
 			"stock_id":           stock_id,
 			"current_price":      cur_price,
-			"base_price":         stock.base_price,
+			"base_price":         base_price_restored,
 			"season_open_price":  saved.get("season_open_price", cur_price),
 			"prev_day_close":     prev_close,
 			"volatility_profile": stock.volatility_profile,
@@ -491,6 +498,7 @@ func initialize_for_load(save_data: Dictionary) -> void:
 		_current_index  = INDEX_BASE
 		_prev_day_index = INDEX_BASE
 	_index_history.clear()
+	_season_count = int(save_data.get("season_count", 1))  ## ADR-025: restore drift counter
 	_engine_state = EngineState.READY
 	# 로드 후 가격 복원 완료 — UI 일괄 갱신.
 	on_price_updated.emit(0)
@@ -506,6 +514,7 @@ func get_save_data() -> Dictionary:
 		stocks_data[stock_id] = {
 			"current_price":     s.get("current_price",     0),
 			"prev_day_close":    s.get("prev_day_close",    0),
+			"base_price":        s.get("base_price",        0),  ## ADR-025: drifted anchor
 			"season_open_price": s.get("season_open_price", s.get("current_price", 0)),
 			"season_bias":       int(s.get("season_bias", SeasonBias.NEUTRAL)),
 			"ohlcv_daily":       s.get("ohlcv_daily",       []),
@@ -513,9 +522,10 @@ func get_save_data() -> Dictionary:
 			"tick_volumes":      s.get("tick_volumes",       []),
 		}
 	return {
-		"stocks": stocks_data,
-		"market_index": _current_index,
+		"stocks":         stocks_data,
+		"market_index":   _current_index,
 		"prev_day_index": _prev_day_index,
+		"season_count":   _season_count,  ## ADR-025: season drift counter
 	}
 
 
@@ -531,6 +541,7 @@ func reset() -> void:
 	_prev_day_index = 0.0
 	_current_index = 0.0
 	_base_market_cap = 0.0
+	_season_count = 0  ## ADR-025
 	_engine_state = EngineState.UNINITIALIZED
 
 
@@ -870,9 +881,11 @@ func generate_stock_m1_cache(
 	var stock_seed: int = (history_seed ^ hash(stock.stock_id)) & 0x7FFFFFFF
 
 	# ADR-024 Phase 3: delegate to C++ MarkovGenerator when extension is loaded.
+	# ADR-025: pass archetype_key so C++ selects the per-archetype transition matrix.
 	if _markov != null:
 		return _markov.generate_stock_m1(
-			vol_profile, base_price, n_days, m1_capacity, d1_capacity, stock_seed)
+			vol_profile, base_price, n_days, m1_capacity, d1_capacity, stock_seed,
+			stock.archetype)
 
 	# GDScript fallback (Phase 1 implementation) — active until extension is compiled.
 	var matrix: Array = _build_transition_matrix(vol_profile, SeasonBias.NEUTRAL)
@@ -1216,6 +1229,17 @@ func _reset_season_mechanics() -> void:
 		state["gradual_events"]    = [] as Array
 		state["order_book"]        = {"ask": [], "bid": []}
 		# current_price, prev_day_close: carry forward — not touched
+
+		# ADR-025: Apply per-season base_price drift from season 2 onward.
+		# Season 1: base_price already set from StockData (no drift on first season).
+		# Season N+1: compound the drift so hard-clamp window and mean-reversion anchor
+		#             both shift gradually, preventing guaranteed season-box trading.
+		if _season_count > 1:
+			var stock: StockData = StockDatabase.get_stock(stock_id)
+			if stock != null and stock.season_drift != 0.0:
+				state["base_price"] = max(1000,
+					round_to_tick(state["base_price"] * (1.0 + stock.season_drift)))
+
 		_transition_matrices[stock_id] = _build_transition_matrix(
 			state["volatility_profile"], bias
 		)

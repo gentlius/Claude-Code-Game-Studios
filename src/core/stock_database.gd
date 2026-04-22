@@ -176,6 +176,8 @@ func _load_stocks_from_json() -> void:
 		var tags: Array = entry.get("event_tags", [])
 		stock.event_tags = Array(tags, TYPE_STRING, &"", null)
 		stock.description = entry.get("description", "")
+		stock.archetype = str(entry.get("archetype", ""))
+		stock.season_drift = float(entry.get("seasonDrift", 0.0))
 		_stocks[stock.stock_id] = stock
 
 	_build_indexes()

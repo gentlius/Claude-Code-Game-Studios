@@ -23,6 +23,13 @@ enum VolatilityProfile { LOW, MEDIUM, HIGH, EXTREME }
 ## 이 종목의 상장 역사 시즌 수 (3~300). 프리히스토리 생성 범위를 결정한다.
 ## 3 = 신생 상장주, 300 = 대형 우량주. OhlcvHistory / M1CacheManager가 참조.
 @export var history_seasons: int = 100
+## 아키타입 코드. MarkovGenerator가 해당 전환 행렬을 선택한다 (ADR-025).
+## 값: "GROWTH" | "VALUE_DIVIDEND" | "CYCLICAL" | "EVENT_DRIVEN" |
+##      "RECOVERY_UNCERTAIN" | "DECLINING_TRAP" | "" (기본 행렬 fallback)
+@export var archetype: String = ""
+## 시즌 경계마다 base_price 앵커에 곱해지는 비율 (ADR-025).
+## +0.025 = 시즌당 +2.5% 드리프트. PriceEngine이 시즌 시작 시 적용.
+@export var season_drift: float = 0.0
 
 ## 종목 표시용 통합 포맷. 전체 코드에서 이 메서드만 사용한다.
 ## 포맷 변경 시 이 한 곳만 수정하면 된다.

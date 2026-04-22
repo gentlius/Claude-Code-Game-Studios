@@ -229,6 +229,15 @@ var _old_prices: Dictionary = {}       ## pre-allocated: stock_id -> int. Reused
 const CONFIG_PATH: String = "res://assets/data/price_engine_config.json"
 var _rumor_pressure_strength: float = 0.0005  ## per-tick fractional delta per impact tier unit (GDD §3-5)
 
+## ADR-024 Phase 2: Markov constants loaded from JSON.
+## generate_stock_m1_cache() reads these so C++ MarkovGenerator uses the same source.
+## Keyed by MarkovState int (0=STRONG_UP … 6=BREAKOUT_DOWN). Populated by _load_config().
+var _cfg_state_params: Array = []       ## 7 entries: [bias, mag_min, mag_max, noise_std, min_dur_min]
+var _cfg_transition_matrix: Array = []  ## 7×7 float rows
+var _cfg_vol_pattern_scale: Array = []  ## 4 floats [LOW..EXTREME]
+var _cfg_base_volume_range: Array = []  ## 4 entries: [min_vol, max_vol]
+var _cfg_state_volume_mult: Array = []  ## 7 floats [STRONG_UP..BREAKOUT_DOWN]
+
 # ── Lifecycle ──
 
 func _ready() -> void:
@@ -242,14 +251,97 @@ func _ready() -> void:
 
 
 ## Load tuning values from price_engine_config.json. Falls back to in-code defaults.
+## ADR-024 Phase 2: Markov constants parsed into _cfg_* vars for C++ parity.
 func _load_config() -> void:
 	var f: FileAccess = FileAccess.open(CONFIG_PATH, FileAccess.READ)
 	if f == null:
+		_init_cfg_from_consts()
 		return
 	var parsed: Variant = JSON.parse_string(f.get_as_text())
 	f.close()
-	if parsed is Dictionary:
-		_rumor_pressure_strength = float(parsed.get("rumorPressureStrength", _rumor_pressure_strength))
+	if not parsed is Dictionary:
+		_init_cfg_from_consts()
+		return
+
+	_rumor_pressure_strength = float(parsed.get("rumorPressureStrength", _rumor_pressure_strength))
+
+	# ── Markov state parameters (stateParams) ──
+	# State order mirrors the MarkovState enum (0=STRONG_UP … 6=BREAKOUT_DOWN).
+	const STATE_NAMES: Array = [
+		"STRONG_UP", "UPTREND", "SIDEWAYS", "DOWNTREND",
+		"STRONG_DOWN", "BREAKOUT_UP", "BREAKOUT_DOWN",
+	]
+	var sp_json: Dictionary = parsed.get("stateParams", {}) as Dictionary
+	_cfg_state_params = []
+	if sp_json.is_empty():
+		_cfg_state_params = _array_copy(STATE_PARAMS.values())
+	else:
+		for name: String in STATE_NAMES:
+			var p: Dictionary = sp_json.get(name, {}) as Dictionary
+			_cfg_state_params.append([
+				float(p.get("bias",           0.0)),
+				float(p.get("magMin",          0.0)),
+				float(p.get("magMax",          0.0)),
+				float(p.get("noiseStd",        0.0)),
+				int(p.get("minDurationMin",    1)),
+			])
+
+	# ── Transition matrix ──
+	var tm_json: Variant = parsed.get("transitionMatrix", [])
+	if tm_json is Array and (tm_json as Array).size() == 7:
+		_cfg_transition_matrix = []
+		for row: Variant in (tm_json as Array):
+			var r: Array[float] = [] as Array[float]
+			for v: Variant in (row as Array):
+				r.append(float(v))
+			_cfg_transition_matrix.append(r)
+	else:
+		_cfg_transition_matrix = TRANSITION_MATRIX.duplicate(true)
+
+	# ── Volatility and volume arrays ──
+	_cfg_vol_pattern_scale = _load_float_array(parsed, "volPatternScale",  VOL_PATTERN_SCALE)
+	_cfg_base_volume_range = _load_nested_array(parsed, "baseVolumeRange", BASE_VOLUME_RANGE)
+	_cfg_state_volume_mult = _load_float_array(parsed, "stateVolumeMult", STATE_VOLUME_MULT)
+
+
+## Fallback: populate _cfg_* from compile-time const values when JSON is unavailable.
+func _init_cfg_from_consts() -> void:
+	_cfg_state_params = _array_copy(STATE_PARAMS.values())
+	_cfg_transition_matrix = TRANSITION_MATRIX.duplicate(true)
+	_cfg_vol_pattern_scale = VOL_PATTERN_SCALE.duplicate()
+	_cfg_base_volume_range = BASE_VOLUME_RANGE.duplicate(true)
+	_cfg_state_volume_mult = STATE_VOLUME_MULT.duplicate()
+
+
+static func _load_float_array(d: Dictionary, key: String, fallback: Array) -> Array[float]:
+	var raw: Variant = d.get(key, [])
+	if not raw is Array or (raw as Array).is_empty():
+		return fallback.duplicate() as Array[float]
+	var out: Array[float] = [] as Array[float]
+	for v: Variant in (raw as Array):
+		out.append(float(v))
+	return out
+
+
+static func _load_nested_array(d: Dictionary, key: String, fallback: Array) -> Array:
+	var raw: Variant = d.get(key, [])
+	if not raw is Array or (raw as Array).is_empty():
+		return fallback.duplicate(true)
+	var out: Array = []
+	for sub: Variant in (raw as Array):
+		var inner: Array = []
+		if sub is Array:
+			for v: Variant in (sub as Array):
+				inner.append(v)
+		out.append(inner)
+	return out
+
+
+static func _array_copy(arr: Array) -> Array:
+	var out: Array = []
+	for v: Variant in arr:
+		out.append(v)
+	return out
 
 
 ## Re-seed the price RNG from wall-clock time (ADR-018).
@@ -738,6 +830,12 @@ func generate_stock_m1_cache(
 	var base_price: int = stock.base_price
 	var matrix: Array = _build_transition_matrix(vol_profile, SeasonBias.NEUTRAL)
 
+	# Phase 2: use JSON-loaded params so C++ MarkovGenerator can validate against same values.
+	var cfg_sp: Array  = _cfg_state_params if not _cfg_state_params.is_empty() else _array_copy(STATE_PARAMS.values())
+	var cfg_vps: Array = _cfg_vol_pattern_scale if not _cfg_vol_pattern_scale.is_empty() else VOL_PATTERN_SCALE
+	var cfg_bvr: Array = _cfg_base_volume_range if not _cfg_base_volume_range.is_empty() else BASE_VOLUME_RANGE
+	var cfg_svm: Array = _cfg_state_volume_mult if not _cfg_state_volume_mult.is_empty() else STATE_VOLUME_MULT
+
 	var rng := RandomNumberGenerator.new()
 	rng.seed = (history_seed ^ hash(stock.stock_id)) & 0x7FFFFFFF
 
@@ -766,7 +864,7 @@ func generate_stock_m1_cache(
 
 		for _min: int in range(MINUTES_PER_DAY):
 			# State transition check every min_duration game-minutes.
-			var params: Array = STATE_PARAMS[markov_state]
+			var params: Array = cfg_sp[markov_state]
 			var min_dur: int = params[4]
 			if state_minutes >= min_dur:
 				var row: Array = matrix[markov_state]
@@ -781,8 +879,8 @@ func generate_stock_m1_cache(
 						break
 			state_minutes += 1
 
-			# Per-minute delta: scale per-tick STATE_PARAMS by TICKS_PER_MINUTE.
-			var sp: Array = STATE_PARAMS[markov_state]
+			# Per-minute delta: scale per-tick params by TICKS_PER_MINUTE.
+			var sp: Array = cfg_sp[markov_state]
 			var n_t: float = float(TICKS_PER_MINUTE)
 			var bias: float  = float(sp[0]) * n_t
 			var mag: float   = rng.randf_range(float(sp[1]), float(sp[2])) * n_t
@@ -790,7 +888,7 @@ func generate_stock_m1_cache(
 			var u1: float = maxf(rng.randf(), 1e-10)
 			var u2: float = rng.randf()
 			var noise: float = sqrt(-2.0 * log(u1)) * cos(TAU * u2) * float(sp[3]) * sqrt(n_t)
-			var pattern_delta: float = (bias + mag + noise) * VOL_PATTERN_SCALE[vol_profile]
+			var pattern_delta: float = (bias + mag + noise) * float(cfg_vps[vol_profile])
 
 			# Mean-reversion drift (same formula as generate_synthetic_d1).
 			var dev: float = (current_price - float(base_price)) / float(base_price)
@@ -819,9 +917,9 @@ func generate_stock_m1_cache(
 			var m1_low: int   = roundi(minf(current_price, next_price) - swing)
 
 			# Volume: base range × state multiplier.
-			var bvr: Array = BASE_VOLUME_RANGE[vol_profile]
+			var bvr: Array = cfg_bvr[vol_profile]
 			var m1_volume: float = rng.randf_range(float(bvr[0]), float(bvr[1])) \
-				* STATE_VOLUME_MULT[markov_state]
+				* float(cfg_svm[markov_state])
 
 			# Write to rolling M1 buffer.
 			var m1_pos: int  = m1_total % m1_capacity
@@ -1865,12 +1963,14 @@ func _build_transition_matrix(
 
 
 ## Build and scale a single transition matrix row for state i (Steps 1-3).
+## Uses _cfg_transition_matrix (JSON-loaded, Phase 2) when available; falls back to const.
 func _build_matrix_row(
 	i: int, self_scale: float, breakout_scale: float
 ) -> Array[float]:
+	var base_matrix: Array = _cfg_transition_matrix if not _cfg_transition_matrix.is_empty() else TRANSITION_MATRIX
 	var row: Array[float] = []
 	for j: int in range(7):
-		row.append(TRANSITION_MATRIX[i][j])
+		row.append(float(base_matrix[i][j]))
 
 	# Step 1: Scale self-transition
 	var adjusted_self: float = minf(row[i] * self_scale, 0.98)

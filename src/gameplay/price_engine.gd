@@ -238,6 +238,10 @@ var _cfg_vol_pattern_scale: Array = []  ## 4 floats [LOW..EXTREME]
 var _cfg_base_volume_range: Array = []  ## 4 entries: [min_vol, max_vol]
 var _cfg_state_volume_mult: Array = []  ## 7 floats [STRONG_UP..BREAKOUT_DOWN]
 
+## ADR-024 Phase 3: C++ MarkovGenerator instance. null when GDExtension is not loaded.
+## Falls back to GDScript generate_stock_m1_cache() when null.
+var _markov: Object = null
+
 # ── Lifecycle ──
 
 func _ready() -> void:
@@ -247,6 +251,7 @@ func _ready() -> void:
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
 	NewsEventSystem.on_rumor_hint.connect(_on_rumor_hint)
 	_load_config()
+	_init_markov_ext()
 	_reseed_session()
 
 
@@ -311,6 +316,36 @@ func _init_cfg_from_consts() -> void:
 	_cfg_vol_pattern_scale = VOL_PATTERN_SCALE.duplicate()
 	_cfg_base_volume_range = BASE_VOLUME_RANGE.duplicate(true)
 	_cfg_state_volume_mult = STATE_VOLUME_MULT.duplicate()
+
+
+## ADR-024 Phase 3: Try to instantiate the C++ MarkovGenerator GDExtension.
+## Fails silently — falls back to GDScript generate_stock_m1_cache() if not built.
+func _init_markov_ext() -> void:
+	if not ClassDB.class_exists("MarkovGenerator"):
+		return  # GDExtension not loaded — GDScript fallback stays active
+	_markov = ClassDB.instantiate("MarkovGenerator")
+	if _markov == null:
+		return
+	_markov.set_config(_build_markov_cfg())
+
+
+## Assemble the config Dictionary that C++ MarkovGenerator.set_config() expects.
+## Keys match price_engine_config.json schema (see assets/data/price_engine_config.json).
+func _build_markov_cfg() -> Dictionary:
+	var cfg: Dictionary = {}
+	cfg["stateParams"]       = _cfg_state_params if not _cfg_state_params.is_empty() \
+	                           else _array_copy(STATE_PARAMS.values())
+	cfg["transitionMatrix"]  = _cfg_transition_matrix if not _cfg_transition_matrix.is_empty() \
+	                           else TRANSITION_MATRIX.duplicate(true)
+	cfg["volSelfScale"]      = VOL_SELF_SCALE.duplicate()
+	cfg["volBreakoutScale"]  = VOL_BREAKOUT_SCALE.duplicate()
+	cfg["volPatternScale"]   = _cfg_vol_pattern_scale if not _cfg_vol_pattern_scale.is_empty() \
+	                           else VOL_PATTERN_SCALE.duplicate()
+	cfg["baseVolumeRange"]   = _cfg_base_volume_range if not _cfg_base_volume_range.is_empty() \
+	                           else BASE_VOLUME_RANGE.duplicate(true)
+	cfg["stateVolumeMult"]   = _cfg_state_volume_mult if not _cfg_state_volume_mult.is_empty() \
+	                           else STATE_VOLUME_MULT.duplicate()
+	return cfg
 
 
 static func _load_float_array(d: Dictionary, key: String, fallback: Array) -> Array[float]:
@@ -828,6 +863,14 @@ func generate_stock_m1_cache(
 	var n_days: int = stock.history_seasons * DAYS_PER_SEASON
 	var vol_profile: int = stock.volatility_profile
 	var base_price: int = stock.base_price
+	var stock_seed: int = (history_seed ^ hash(stock.stock_id)) & 0x7FFFFFFF
+
+	# ADR-024 Phase 3: delegate to C++ MarkovGenerator when extension is loaded.
+	if _markov != null:
+		return _markov.generate_stock_m1(
+			vol_profile, base_price, n_days, m1_capacity, d1_capacity, stock_seed)
+
+	# GDScript fallback (Phase 1 implementation) — active until extension is compiled.
 	var matrix: Array = _build_transition_matrix(vol_profile, SeasonBias.NEUTRAL)
 
 	# Phase 2: use JSON-loaded params so C++ MarkovGenerator can validate against same values.
@@ -837,7 +880,7 @@ func generate_stock_m1_cache(
 	var cfg_svm: Array = _cfg_state_volume_mult if not _cfg_state_volume_mult.is_empty() else STATE_VOLUME_MULT
 
 	var rng := RandomNumberGenerator.new()
-	rng.seed = (history_seed ^ hash(stock.stock_id)) & 0x7FFFFFFF
+	rng.seed = stock_seed
 
 	# Circular rolling buffers — only keep last m1_capacity M1 bars and d1_capacity D1 bars.
 	var m1_ohlc := PackedInt32Array()

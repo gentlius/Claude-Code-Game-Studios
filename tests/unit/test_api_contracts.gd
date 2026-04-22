@@ -599,3 +599,14 @@ func test_m1_cache_manager_constants():
 func test_price_engine_generate_stock_m1_cache_api():
 	assert_true(PriceEngine.has_method("generate_stock_m1_cache"),
 		"generate_stock_m1_cache 존재")
+
+
+# ── PriceEngine Phase 3: GDExtension wiring (ADR-024) ────────────────────────
+## ADR-024 §3: _init_markov_ext / _build_markov_cfg are private — only the
+## public observable effect is tested: _markov starts null-or-instance at ready.
+
+func test_price_engine_has_markov_ext_helpers():
+	assert_true(PriceEngine.has_method("_init_markov_ext"),
+		"_init_markov_ext 존재 (Phase 3 wiring)")
+	assert_true(PriceEngine.has_method("_build_markov_cfg"),
+		"_build_markov_cfg 존재 (Phase 3 cfg builder)")

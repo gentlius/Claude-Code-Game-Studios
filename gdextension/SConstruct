@@ -1,0 +1,35 @@
+#!/usr/bin/env python
+# SConstruct — GDExtension build script for MarkovGenerator.
+# Usage (from gdextension/ directory):
+#   scons platform=windows target=template_release arch=x86_64
+#   scons platform=windows target=template_debug  arch=x86_64
+#
+# Prerequisites:
+#   git submodule add -b godot-4.6 https://github.com/godotengine/godot-cpp godot-cpp
+#   git submodule update --init --recursive
+#   pip install scons
+
+import os
+
+# Load the godot-cpp environment (handles all compiler/platform flags).
+env = SConscript("godot-cpp/SConstruct")
+
+# Project sources
+env.Append(CPPPATH=["src/"])
+sources = Glob("src/*.cpp")
+
+# Output path — Godot scans res://gdextension/bin/{platform}/ at runtime.
+# The suffix encodes platform + target + arch, e.g. ".windows.template_release.x86_64"
+platform     = env["platform"]
+suffix       = env["suffix"]
+shlibsuffix  = env["SHLIBSUFFIX"]
+
+if platform == "macos":
+    # macOS uses a .framework bundle
+    lib_path = "bin/macos/libmarkov_generator{}.framework/libmarkov_generator{}".format(
+        suffix, suffix)
+else:
+    lib_path = "bin/{}/libmarkov_generator{}{}".format(platform, suffix, shlibsuffix)
+
+library = env.SharedLibrary(lib_path, source=sources)
+Default(library)

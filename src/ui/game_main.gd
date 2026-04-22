@@ -64,6 +64,11 @@ func _on_slot_selected(id: int) -> void:
 		_show_start_screen()
 		return
 
+	# ADR-024: 로드 후 M1 프리히스토리 캐시 복구.
+	# 디스크 캐시가 유효(버전·시드 일치)하면 재생성 없이 로드, 아니면 재생성.
+	M1CacheManager.reset()
+	M1CacheManager.generate_all(StockDatabase.get_all_stocks(), OhlcvHistory.history_seed)
+
 	_load_main_screen()
 
 
@@ -98,10 +103,11 @@ func _on_new_game_confirmed(slot_id: int) -> void:
 	CurrencySystem.init_first_season()
 	PortfolioManager.update_valuation(CurrencySystem.get_sim_cash(), 0)
 
-	# 인트로 시퀀스 재생 중 첫 번째 종목의 M1 프리히스토리 백그라운드 생성.
-	# OhlcvHistory.reset() 이후 → history_seed 확정 → D1 bars 유효 상태.
-	# 인트로가 끝날 때까지 생성이 완료되지 않으면 ChartRenderer가 스피너를 표시.
-	M1CacheManager.preheat_first_stock()
+	# 인트로 시퀀스 재생 중 전 종목 M1+D1 프리히스토리 배치 생성 (ADR-024 Phase 1).
+	# OhlcvHistory.reset() 이후 → history_seed 확정 → 슬롯별 캐시 격리.
+	# 인트로 종료 전 완료 안 되면 ChartRenderer가 spinner 표시 후 batch_complete에서 갱신.
+	M1CacheManager.clear_slot_cache()
+	M1CacheManager.generate_all(StockDatabase.get_all_stocks(), OhlcvHistory.history_seed)
 
 	# 인트로 시퀀스 — 새 게임 시 항상 재생 (GDD intro-sequence.md §3-1)
 	var IntroScript = load("res://src/ui/intro_sequence.gd")

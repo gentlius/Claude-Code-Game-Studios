@@ -136,21 +136,13 @@ func _get_all_daily(stock_id: String) -> Array[Dictionary]:
 	return result
 
 
-## Generates stock.history_seasons × DAYS_PER_SEASON daily bars.
-## ADR-023: 자체 알고리즘 제거 — PriceEngine.generate_synthetic_d1() 위임.
-## 가격 생성 규칙(Markov, 변동성 프로필, 드리프트)은 PriceEngine 단일 소유.
+## D1 프리히스토리 바 반환. ADR-024 Phase 1: M1CacheManager 의존성 역전.
+## M1CacheManager.get_d1_candles() 에서 읽음 (M1 집계 D1 — M1-first 방식).
+## 캐시 미준비 시 [] 반환 → chart renderer 가 spinner 표시 후 batch_complete에서 갱신.
 func _generate_pre_history(stock_id: String) -> Array[Dictionary]:
-	var stock_data: StockData = StockDatabase.get_stock(stock_id)
-	if stock_data == null:
+	if not M1CacheManager.is_cache_ready(stock_id):
 		return []
-	var n_seasons: int = stock_data.history_seasons if stock_data != null else N_PRE_SEASONS
-	var total_days: int = n_seasons * DAYS_PER_SEASON
-
-	var rng := RandomNumberGenerator.new()
-	# XOR with stock hash — 같은 history_seed라도 종목마다 다른 시퀀스, 재현 가능.
-	rng.seed = (history_seed ^ hash(stock_id)) & 0x7FFFFFFF
-
-	return PriceEngine.generate_synthetic_d1(stock_data, total_days, rng)
+	return M1CacheManager.get_d1_candles(stock_id)
 
 
 ## Aggregates a flat array of daily bars into candles of [param group_size] bars each.

@@ -78,7 +78,7 @@ var _d1_volume: float = 0.0
 ## Used to detect whether today's intra-day candle is already in _candles.
 var _d1_candle_base_count: int = 0
 
-## Set to true after M1CacheManager emits immediate_seasons_ready for the active stock.
+## Set to true after M1CacheManager emits batch_complete (ADR-024 Phase 1).
 var _m1_prehistory_ready: bool = false
 
 ## Drag-to-scroll state. Left-button drag scrolls through time.
@@ -149,8 +149,7 @@ func _ready() -> void:
 	GameClock.on_tick.connect(_on_tick)
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
 	PriceEngine.on_price_updated.connect(_on_price_updated)
-	M1CacheManager.immediate_seasons_ready.connect(_on_m1_immediate_ready)
-	M1CacheManager.season_ready.connect(_on_m1_season_ready)
+	M1CacheManager.batch_complete.connect(_on_m1_batch_complete)
 	clip_contents = true
 	tree_exiting.connect(_disconnect_signals)
 	_load_debounce_timer = Timer.new()
@@ -276,12 +275,8 @@ func _do_load_stock(stock_id: String) -> void:
 	_tick_volumes = PriceEngine.get_tick_volumes(stock_id)
 	_ohlcv_daily = PriceEngine.get_ohlcv_history(stock_id)
 
-	# Reset pre-history state and trigger M1 pre-history generation.
-	_m1_prehistory_ready = false
-	if OhlcvHistory.history_seed != 0:
-		var stock: StockData = StockDatabase.get_stock(stock_id)
-		if stock != null:
-			M1CacheManager.load_stock(stock_id, stock.history_seasons)
+	# Pre-history ready if batch_complete already fired (e.g. stock switch after first load).
+	_m1_prehistory_ready = M1CacheManager.is_cache_ready(stock_id)
 
 	_aggregate_candles()
 	_update_header()
@@ -396,10 +391,8 @@ func _disconnect_signals() -> void:
 		GameClock.on_market_state_changed.disconnect(_on_market_state_changed)
 	if PriceEngine.on_price_updated.is_connected(_on_price_updated):
 		PriceEngine.on_price_updated.disconnect(_on_price_updated)
-	if M1CacheManager.immediate_seasons_ready.is_connected(_on_m1_immediate_ready):
-		M1CacheManager.immediate_seasons_ready.disconnect(_on_m1_immediate_ready)
-	if M1CacheManager.season_ready.is_connected(_on_m1_season_ready):
-		M1CacheManager.season_ready.disconnect(_on_m1_season_ready)
+	if M1CacheManager.batch_complete.is_connected(_on_m1_batch_complete):
+		M1CacheManager.batch_complete.disconnect(_on_m1_batch_complete)
 	# TD-AUDIT-03: 씬 제거 시 타이머 dangling 방지 — timeout이 freed 객체에서 발화하는 오류 수정
 	if is_instance_valid(_load_debounce_timer):
 		_load_debounce_timer.stop()
@@ -409,42 +402,19 @@ func _disconnect_signals() -> void:
 
 # ── M1 Pre-history Signal Handlers ──
 
-## Called when M1CacheManager has generated the immediate (last 5 season) pre-history.
-## Sets the ready flag and rebuilds the chart — aggregation reads from M1CacheManager directly.
-func _on_m1_immediate_ready(stock_id: String) -> void:
-	if stock_id != _stock_id:
-		return
-	_m1_prehistory_ready = true
+## Called when M1CacheManager.batch_complete fires (전 종목 배치 생성 완료).
+## Sets the ready flag and rebuilds the chart — aggregation now reads from M1CacheManager.
+func _on_m1_batch_complete() -> void:
+	_m1_prehistory_ready = M1CacheManager.is_cache_ready(_stock_id)
 	_aggregate_candles()
 	_dirty = true
 	queue_redraw()
 
 
-## Called when an on-demand season finishes generating. Refreshes chart (new seasons now available).
-func _on_m1_season_ready(_season_idx: int, stock_id: String) -> void:
-	if stock_id != _stock_id:
-		return
-	_aggregate_candles()
-	_dirty = true
-	queue_redraw()
-
-
-## Checks whether the visible window is approaching the left boundary of loaded pre-history.
-## Triggers an on-demand season request when within 50 candles of the start.
+## Checks whether the visible window is approaching the left boundary of pre-history.
+## ADR-024 Phase 1: batch generation covers all history upfront — no on-demand requests needed.
 func _check_prehistory_boundary() -> void:
-	if not _m1_prehistory_ready or _timeframe == Timeframe.W1 or _timeframe == Timeframe.MN \
-			or _timeframe == Timeframe.D1:
-		return
-	var total: int = _candles.size()
-	var start_idx: int = maxi(0, total - _visible_count - _scroll_offset)
-	if start_idx >= 50:
-		return
-	# Determine which M1 cache season corresponds to the current left edge.
-	var m1_per_chart: int = maxi(1, int(_timeframe) / 4)
-	var m1_near_start: int = start_idx * m1_per_chart
-	var season_idx: int = m1_near_start / (M1CacheManager.DAYS_PER_SEASON * M1CacheManager.MINUTES_PER_DAY)
-	if season_idx > 0:
-		M1CacheManager.request_season(season_idx - 1)
+	pass  # No-op: batch generates all M1 bars at game start.
 
 
 # ── Input ──
@@ -552,10 +522,10 @@ func _aggregate_candles() -> void:
 	# M1 cache stores 1 candle per minute; tf ticks / 4 ticks-per-minute = minutes per candle.
 	var m1_per_chart: int = tf / 4  # M1→1, M5→5, M15→15
 
-	# Pre-history portion from M1CacheManager.
-	# get_aggregated_candles() works directly on PackedArrays — only allocates output-count Dicts.
+	# Pre-history portion from M1CacheManager (ADR-024: M1-first batch generation).
+	# get_aggregated_m1() works directly on PackedArrays — only allocates output-count Dicts.
 	if _m1_prehistory_ready:
-		var pre: Array[Dictionary] = M1CacheManager.get_aggregated_candles(_stock_id, m1_per_chart)
+		var pre: Array[Dictionary] = M1CacheManager.get_aggregated_m1(_stock_id, m1_per_chart)
 		_candles.append_array(pre)
 
 	# Current season portion from tick buffer.

@@ -294,7 +294,7 @@ PriceHistoryBuffer {
 > 영구적으로 부족하여 표시 불가. 1D 차트에서 MA60은 사실상 사용 불가한
 > 지표임을 인지. 5T/15T 타임프레임에서는 시즌 초반 이후 사용 가능.
 
-##### 5-3. M1/M5/M15 프리히스토리
+##### 5-3. M1/M5/M15 프리히스토리 (ADR-023, ADR-024)
 
 현재 시즌 이전에 존재했던 모든 기간(pre-history)에 대해 1분봉(M1) 차트를 제공한다.
 이는 W1/MN 전용이었던 과거 데이터를 M1/M5/M15 타임프레임에서도 볼 수 있게 한다.
@@ -303,77 +303,88 @@ PriceHistoryBuffer {
 
 | 원칙 | 상세 |
 |------|------|
-| **D1 파생** | M1 바는 반드시 `OhlcvHistory.get_all_daily_bars()`의 D1 바에서 파생. 독립 RNG 없음 (가격 일관성 보장). |
-| **시드 일관성** | M1 장중 노이즈 시드 = `OhlcvHistory.history_seed XOR hash(stock_id) XOR (season_idx × 9973)`. 동일 시드로 항상 동일 패턴 재현. |
-| **비동기 생성** | M1 데이터는 백그라운드 스레드에서 생성. 생성 중에도 현재 시즌 차트는 정상 표시됨. |
-| **디스크 캐시** | 생성된 시즌 데이터는 `user://m1_cache/{stock_id}_{season_idx}.bin`에 저장. 재실행 시 재생성 없음. |
-| **LRU 메모리** | 최대 `MAX_LOADED_SEASONS = 12` 시즌을 RAM에 상주. 초과 시 가장 오래된 시즌 evict. |
+| **M1-first** | 모든 타임프레임 데이터는 M1 Markov 생성이 단일 소스. D1→M1 확장 알고리즘 없음. |
+| **2-tier 캐시** | M1 7,800 bars (1시즌) + D1 5,200 bars (260시즌). M5/M15/W1/MN은 런타임 집계. |
+| **타임프레임 연속성** | M1/M5/M15가 모두 동일한 최근 1시즌을 커버. D1 전환 시 동일 구간이 겹쳐 시각적 연속성 확보. |
+| **비동기 배치 생성** | 인트로 시퀀스 재생 중 백그라운드 스레드로 전 종목 생성. 진행률 시그널 emit. |
+| **슬롯별 디스크 캐시** | `user://m1_cache/slot_{id}/{stock_id}.bin`. 세이브 슬롯 간 격리 (ADR-023). |
+| **시드 결정론** | 시드 = `OhlcvHistory.history_seed XOR hash(stock_id)`. 동일 시드 → 동일 패턴 재현. |
 
-**생성 단계 (종목 선택 시)**
-
-```
-load_stock(stock_id, history_seasons):
-    1. D1 bars ← OhlcvHistory.get_all_daily_bars(stock_id)   # 메인 스레드
-    2. Thread: 직전 N_IMMEDIATE_SEASONS(=5)개 시즌 생성+저장
-    3. Signal: immediate_seasons_ready(stock_id)
-    4. ChartRenderer: _m1_prehistory_ready = true, _aggregate_candles() 재호출
-```
-
-**온디맨드 생성 (차트 스크롤 시)**
-
-차트를 과거로 스크롤하여 미생성 구간에 근접(50캔들 이내)하면
-`request_season(season_idx - 1)`이 발동된다. 완료 시 `season_ready` 시그널 → 재집계.
-
-**M1 장중 확장 알고리즘 (_expand_d1_to_m1)**
+**캐시 포맷**
 
 ```
-D1 바 1개 → MINUTES_PER_DAY(=390)개 M1 캔들:
-    price ← d1_open
-    for each minute m:
-        remaining = MINUTES_PER_DAY - m
-        bias  = (d1_close - price) / remaining × 0.5   # 종가 방향 편향
-        noise = rng × M1_VOLATILITY(=0.004) × (d1_high - d1_low) × 0.5
-        next_price = clamp(price + bias + noise, d1_low, d1_high)
-        wicks = (d1_high - d1_low) × rng(0.001~0.005)
-        m1_high = min(max(price, next_price) + wicks, d1_high)
-        m1_low  = max(min(price, next_price) - wicks, d1_low)
-    last_minute.close ← d1_close   # D1 종가로 고정 (연속성 보장)
+user://m1_cache/slot_{id}/{stock_id}.bin:
+    PackedInt32Array  m1_ohlc   # 7,800 × 4 ints  (open, high, low, close)
+    PackedFloat32Array m1_vol   # 7,800 floats
+    PackedInt32Array  d1_ohlc   # 5,200 × 4 ints
+    PackedFloat32Array d1_vol   # 5,200 floats
 ```
 
-**집계 성능 (get_aggregated_candles)**
+저장 크기: (7,800 + 5,200) × 20 bytes = **260KB/종목**, 46종목 = **~12MB/슬롯**.
 
-M1 캐시는 `PackedInt32Array(ohlc) + PackedFloat32Array(vol)` 형식으로 저장된다.
-집계 시 PackedArray를 직접 순회 — Dictionary 변환 비용은 출력 캔들 수에만 발생.
-
-| 집계 | 입력 M1 수 | 출력 캔들 수 | Dict 할당 |
-|------|-----------|------------|---------|
-| M5 (5분봉) | ~39,000 | ~7,800 | 7,800개 |
-| M15 (15분봉) | ~39,000 | ~2,600 | 2,600개 |
-
-**신규 게임 시 프리히트 (preheat_first_stock)**
-
-새 게임 시작 후 인트로 시퀀스 재생 중, 첫 번째 종목의 M1 즉시 시즌을 백그라운드에서
-미리 생성한다. 인트로가 끝났을 때 생성이 완료되지 않았으면 ChartRenderer가
-"프리히스토리 로딩 중..." 안내 텍스트를 차트 상단에 표시(비차단).
+**인트로 배치 생성 흐름**
 
 ```
 GameMain._on_new_game_confirmed():
-    ...
-    OhlcvHistory.reset()     ← history_seed 확정
+    OhlcvHistory.reset()               # history_seed 생성
     PriceEngine.init_first_season()
-    M1CacheManager.preheat_first_stock()   ← 인트로 중 백그라운드 생성 시작
+    M1CacheManager.generate_all(       # 전 종목 백그라운드 배치
+        StockDatabase.get_all_stocks(),
+        OhlcvHistory.history_seed
+    )
     [인트로 재생]
+    # 생성 미완 시: ChartRenderer가 "프리히스토리 생성 중..." 표시 (비차단)
 ```
 
-**타임프레임별 M1 집계 상수**
+**배치 생성 진행 시그널**
 
-| 타임프레임 | m1_per_candle | 근거 |
-|-----------|-------------|------|
-| M1 | 1 | 1분봉 1:1 |
-| M5 | 5 | 5분 = M1 × 5 |
-| M15 | 15 | 15분 = M1 × 15 |
+```
+M1CacheManager.batch_progress(done: int, total: int)   # 종목 단위 진행률
+M1CacheManager.batch_complete                           # 전 종목 완료
+```
 
-> **W1/MN**: M1 캐시를 사용하지 않음. `OhlcvHistory.get_candles()`의 D1 집계 사용.
+**M1 Markov 생성 알고리즘**
+
+D1→M1 확장이 아닌 `PriceEngine.generate_all_stocks_m1()`의 Markov 직접 생성:
+
+```
+종목당 history_seasons × 20일 × 390분 M1 바를 Markov로 생성:
+    state = SIDEWAYS, price = base_price, seed = history_seed XOR hash(stock_id)
+    for each minute:
+        - STATE_PARAMS[state]로 bias/magnitude/noise 계산
+        - VOL_PATTERN_SCALE[vol_profile] 스케일
+        - 드리프트(base_price 회귀) 적용
+        - tick_size 반올림
+        - D1 누적기에 기록 (동시에 D1 집계)
+    마지막 7,800 M1 + 마지막 5,200 D1을 캐시에 저장
+```
+
+Phase 3(GDExtension): C++ `MarkovGenerator`로 위임하여 ~20-50× 속도 향상.
+
+**타임프레임 서빙**
+
+| 타임프레임 | 데이터 소스 | 방식 |
+|-----------|-----------|------|
+| M1 | M1 캐시 (7,800 bars) | 직접 서빙 |
+| M5 | M1 캐시 | 런타임 집계 (5 M1 → 1 M5) |
+| M15 | M1 캐시 | 런타임 집계 (15 M1 → 1 M15) |
+| D1 | D1 캐시 (5,200 bars) | 직접 서빙 |
+| W1 | D1 캐시 | 런타임 집계 (5 D1 → 1 W1) |
+| MN | D1 캐시 | 런타임 집계 (20 D1 → 1 MN) |
+
+**집계 성능**
+
+PackedArray 직접 순회. Dictionary 할당은 출력 캔들 수에만 발생.
+
+| 집계 | 입력 바 수 | 출력 캔들 | Dict 할당 |
+|------|----------|---------|---------|
+| M5 | 7,800 M1 | 1,560 | 1,560개 |
+| M15 | 7,800 M1 | 520 | 520개 |
+| W1 | 5,200 D1 | 1,040 | 1,040개 |
+| MN | 5,200 D1 | 260 | 260개 |
+
+> **W1/MN 현재 시즌**: 진행 중인 시즌의 D1 바는 `PriceEngine.get_ohlcv_history()`에서 추가.
+> `OhlcvHistory.get_candles()` 호출은 유지 (완료 시즌 누적 + 현재 시즌 합산).
 
 #### 규칙 6. 성능 전략
 
@@ -580,13 +591,18 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `OhlcvHistory.get_candles(stock_id, "W1") -> Array[Dictionary]` 존재 (S9-07)
 - [x] `OhlcvHistory.get_candles(stock_id, "MN") -> Array[Dictionary]` 존재 (S9-07)
 - [x] `ChartRenderer.Timeframe.W1 = 9000`, `MN = 9001` sentinel enum 값 정의
-- [x] `M1CacheManager.load_stock(stock_id, history_seasons)` — 종목 선택 시 즉시 시즌 생성 트리거
-- [x] `M1CacheManager.get_aggregated_candles(stock_id, m1_per_candle)` — PackedArray 직접 집계
-- [x] `M1CacheManager.immediate_seasons_ready(stock_id)` 시그널 → `ChartRenderer._on_m1_immediate_ready()`
-- [x] `M1CacheManager.season_ready(season_idx, stock_id)` 시그널 → `ChartRenderer._on_m1_season_ready()`
-- [x] `M1CacheManager.preheat_first_stock()` — 신규 게임 인트로 중 백그라운드 생성
-- [x] `OhlcvHistory.get_all_daily_bars(stock_id)` — M1CacheManager가 D1 바 소스로 사용
-- [x] `OhlcvHistory.history_seed` — M1 시드 파생에 사용 (XOR hash(stock_id) XOR season_idx×9973)
+- [x] `M1CacheManager.generate_all(stocks, history_seed)` — 인트로 배치 생성 (전 종목)
+- [x] `M1CacheManager.get_m1_candles(stock_id) -> Array[Dictionary]` — M1 캔들 반환 (= get_aggregated_m1(id, 1))
+- [x] `M1CacheManager.get_d1_candles(stock_id) -> Array[Dictionary]` — D1 캔들 반환 (OhlcvHistory 위임)
+- [x] `M1CacheManager.get_aggregated_m1(stock_id, m1_per_candle) -> Array[Dictionary]` — M1 런타임 집계 (M5/M15)
+- [x] `M1CacheManager.get_aggregated_d1(stock_id, d1_per_candle) -> Array[Dictionary]` — D1 런타임 집계 (W1/MN)
+- [x] `M1CacheManager.batch_progress(done, total)` 시그널 → ChartRenderer 로딩 표시
+- [x] `M1CacheManager.batch_complete` 시그널 → ChartRenderer `_on_m1_batch_complete()`
+- [x] `OhlcvHistory.history_seed` — M1 시드 파생에 사용 (XOR hash(stock_id))
+- [x] ChartRenderer: M1/M5/M15 → `get_aggregated_m1()`, D1/W1/MN → `OhlcvHistory.get_candles()`(내부에서 M1CacheManager D1 캐시 소비)
+- [x] `ChartRenderer.Timeframe.W1 = 9000`, `MN = 9001` sentinel enum 값 정의
+- [x] `SkillTree.is_skill_unlocked("A1")` — MA 표시 여부 확인
+- [x] `SkillTree.is_skill_unlocked("A2")` — RSI 표시 여부 확인
 
 ### AC → 테스트 매핑
 

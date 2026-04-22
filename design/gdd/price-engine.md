@@ -1215,3 +1215,74 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `assets/data/market_profiles/market_kr.json` — `"daily_limit_pct": 0.30` 등록
 - [ ] short-selling.md 강제청산 임계값(120% 상승 = 상한가 4회) 연동 확인 — ShortSellingSystem과 협의
 - [ ] 테스트: `test_price_engine.gd` — `test_daily_limit_loaded_from_market_profile()` 추가
+
+### M1-first 프리히스토리 배치 생성 (ADR-024)
+
+> 근거: [ADR-023](../../docs/architecture/023-price-generation-single-ownership.md),
+> [ADR-024](../../docs/architecture/024-price-engine-gdextension.md)
+
+**설계 목표**: 전 종목 프리히스토리를 M1 Markov로 직접 생성하여 모든 타임프레임이
+동일한 데이터 소스에서 파생되도록 한다. D1→M1 확장 알고리즘 제거.
+
+**배치 생성 API**
+
+```
+PriceEngine.generate_all_stocks_m1(
+    stocks: Array[StockData],   # 전 종목 StockData
+    seeds:  PackedInt64Array    # 종목별 시드 (OhlcvHistory.history_seed XOR hash(stock_id))
+) -> void
+```
+
+- 백그라운드 스레드에서 호출 (M1CacheManager가 관리)
+- 전 종목을 순차 처리하며 진행률 시그널 emit
+- 종목당: `history_seasons × 20일 × 390분 M1` 바를 Markov로 생성
+- 마지막 7,800 M1 바(1시즌) + 마지막 5,200 D1 바(260시즌)를 캐시로 반환
+
+**캐시 포맷 (종목당)**
+
+| 캐시 | 크기 | 서빙 타임프레임 |
+|------|------|----------------|
+| M1 | 7,800 bars (1시즌 × 390분) | M1 / M5(집계) / M15(집계) |
+| D1 | 5,200 bars (260시즌 × 20일) | D1 / W1(집계) / MN(집계) |
+
+M5/M15/W1/MN은 런타임 집계 — 별도 캐시 없음.
+
+**마이그레이션 3단계 (ADR-024)**
+
+| 단계 | 내용 | 구현 위치 |
+|------|------|---------|
+| Phase 1 | GDScript M1-first 검증 | `price_engine.gd` + `m1_cache_manager.gd` |
+| Phase 2 | 상수 JSON 추출 | `assets/data/price_engine_config.json` |
+| Phase 3 | C++ GDExtension (`MarkovGenerator`) | `gdextension/src/markov_generator.cpp` |
+
+**Phase 3 구현 경계**
+
+```
+C++ MarkovGenerator (RefCounted, stateless):
+    generate_all_stocks_m1(stocks_cfg, seeds) -> PackedArrays
+    step_tick(state, params, rng_state)        -> new_price, new_state
+
+GDScript PriceEngine (autoload, 유지):
+    _markov: MarkovGenerator   # C++ 인스턴스 보유
+    시그널, 이벤트 레이어, VI/CB, 세이브/로드
+```
+
+**PRNG**: C++ PCG32 단일화. GDScript `RandomNumberGenerator`는 가격 생성에서 제거.
+**플랫폼**: Windows (우선), Android/iOS (추후). 웹 export 미지원.
+
+**체크리스트 (Phase 1)**
+- [ ] `PriceEngine.generate_all_stocks_m1(stocks, seeds)` 구현 — GDScript
+- [ ] M1 Markov 루프가 `generate_synthetic_d1()` 동일 STATE_PARAMS/전이행렬 사용
+- [ ] 스트리밍 중 D1 누적기 동작 검증 (M1 → D1 집계 정확성)
+- [ ] `M1CacheManager`가 새 배치 API 호출하여 M1+D1 캐시 생성
+
+**체크리스트 (Phase 2)**
+- [ ] `STATE_PARAMS`, `TRANSITION_MATRIX`, `VOL_PATTERN_SCALE`, `BASE_VOLUME_RANGE` → `price_engine_config.json` 이전
+- [ ] GDScript/C++ 양쪽이 동일 JSON에서 로드
+
+**체크리스트 (Phase 3)**
+- [ ] `gdextension/` 디렉토리 및 빌드 환경 (godot-cpp, SConstruct)
+- [ ] `MarkovGenerator` C++ 구현 + `.gdextension` 디스크립터
+- [ ] `PriceEngine.gd`의 `generate_all_stocks_m1` / `step_tick` 호출이 C++로 위임
+- [ ] Windows 64bit 빌드 검증
+- [ ] 테스트: `test_api_contracts.gd` — `test_price_engine_gdextension_api()` 추가

@@ -319,14 +319,18 @@ func _init_cfg_from_consts() -> void:
 
 
 ## ADR-024 Phase 3: Try to instantiate the C++ MarkovGenerator GDExtension.
-## Fails silently — falls back to GDScript generate_stock_m1_cache() if not built.
+## C++ MarkovGenerator 로드 시도. 실패 시 GDScript 폴백 (느림 — Output 패널 확인).
 func _init_markov_ext() -> void:
 	if not ClassDB.class_exists("MarkovGenerator"):
-		return  # GDExtension not loaded — GDScript fallback stays active
+		push_warning("PriceEngine: MarkovGenerator GDExtension 미로드 — GDScript 폴백 사용 (느림). " +
+			"gdextension/bin/windows/ 에 DLL 있는지, Godot 에디터 재시작했는지 확인.")
+		return
 	_markov = ClassDB.instantiate("MarkovGenerator")
 	if _markov == null:
+		push_error("PriceEngine: MarkovGenerator 인스턴스 생성 실패.")
 		return
 	_markov.set_config(_build_markov_cfg())
+	print("PriceEngine: C++ MarkovGenerator 로드 완료.")
 
 
 ## Assemble the config Dictionary that C++ MarkovGenerator.set_config() expects.

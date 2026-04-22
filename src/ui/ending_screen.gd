@@ -10,6 +10,7 @@
 ## 엔딩 데이터는 MarketProfile.get_ending_param(ending_id, field)에서 읽는다. ADR-021.
 ## JSON 필드: name_key / body_key / sfx_key / visual / action_label_key / is_bad_ending
 ## See: design/gdd/endings-achievements.md §9 Implementation Checklist
+class_name EndingScreen
 extends CanvasLayer
 
 # ── Signals ──

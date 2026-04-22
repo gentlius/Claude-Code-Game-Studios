@@ -33,6 +33,9 @@ dist/
 *.dylib
 *.app
 
+# C++ build artifacts (object files) — not committed
+*.obj
+
 # === Engine: Godot ===
 .godot/
 *.translation

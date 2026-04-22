@@ -33,8 +33,11 @@ dist/
 *.dylib
 *.app
 
-# C++ build artifacts (object files) — not committed
+# C++ build artifacts — not committed
 *.obj
+*.exp
+*.lib
+*.pdb
 
 # === Engine: Godot ===
 .godot/

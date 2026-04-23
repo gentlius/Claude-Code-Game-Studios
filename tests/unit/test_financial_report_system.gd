@@ -148,7 +148,7 @@ func test_compute_new_roe_is_clamped_within_bounds() -> void:
 	# If DB empty, skip (integration check).
 	var all_ids: Array[String] = StockDatabase.get_all_stock_ids()
 	if all_ids.is_empty():
-		pass_test()
+		pass_test("종목 없음 — 헤드리스 환경 스킵")
 		return
 	var stock_id: String = all_ids[0]
 	var result: float = FinancialReportSystem._compute_new_roe(stock_id)
@@ -168,7 +168,7 @@ func test_compute_new_roe_returns_zero_for_missing_stock() -> void:
 func test_apply_roe_update_sets_per_sentinel_when_roe_negative() -> void:
 	var all_ids: Array[String] = StockDatabase.get_all_stock_ids()
 	if all_ids.is_empty():
-		pass_test()
+		pass_test("종목 없음 — 헤드리스 환경 스킵")
 		return
 	var stock_id: String = all_ids[0]
 	var stock: StockData = StockDatabase.get_stock(stock_id)
@@ -195,7 +195,7 @@ func test_consensus_roe_differs_from_new_roe_via_separate_rng() -> void:
 	# Consensus uses _consensus_rng; new_roe uses _rng. Seeds are different → values differ.
 	var all_ids: Array[String] = StockDatabase.get_all_stock_ids()
 	if all_ids.is_empty():
-		pass_test()
+		pass_test("종목 없음 — 헤드리스 환경 스킵")
 		return
 	var stock_id: String = all_ids[0]
 	FinancialReportSystem._rng.seed = 12345

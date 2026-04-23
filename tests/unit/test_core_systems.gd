@@ -49,7 +49,7 @@ func test_stock_database_has_stocks_loaded() -> void:
 func test_stock_database_get_stock_returns_stockdata() -> void:
 	var ids: Array[String] = StockDatabase.get_all_stock_ids()
 	if ids.is_empty():
-		pass_test()
+		pass_test("종목 없음 — 헤드리스 환경 스킵")
 		return
 	var stock: StockData = StockDatabase.get_stock(ids[0])
 	assert_not_null(stock, "get_stock() → StockData 반환")
@@ -57,7 +57,7 @@ func test_stock_database_get_stock_returns_stockdata() -> void:
 func test_stock_database_stock_exists_true() -> void:
 	var ids: Array[String] = StockDatabase.get_all_stock_ids()
 	if ids.is_empty():
-		pass_test()
+		pass_test("종목 없음 — 헤드리스 환경 스킵")
 		return
 	assert_true(StockDatabase.stock_exists(ids[0]), "stock_exists() = true for known ID")
 
@@ -77,7 +77,7 @@ func test_stock_database_get_all_stocks_count_matches() -> void:
 func test_stock_database_get_stocks_by_sector_returns_array() -> void:
 	var sectors: Array[Dictionary] = StockDatabase.get_all_sectors()
 	if sectors.is_empty():
-		pass_test()
+		pass_test("섹터 없음 — 헤드리스 환경 스킵")
 		return
 	var sector_name: String = str(sectors[0]["sector"])
 	var stocks: Array[StockData] = StockDatabase.get_stocks_by_sector(sector_name)
@@ -90,7 +90,7 @@ func test_stock_database_get_stocks_by_sector_empty_for_unknown() -> void:
 func test_stock_database_get_all_sectors_returns_dicts() -> void:
 	var sectors: Array[Dictionary] = StockDatabase.get_all_sectors()
 	if sectors.is_empty():
-		pass_test()
+		pass_test("섹터 없음 — 헤드리스 환경 스킵")
 		return
 	assert_true(sectors[0].has("sector"), "섹터 dict에 'sector' 키 존재")
 

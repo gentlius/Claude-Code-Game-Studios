@@ -80,6 +80,10 @@ var _d1_candle_base_count: int = 0
 
 ## Set to true after M1CacheManager emits batch_complete (ADR-024 Phase 1).
 var _m1_prehistory_ready: bool = false
+## Number of prehistoric M1 candles prepended to _candles (D1-equivalent of _d1_candle_base_count).
+## _update_last_candle() uses this as an offset so current-season candles are written at the
+## correct index instead of overwriting prehistoric ones.
+var _m1_pre_candle_count: int = 0
 
 ## Drag-to-scroll state. Left-button drag scrolls through time.
 var _is_dragging: bool = false
@@ -524,9 +528,11 @@ func _aggregate_candles() -> void:
 
 	# Pre-history portion from M1CacheManager (ADR-024: M1-first batch generation).
 	# get_aggregated_m1() works directly on PackedArrays — only allocates output-count Dicts.
+	_m1_pre_candle_count = 0
 	if _m1_prehistory_ready:
 		var pre: Array[Dictionary] = M1CacheManager.get_aggregated_m1(_stock_id, m1_per_chart)
 		_candles.append_array(pre)
+		_m1_pre_candle_count = pre.size()
 
 	# Current season portion from tick buffer.
 	if _tick_prices.size() > 0:
@@ -582,23 +588,28 @@ func _update_last_candle() -> void:
 	if n == 0:
 		return
 
+	# _m1_pre_candle_count is the number of prehistoric M1 candles prepended to _candles.
+	# All current-season candle reads/writes must use this as a base offset so they
+	# don't overwrite the prehistoric prefix. Mirrors how D1 uses _d1_candle_base_count.
+	var offset: int = _m1_pre_candle_count
+
 	# Append any newly completed candles (at most 1 per tick in steady state)
 	var complete: int = n / tf
-	while _candles.size() < complete:
-		var idx: int = _candles.size()
+	while _candles.size() - offset < complete:
+		var idx: int = _candles.size() - offset
 		_candles.append(_aggregate_range(idx * tf, (idx + 1) * tf - 1))
 
 	if n % tf == 0 and complete > 0:
 		# Exact candle boundary — finalize the last complete candle.
 		# Without this, the candle stored as a partial on the previous tick
 		# is never updated with the boundary tick's price (close/high/low gap).
-		_candles[complete - 1] = _aggregate_range((complete - 1) * tf, complete * tf - 1)
+		_candles[offset + complete - 1] = _aggregate_range((complete - 1) * tf, complete * tf - 1)
 	elif n % tf != 0:
 		# Update or append the in-progress partial candle
 		var start: int = complete * tf
 		var partial: Dictionary = _aggregate_range(start, n - 1)
-		if _candles.size() > complete:
-			_candles[complete] = partial
+		if _candles.size() - offset > complete:
+			_candles[offset + complete] = partial
 		else:
 			_candles.append(partial)
 	_update_last_indicator()

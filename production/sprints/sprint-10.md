@@ -5,12 +5,12 @@
 Beta 최종 스프린트. 이 스프린트가 끝나면 Beta가 닫히고 Sprint 11부터 Polish가 시작된다.
 이월 없음 — 모든 태스크를 이 스프린트 안에서 완결한다.
 
-P3 섹터 ETF·A4 섹터 비교로 분석→ETF 매매 루프를 완성하고, TR4 레버리지 UI와
-B-13 팡파레로 감성 연출을 완료한다. 이번 세션에서 업데이트된 GDD 전체
-(save-load AC-18/19, news-events 가중치, season-manager E2E, currency-system E2E,
-short-selling 마진율, leverage F2b, trading-fees MVP 계약, FinancialReport,
-MarketProfile DLC)를 전부 구현하고, 유닛 테스트·fixture·GDD 상태 정리까지
-완결 후 Beta 3시즌 E2E QA로 마일스톤을 닫는다.
+**구현 완료 (S10-01~S10-11 전부 Done)**: P3 ETF, A4 섹터 비교, TR4 레버리지 UI,
+엔딩 화면 3종, 팡파레 4등급, FinancialReportSystem Phase 1, MarketProfile DLC,
+GDD 업데이트 구현 전체, 유닛 테스트, fixture, 설정 화면.
+
+**나머지 포커스**: 집중 테스트·폴리싱 — ADR-026 회귀 검증, GDD 상태 정리,
+Beta E2E QA로 마일스톤 종료.
 
 ## Capacity
 
@@ -37,14 +37,18 @@ MarketProfile DLC)를 전부 구현하고, 유닛 테스트·fixture·GDD 상태
 | S10-10 | portfolio-manager.md Approved 전환 | game-designer + lead-programmer | 0.5 | xp-system Approved 확인 | portfolio-manager.md Status: In Review → Approved. 역방향 Hard 의존(xp-system)이 Approved 상태이므로 승격 조건 충족. 코드-GDD 일치 최종 확인. systems-index.md 갱신. |
 | S10-11 | TD-CR-02 gamepad 홀딩스 네비게이션 | ui-programmer | 0.5 | — | `portfolio_view.gd` 컨트롤에 `focus_mode = Control.FOCUS_ALL` 설정. 게임패드 D-pad로 보유 종목 리스트 탐색 가능. 기존 테스트 전부 통과. |
 | S10-12 | Beta 3시즌 E2E QA + beta.md Closed | qa-lead + producer | 0.5 | S10-01~S10-11 전체 완료 | **(1)** 3시즌 플레이 → 저장 → 재로드 수동 통과. **(2)** 이중 승리 조건(cash_assets ≥ 1,000억 OR total_assets ≥ 1조) 각 경로 수동 검증. **(3)** 가격 정찰 익스플로잇 차단(동일 세이브 5회 로드 → 가격 시퀀스 다름). **(4)** 14개 스킬 Phase 1~4 전부 해금 가능 확인. **(5)** `--export-release` 빌드 성공. **(6)** beta.md DoD 전 항목 `[x]` → Status: Closed. |
+| S10-13 | ADR-026 회귀 검증 | qa-lead + gameplay-programmer | 0.5 | ADR-026 v2 구현 완료 | 매크로 추세 레이어 변경(driftScale, self-prob 0.96) 후 가격 생성 정상 동작 확인: **(1)** GROWTH 아키타입 → 월봉 상승 우세, DECLINING_TRAP → 하락 우세 (10시즌 시뮬, 각 방향 70% 이상). **(2)** BULL 시즌 → FLAT 달보다 TREND_UP 달 빈도 높음 (SeasonBias 확인). **(3)** TREND_UP/DOWN 월에 base_price 대비 ±5% 이상 이탈 발생 (driftScale 효과). **(4)** CACHE_VERSION=6 캐시 무효화 확인 (이전 캐시 있을 시 재생성). |
+| S10-14 | GDD 상태 정리 | lead-programmer + game-designer | 0.5 | S10-06 완료 | 구현 완료됐으나 Status가 In Review/Draft인 GDD → Approved 전환. `design/gdd/systems-index.md` 상태 동기화. 대상: `profit-celebration.md`, `sector-etf.md`, `sector-comparison.md`, `financial-report-system.md`, 기타 In Review 전체 확인. |
+| S10-15 | Sprint 11 Polish 준비 + 프레임워크 셋업 | producer | 0.5 | S10-12 완료 | **(1)** `production/sprint-11.md` Polish 스프린트 스켈레톤 생성 (목표: 성능 프로파일링, 밸런스 조정, 플레이테스트 3회, UX 폴리싱). **(2)** 새 프레임워크 설정 확인: `production/review-mode.txt`=lean, `production/stage.txt`=polish. **(3)** sprint-10.md DoD 전 항목 [x] + Producer 서명. |
 
 ## Capacity Check
 
 | Category | Sessions |
 |----------|----------|
 | Available (buffer 제외) | 12 |
-| 전체 태스크 합계 | 12.0 (S10-01×1.0 + S10-02×2.0 + S10-03×1.5 + S10-04×1.0 + S10-05×1.5 + S10-06×1.5 + S10-07×1.5 + S10-08×1.0 + S10-09×0.5 + S10-10×0.5 + S10-11×0.5 + S10-12×0.5) |
-| **적합성** | **12.0 / 12 ✅ 버퍼 정확히 소진** |
+| 구현 완료 (S10-01~S10-11) | 11.5 |
+| 테스트/폴리싱/마감 (S10-12~S10-15) | 2.0 |
+| **남은 작업** | **S10-12~S10-15 (2.0 sessions)** |
 
 > 스프린트 기간 3주(2026-05-01~05-21)로 확장. 이월 없음. 전 태스크 Must Have.
 
@@ -80,4 +84,7 @@ Day 10:   S10-12 Beta E2E QA + beta.md Closed
 - [x] S10-10: portfolio-manager.md Approved + systems-index.md 갱신
 - [x] S10-11: gamepad 홀딩스 네비게이션 + 기존 테스트 통과
 - [ ] S10-12: beta.md DoD 전 항목 `[x]` + beta.md Status: Closed + QA Lead 서명
+- [ ] S10-13: ADR-026 회귀 검증 통과 (GROWTH 상승 우세, DECLINING_TRAP 하락 우세, driftScale 효과 확인)
+- [ ] S10-14: GDD 상태 정리 완료 (In Review → Approved 전환, systems-index 동기화)
+- [ ] S10-15: sprint-11.md Polish 스켈레톤 생성 + review-mode.txt=lean + stage.txt=polish
 - [ ] `sprint-10.md` DoD 전 항목 `[x]` — Producer 확인

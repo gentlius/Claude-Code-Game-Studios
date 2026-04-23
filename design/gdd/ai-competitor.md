@@ -252,7 +252,7 @@ sigma_daily = sigma_tier / sqrt(SEASON_DAYS)
 # SEASON_DAYS = 20
 
 예) 브론즈: sigma_daily = 55 / sqrt(20) ≈ 12.3%
-예) 레전드: sigma_daily = 15 / sqrt(20) ≈ 3.4%
+예) 레전드: sigma_daily = 28 / sqrt(20) ≈ 6.3%
 ```
 
 **예시 계산 — 브론즈 AI, target_r=38.6%, SEASON_DAYS=20:**
@@ -535,6 +535,12 @@ participant_rng_seed = (season_seed × 1000003) XOR (participant_id × 998244353
 기대: 티어 내 순위가 대략 40~60% 구간에 위치 (즉, "평균 달성 = 중간 순위")
       이 조건이 깨지면 mu_tier 또는 sigma_tier 재조정 필요
 ```
+
+---
+
+## Design Notes
+
+> **스킬 소진 이후 경쟁 밸런스**: 플레이어가 모든 스킬을 해금하고 XP가 실질적 이득을 주지 않는 구간에서도 AI 경쟁자는 동일한 통계적 파라미터(`mu_tier`, `sigma_tier`)로 순위를 유지한다. 이 구간은 플레이어가 "정보 도구 없이 순수 판단으로" AI를 이겨야 하는 구간이다 — 필라 "판단이 곧 실력"의 최고 수준 표현. AI가 지나치게 쉬워지지 않도록 `sigma_tier` 하한을 유지한다.
 
 ---
 

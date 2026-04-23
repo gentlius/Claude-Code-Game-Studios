@@ -4,7 +4,7 @@ When authoring or editing files in this directory, follow these standards.
 
 ## GDD Files (`design/gdd/`)
 
-Every GDD must include all **8 required sections** in this order:
+Every GDD must include all **9 required sections** in this order:
 1. Overview — one-paragraph summary
 2. Player Fantasy — intended feeling and experience
 3. Detailed Rules — unambiguous mechanics
@@ -13,6 +13,7 @@ Every GDD must include all **8 required sections** in this order:
 6. Dependencies — other systems listed
 7. Tuning Knobs — configurable values identified
 8. Acceptance Criteria — testable success conditions
+9. Implementation Checklist — Approved 전 필수 (`.claude/docs/coding-standards.md` 형식 참조)
 
 **File naming:** `[system-slug].md` (e.g. `movement-system.md`, `combat-system.md`)
 

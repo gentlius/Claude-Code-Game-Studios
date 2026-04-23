@@ -58,10 +58,12 @@
 6. **주말 스킵**: 금요일 장 마감 후, 월요일 장 시작까지 자동 스킵.
    스킵 전에 주간 리포트 표시.
 
-7. **틱 처리 순서**: 각 틱은 다음 순서로 처리된다.
+7. **틱 처리 순서**: 각 틱은 다음 5단계 순서로 처리된다 (§틱 처리 순서 섹션에 상세 명세).
    1) 뉴스/이벤트 시스템 — 이번 틱에 발생할 이벤트 평가 및 적용
    2) 가격 엔진 — 이벤트 반영 후 가격 갱신
-   3) 주문 처리 엔진 — 갱신된 가격 기준으로 주문 체결
+   3) 주문 처리 엔진 — 갱신된 가격 기준으로 주문 체결 (3a PRE_MARKET → 3b 시장가 → 3c 지정가 → 3d 만료)
+   4) StopLossTakeProfit — 손절/익절 조건 체크 → 조건 충족 시 즉시 시장가 주문 제출
+   5) LeverageManager — 마진 비율 갱신 → 마진콜/강제청산 판정
    이 순서가 보장되지 않으면 "뉴스 발생 전 가격에 주문 체결" 같은 비정상 동작 발생.
 
 ### States and Transitions
@@ -147,6 +149,7 @@ toggle_pause()                       # MARKET_OPEN ↔ PAUSED 전환. MARKET_OPE
 | **뉴스 피드 UI** | 하위 → 구독 | `on_market_state_changed` 시그널로 피드 상태(ACTIVE/FROZEN/PRE_MARKET_MODE) 전환. 피드 초기화 타이밍 결정 |
 | **포트폴리오 UI** | 하위 → 구독 | `on_tick` 구독 (보유 종목 실시간 평가 갱신). `on_market_state_changed` 시그널로 SETTLEMENT 상태 전환 |
 | **경험치 시스템** | 하위 → 구독 | `on_market_close`, `on_season_end` 시그널 구독 → 일일/시즌 보너스 XP 산출 |
+| **라이프스타일 소비** | 하위 → 구독 | `on_market_close` 시그널 구독 → `LifestyleManager.process_market_close(day, week)` 호출. **Hard** (day/week 파라미터 필수) |
 | **프로그레션 UI** | 하위 → 조회+구독 | `toggle_pause()` 호출 (스킬 트리 오버레이). `on_market_state_changed` 시그널로 UI 상태 전환 |
 
 ## Formulas
@@ -262,6 +265,7 @@ total_season_days = weeks_per_season * 5
 | 뉴스 피드 UI | 피드가 이 시스템에 의존 | `on_market_state_changed` 시그널로 피드 상태 전환. **Soft** |
 | 포트폴리오 UI | UI가 이 시스템에 의존 | `on_tick` 구독 (실시간 평가 갱신). `on_market_state_changed` 시그널로 SETTLEMENT 전환. **Soft** |
 | 경험치 시스템 | XP가 이 시스템에 의존 | `on_market_close`, `on_season_end` 시그널 구독 → 일일/시즌 보너스 XP 산출. **Hard** |
+| 라이프스타일 소비 | LifestyleManager가 이 시스템에 의존 | `on_market_close` 구독 → `process_market_close(day, week)` 동기 호출. **Hard** |
 | 프로그레션 UI | UI가 이 시스템에 의존 | `toggle_pause()` 호출 (스킬 트리 오버레이). `on_market_state_changed` 시그널. **Hard** |
 
 모든 의존 방향이 단방향(하위 → 게임 시계)이다. 게임 시계는 어떤 시스템에도

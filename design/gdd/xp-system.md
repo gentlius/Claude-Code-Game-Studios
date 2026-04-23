@@ -326,6 +326,10 @@ get_cumulative_xp_for_level(target_level) = Σ required_xp(lv) for lv = 1 to (ta
 - ~~시즌 관리 시스템과의 인터페이스~~ → 시즌 관리 GDD 설계 시 확정 (provisional: `on_season_end` + `final_rank: int, 1-indexed`)
 - ~~거래 XP 스팸 문제~~ → 디자인 리뷰에서 거래 XP 제거로 해결 (2026-04-01). 근거: "판단이 곧 실력" 필라 우선, 거래 횟수 보상은 스팸 유발
 
+## Design Notes
+
+> **스킬 소진 이후 구간 — 의도된 설계**: 모든 스킬을 해금하고 XP/스킬 포인트가 축적되는 구간은 "정보 도구 지원 없는 순수 판단 실력 경쟁 구간"이다. 이 구간은 필라 **"판단이 곧 실력"** 의 직접 구현이며, 진입 장벽이 아니라 최고 수준 플레이어를 위한 마스터리 검증 구간이다. 스킬 포인트 잉여 활용처(Sprint 12+ 추가 스킬 브랜치)가 구현될 때까지 의도적으로 유지한다.
+
 ---
 
 ## 9. Implementation Checklist

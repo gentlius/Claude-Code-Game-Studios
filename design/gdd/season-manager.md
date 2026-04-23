@@ -149,8 +149,10 @@
 > **AI 요구사항 — SeasonManager가 AiCompetitor에 요구하는 계약**:
 > - 시즌 시작 시: `AiCompetitor.init_season(player_tier, participant_counts: Dictionary, seed: int)` 호출
 >   (`seed`는 SeasonManager가 생성하여 전달. 재현 가능한 시뮬레이션을 위해 필수)
-> - 매 틱: `AiCompetitor.get_tier_return_pct(participant_id: int) → float` 제공
-> - 글로벌 순위 갱신 시 (일 1회): `AiCompetitor.get_all_return_pcts(tier: int) → Array[float]` 제공
+> - 일 1회 EOD: `AiCompetitor.get_eod_snapshot(tier: int) → Array[float]` — 해당 티어 전체 수익률 배열
+> - 글로벌 순위 계산: `AiCompetitor.get_sorted_indices(tier: int) → Array[int]` — 정렬된 인덱스
+> - 플레이어 순위 추정: `AiCompetitor.estimate_player_rank(player_return_pct: float) → int`
+> - (per-tick per-participant 조회 없음 — AI는 EOD 배치 스냅샷 방식. ai-competitor.md §3-4 참조)
 > - 타 티어 AI의 `return_pct`는 통계적으로 생성 가능 (실제 매매 불필요).
 >   생성 방식(분포, 갱신 주기, 시드 공식)은 `ai-competitor.md`에서 정의.
 
@@ -222,7 +224,7 @@
 
 - 진입 조건: 시즌 시작 시점 `cash_assets` < 1,000,000원
 - 제약: 공식 리그 순위/상금 제외
-- **XP 지급 범위**: 일일 보너스 XP는 `FREE_MARKET_XP_RATE`(0.50) 배율 **감면** (§4-7). 시즌 XP(BASE_SEASON_XP·rank_bonus·return_bonus) 미지급(순위 없음). 완주 보너스 XP(20 XP)는 수익률 ≥ 0% AND 체결 ≥ 5회 충족 시 동일하게 지급.
+- **XP 지급 범위**: 일일 보너스 XP는 `FREE_MARKET_XP_RATE`(1.00) 배율 적용 — **패널티 없음** (§4-7). 시즌 XP(BASE_SEASON_XP·rank_bonus·return_bonus) 미지급(순위 없음). 완주 보너스 XP(20 XP)는 수익률 ≥ 0% AND 체결 ≥ 5회 충족 시 동일하게 지급.
 - 복귀 조건: 자산 ≥ 1,000,000원이 되면 다음 시즌 시작 시 브론즈 재진입 가능
 - 청산 조건: 보유 주식 없음 AND sim_cash < 10,000원 → 한강 엔딩
 
@@ -320,17 +322,23 @@ prize(rank, tier) = TIER_ENTRY_THRESHOLD[tier] × PRIZE_RATE[rank]
 PRIZE_RATE = { 1: 0.50, 2: 0.30, 3: 0.15, 4: 0.08, 5: 0.05, 6~10: 0.03 }
 ```
 
-### 4-7. 프리마켓 XP 패널티
+### 4-7. 프리마켓 XP
 
 ```
-# 적용 대상: 일일 보너스 XP만 감면
+# 프리마켓은 XP 패널티 없음 (FREE_MARKET_XP_RATE = 1.0)
 daily_xp_granted = base_daily_xp × (FREE_MARKET_XP_RATE if is_free_market else 1.0)
 
 # 시즌 순위 보너스 XP: 프리마켓 참가자는 순위 없으므로 지급 안 됨
 # 완주 보너스 XP: 패널티 없이 20 XP 지급 (수익률 ≥ 0% 조건 충족 시)
+
+# 컴백 보너스: 연속 2시즌 프리마켓 후 공식 리그 복귀 시 해당 시즌 전체 XP ×1.2
+if consecutive_free_market_seasons >= 2 and not is_free_market:
+    season_xp_multiplier = 1.20   # 복귀 시즌에만 적용
 ```
 
 > SeasonManager → XPSystem 인터페이스: §6 참조
+>
+> **설계 의도**: 프리마켓 XP 패널티(구 0.5×)는 재기를 어렵게 만들고 "판단이 곧 실력" 필러와 충돌했다. 1.0×로 유지하면 프리마켓에서도 꾸준히 스킬트리를 성장시킬 수 있어 복귀 가능성이 열린다. 컴백 보너스는 장기 프리마켓 후 복귀 의지를 보상한다.
 
 ## 5. Edge Cases
 
@@ -400,7 +408,9 @@ daily_xp_granted = base_daily_xp × (FREE_MARKET_XP_RATE if is_free_market else 
 |----------|--------|----------|------|
 | `FREE_MARKET_THRESHOLD` | 1,000,000 | 500,000 – 2,000,000 | 프리마켓 진입/복귀 기준. 높을수록 생존 구간 확장 |
 | `HANGANG_THRESHOLD` | 10,000 | 1,000 – 50,000 | 한강 엔딩 발동 기준. 낮을수록 생존 구간이 길어짐 |
-| `FREE_MARKET_XP_RATE` | 0.50 | 0.10 – 0.80 | 프리마켓 XP 배율. 낮을수록 재기 페널티 심화 |
+| `FREE_MARKET_XP_RATE` | 1.00 | 0.50 – 1.50 | 프리마켓 XP 배율. 1.0 = 패널티 없음. 낮출수록 재기 장벽 증가 |
+| `COMEBACK_BONUS_SEASONS` | 2 | 1 ~ 4 | 컴백 보너스 발동에 필요한 연속 프리마켓 시즌 수. 낮을수록 보너스 발동 빈번 |
+| `COMEBACK_XP_MULTIPLIER` | 1.20 | 1.05 – 1.50 | 컴백 시즌 XP 배율. 복귀 첫 시즌에만 적용 |
 | `ENDING_THRESHOLD` | 100,000,000,000 | — | 거장 엔딩 발동 자산. 게임의 최종 목표이므로 변경 시 전체 밸런스 재검토 필요 |
 
 ### 7-5. 티어 참가자 분포

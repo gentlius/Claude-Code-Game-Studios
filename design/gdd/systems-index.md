@@ -24,30 +24,30 @@
 
 | # | System Name | Category | Priority | GDD | Impl | Design Doc | Depends On |
 |---|-------------|----------|----------|-----|------|------------|------------|
-| 1 | 게임 시계 (Game Clock) | Core | MVP | In Review | ✅ Done | [game-clock.md](game-clock.md) | — |
+| 1 | 게임 시계 (Game Clock) | Core | MVP | Approved | ✅ Done | [game-clock.md](game-clock.md) | — |
 | 2 | 종목 데이터베이스 (Stock Database) | Core | MVP | Approved | ✅ Done | [stock-database.md](stock-database.md) | — |
 | 3 | 가격 엔진 (Price Engine) | Gameplay | MVP | In Review | ✅ Done | [price-engine.md](price-engine.md) | 게임 시계, 종목 DB |
-| 4 | 뉴스/이벤트 시스템 (News & Events) | Gameplay | MVP | In Review | ✅ Done | [news-events.md](news-events.md) | 게임 시계, 종목 DB |
-| 5 | 주문 처리 엔진 (Order Engine) | Gameplay | MVP | In Review | ✅ Done | [order-engine.md](order-engine.md) | 종목 DB, 재화 시스템, 가격 엔진, 게임 시계, 포트폴리오 |
+| 4 | 뉴스/이벤트 시스템 (News & Events) | Gameplay | MVP | Approved | ✅ Done | [news-events.md](news-events.md) | 게임 시계, 종목 DB |
+| 5 | 주문 처리 엔진 (Order Engine) | Gameplay | MVP | Approved | ✅ Done | [order-engine.md](order-engine.md) | 종목 DB, 재화 시스템, 가격 엔진, 게임 시계, 포트폴리오 |
 | 6 | 포트폴리오 관리 (Portfolio Manager) | Gameplay | MVP | Approved | ✅ Done | [portfolio-manager.md](portfolio-manager.md) | 종목 DB, 재화 시스템 |
 | 7 | AI 경쟁자 시스템 (AI Competitors) | Gameplay | V-Slice | Approved | ✅ Done | [ai-competitor.md](ai-competitor.md) | 게임 시계 (TICKS_PER_DAY), 시즌/대회 관리 |
-| 8 | 스킬 트리 시스템 (Skill Tree) | Progression | V-Slice | In Review | ✅ Done | [skill-tree.md](skill-tree.md) | 경험치 시스템 |
+| 8 | 스킬 트리 시스템 (Skill Tree) | Progression | V-Slice | Approved | ✅ Done | [skill-tree.md](skill-tree.md) | 경험치 시스템 |
 | 9 | 경험치 시스템 (XP System) | Progression | V-Slice | Approved | ✅ Done | [xp-system.md](xp-system.md) | 주문 엔진, 포트폴리오, 게임 시계 |
 | 10 | 시즌/대회 관리 (Season Manager) | Progression | V-Slice | Approved | ✅ Done | [season-manager.md](season-manager.md) | 가격 엔진, 포트폴리오, AI 경쟁자, 재화 |
-| 11 | 재화 시스템 (Currency System) | Economy | MVP | In Review | ✅ Done | [currency-system.md](currency-system.md) | — |
-| 12 | 트레이딩 스크린 (Main HUD) | UI | MVP | In Review | ✅ Done | [trading-screen.md](trading-screen.md) | 가격 엔진, 주문 엔진, 포트폴리오, 게임 시계 |
-| 13 | 차트 렌더러 (Chart Renderer) | UI | MVP | In Review | ✅ Done | [chart-renderer.md](chart-renderer.md) | 가격 엔진, 게임 시계 |
-| 14 | 뉴스 피드 UI (News Feed UI) | UI | MVP | In Review | ✅ Done | [news-feed-ui.md](news-feed-ui.md) | 뉴스/이벤트 시스템, 게임 시계 |
-| 15 | 포트폴리오 UI (Portfolio UI) | UI | MVP | In Review | ✅ Done | [portfolio-ui.md](portfolio-ui.md) | 포트폴리오 관리, 게임 시계 |
+| 11 | 재화 시스템 (Currency System) | Economy | MVP | Approved | ✅ Done | [currency-system.md](currency-system.md) | — |
+| 12 | 트레이딩 스크린 (Main HUD) | UI | MVP | Approved | ✅ Done | [trading-screen.md](trading-screen.md) | 가격 엔진, 주문 엔진, 포트폴리오, 게임 시계 |
+| 13 | 차트 렌더러 (Chart Renderer) | UI | MVP | Approved | ✅ Done | [chart-renderer.md](chart-renderer.md) | 가격 엔진, 게임 시계 |
+| 14 | 뉴스 피드 UI (News Feed UI) | UI | MVP | Approved | ✅ Done | [news-feed-ui.md](news-feed-ui.md) | 뉴스/이벤트 시스템, 게임 시계 |
+| 15 | 포트폴리오 UI (Portfolio UI) | UI | MVP | Approved | ✅ Done | [portfolio-ui.md](portfolio-ui.md) | 포트폴리오 관리, 게임 시계 |
 | 16 | 리그/시즌 UI (League & Season UI) | UI | V-Slice | In Review | ✅ Done (AC 검증·빌드검증 잔여) | [league-ui.md](league-ui.md) | 시즌/대회 관리, AI 경쟁자, 게임 시계 |
-| 17 | ~~프로그레션 UI (Progression UI)~~ → **F3 성장 화면** | UI | V-Slice→Beta | In Review | ✅ Done | [growth-screen.md](growth-screen.md) | 경험치 시스템, 스킬 트리, 게임 시계, 트레이딩 스크린 · ⚠️ 구 progression-ui.md → `design/gdd/archive/` |
+| 17 | ~~프로그레션 UI (Progression UI)~~ → **F3 성장 화면** | UI | V-Slice→Beta | Approved | ✅ Done | [growth-screen.md](growth-screen.md) | 경험치 시스템, 스킬 트리, 게임 시계, 트레이딩 스크린 · ⚠️ 구 progression-ui.md → `design/gdd/archive/` |
 | 18 | 세이브/로드 (Save/Load) | Persistence | Alpha | Approved | ✅ Done | [save-load.md](save-load.md) | 포트폴리오, 스킬 트리, 시즌, 경험치 |
 | 19 | 오디오 시스템 (Audio) | Audio | Alpha | Approved | ✅ Done | [audio.md](audio.md) | 주문 엔진, 뉴스 시스템 |
 | 20 | 라이프스타일 소비 (Lifestyle Spending) | Economy | Beta | Approved | ✅ Done | [lifestyle-spending.md](lifestyle-spending.md) | 재화 시스템, 시즌 관리, 세이브/로드 |
 | 21 | 수익 실현 팡파레 (Profit Celebration) | UI | Beta | In Review | ✅ Done (코드 — 오디오 에셋·빌드검증 잔여) | [profit-celebration.md](profit-celebration.md) | 주문 엔진, 오디오, 트레이딩 스크린 |
 | 22 | 오더북 (Order Book) | Gameplay | Beta | Approved | ✅ Done | [order-book.md](order-book.md) | 가격 엔진, 주문 엔진 |
-| 23 | TR2 손절/익절 (Stop-Loss/Take-Profit) | Gameplay | Beta | In Review | ✅ Done | [stop-loss-take-profit.md](stop-loss-take-profit.md) | 주문 엔진, 스킬 트리 |
-| 24 | 스타트 스크린 (Start Screen) | UI | Alpha | In Review | ✅ Done | [start-screen.md](start-screen.md) | 세이브/로드 |
+| 23 | TR2 손절/익절 (Stop-Loss/Take-Profit) | Gameplay | Beta | Approved | ✅ Done | [stop-loss-take-profit.md](stop-loss-take-profit.md) | 주문 엔진, 스킬 트리 |
+| 24 | 스타트 스크린 (Start Screen) | UI | Alpha | Approved | ✅ Done | [start-screen.md](start-screen.md) | 세이브/로드 |
 | 25 | 인트로 시퀀스 (Intro Sequence) | UI | Alpha | Approved | ✅ Done | [intro-sequence.md](intro-sequence.md) | — |
 | 26 | 크레딧 화면 (Credits Screen) | UI | Full | Draft | — | [credits-screen.md](credits-screen.md) | — |
 | 27 | A3 재무제표 (Financial Statements) | UI | Beta | In Review | ✅ Done (PER/PBR/ROE — total_shares ADR-019 연동 잔여) | [financial-statements.md](financial-statements.md) | 스킬 트리, StockData, 가격 엔진 |

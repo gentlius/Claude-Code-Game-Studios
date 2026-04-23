@@ -219,7 +219,7 @@ total_rumor_price_effect ≈ RUMOR_PRESSURE_STRENGTH × 60  (틱 누적, 복리 
 | RUMOR_LEAD_TICKS 내에 장 마감 | 루머 발화 후 뉴스 발동 전 장 마감 → 루머 카드만 표시되고 뉴스 미발동, 해당 이벤트 취소. `_rumor_pressure` 항목도 즉시 삭제하여 다음 거래일로 가격 압력이 이월되지 않도록 한다. |
 | 루머 후 즉시 뉴스 발동 (LEAD_TICKS = 0) | 루머 없이 뉴스만 발동. 가격 선반영도 없음. 튜닝 최솟값 30틱 이하 비권장 |
 | 동일 종목 루머 중복 (60틱 내 두 번째 이벤트) | 두 번째 루머로 `_rumor_pressure` **덮어쓰기** (누적 금지). 첫 번째 루머 방향은 버려진다. 누적하면 압력이 2배가 되어 밸런스 파괴. |
-| 익스플로잇 — 루머 패턴 학습 후 100% 예측 | 30% 반전은 독립 확률 → 패턴 없음. 장기 통계로만 70% 수렴 |
+| 익스플로잇 — 루머 패턴 학습 후 100% 예측 | 45% 반전은 독립 확률 → 패턴 없음. 장기 통계로만 55% 수렴 (B-09) |
 | 가짜 루머로 인한 설거지 후 상/하한가 클램프 | 선반영(+3%) + 악재 event_delta(-8%)가 겹치면 일일 하한가(-30%)에 걸릴 수 있음. 이는 의도된 동작 — 레버리지 또는 대량 보유 플레이어의 극단 손실 가능. |
 | `RUMOR_PRESSURE_STRENGTH` 과도하게 클 때 | 60틱 누적 압력이 ±30% 일일 가격제한폭에 걸릴 수 있음. 상한: `60 × RUMOR_PRESSURE_STRENGTH < DAILY_LIMIT_PCT` → 0.005 미만 유지. 안전 최대값 권장: 0.001 (60틱 6%). |
 
@@ -307,7 +307,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | AC-01 | `tests/unit/test_rumor_channel.gd` | `test_no_rumor_without_s3()` |
 | AC-02 | E2E 시각 검증 | 루머 카드 표시 시점 (scheduled_tick - RUMOR_LEAD_TICKS) |
 | AC-03 | E2E 시각 검증 | 루머 카드 점선 테두리 + 기울임체 구분 |
-| AC-04 | `tests/unit/test_rumor_channel.gd` | `test_accuracy_converges_to_70pct()` |
+| AC-04 | `tests/unit/test_rumor_channel.gd` | `test_accuracy_converges_to_55pct()` |
 | AC-05 | `tests/unit/test_rumor_channel.gd` | `test_no_rumor_when_event_after_market_close()` |
 | AC-07 | `tests/unit/test_rumor_channel.gd` | `test_rumor_pressure_shifts_price_in_stated_direction()` |
 | AC-08 | `tests/unit/test_rumor_channel.gd` | `test_fake_rumor_reverses_after_news()` |

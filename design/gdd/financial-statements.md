@@ -92,6 +92,8 @@ ROE_current = StockData.roe  ## 고정
 
 **결손 기업 표시**: `per == 0.0` 또는 `pbr == 0.0` 이면 "N/A" 표시.
 
+> **FinancialReportSystem 연동 주의**: `FinancialReportSystem`이 정기 실적 이벤트 발생 시 `StockData.per`와 `StockData.pbr`을 업데이트한다 ([financial-report-system.md](financial-report-system.md) 참조). 이 시점에 `base_per`/`base_pbr` 기준이 변경되어 `PER_current`·`PBR_current` 표시값이 단계적으로 변화한다 — **의도된 동작**. 실적 공시 직후 재무 지표가 급변하는 것은 버그가 아니라 공시 효과가 반영된 결과다.
+
 ### 3-4. 종목별 기준값 범위 (stocks.json 추가 기준)
 
 KRX 섹터별 일반적 범위를 참고하여 설정:

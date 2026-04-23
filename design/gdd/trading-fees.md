@@ -163,7 +163,7 @@ net_proceeds   = gross × (1 - sell_tax - commission) - capital_gains
 | `OrderEngine` | 체결 시 `MarketConfig.get_fee_breakdown()` 호출 |
 | `PortfolioManager` | 실현이익·보유일 제공 |
 | `CurrencySystem` | `cash_deduct()` / `cash_add()` |
-| `MarketConfig` (신규 autoload) | JSON 로드, fee_breakdown 계산 |
+| `MarketConfig` | JSON 로드, fee_breakdown 계산 |
 | `assets/data/market_config.json` | 시장별 파라미터 |
 
 ---

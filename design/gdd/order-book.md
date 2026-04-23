@@ -249,9 +249,8 @@ else:
 ```
 52주 최고 78,500 (+4.8%)  │  52주 최저 58,000
 ```
-- `StockData.week52_high`, `StockData.week52_low` 필드 필요
-- 현재 StockData 미구현. Sprint 9 대상이었으나 미구현 — Sprint 10 이후 구현 대상. 이 행은 구현 전까지 숨김
-- stocks.json에 `week52_high`, `week52_low` 필드 추가 필요 (미등록)
+- **계산 방식**: `StockData` 정적 필드 불필요. `PriceEngine._stock_states[stock_id]["ohlcv_daily"]` 배열에서 `max(close)` / `min(close)` 동적 계산.
+- **구현 상태**: Sprint 10 이후 구현 대상. 구현 전까지 이 행 `visible = false`.
 
 ---
 

@@ -82,9 +82,9 @@ etf_price(t) = ETF_BASE_PRICE × (1.0 + sector_return(t))
 ### 3-4 포트폴리오 슬롯
 
 ETF는 일반 종목과 동일한 슬롯을 소비한다.
-P2 MAX_HOLDINGS = 10슬롯 공유. ETF 1종 = 1슬롯.
+MAX_HOLDINGS (skill-tree.md §F2 참조) 슬롯 공유. ETF 1종 = 1슬롯.
 
-플레이어는 최대 10슬롯 내에서 개별 종목과 ETF를 자유롭게 혼합 보유할 수 있다.
+플레이어는 MAX_HOLDINGS 슬롯 내에서 개별 종목과 ETF를 자유롭게 혼합 보유할 수 있다.
 
 ### 3-5 진입 조건
 
@@ -277,7 +277,7 @@ buy_cost = quantity × price × (1.0 + 0.00015)
 |---------|--------|---------|------|
 | ETF_BASE_PRICE | 50,000원 | 10,000 ~ 100,000 | 진입 장벽 + 수익 가시성 |
 | 수수료율 | 0.015% (매수), 0.2% + 0.015% (매도) | trading-fees.md 동일 | 단타 억제 |
-| MAX_HOLDINGS | 10 (P2와 공유) | 변경 불가 (P2 정의) | 분산 한계 |
+| MAX_HOLDINGS | skill-tree.md §F2 참조 (단일 소유자: SkillTree) | — | 분산 한계 |
 | ETF 하한가 | 1원 | 0 ~ 100 | 극단적 폭락 시 계좌 보호 |
 | FLOW_SENSITIVITY | 0.5 | 0.1 ~ 1.0 | 낮을수록 둔한 반응, 높을수록 급격한 쏠림 |
 | FLOW_DECAY | 0.1 | 0.05 ~ 0.3 | 높을수록 빠른 평균 회귀 (회전 주기 단축) |

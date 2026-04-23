@@ -45,7 +45,7 @@
 | 19 | 오디오 시스템 (Audio) | Audio | Alpha | Approved | ✅ Done | [audio.md](audio.md) | 주문 엔진, 뉴스 시스템 |
 | 20 | 라이프스타일 소비 (Lifestyle Spending) | Economy | Beta | Approved | ✅ Done | [lifestyle-spending.md](lifestyle-spending.md) | 재화 시스템, 시즌 관리, 세이브/로드 |
 | 21 | 수익 실현 팡파레 (Profit Celebration) | UI | Beta | In Review | ✅ Done (코드 — 오디오 에셋·빌드검증 잔여) | [profit-celebration.md](profit-celebration.md) | 주문 엔진, 오디오, 트레이딩 스크린 |
-| 22 | 오더북 (Order Book) | Gameplay | Beta | In Review | ✅ Done | [order-book.md](order-book.md) | 가격 엔진, 주문 엔진 |
+| 22 | 오더북 (Order Book) | Gameplay | Beta | Approved | ✅ Done | [order-book.md](order-book.md) | 가격 엔진, 주문 엔진 |
 | 23 | TR2 손절/익절 (Stop-Loss/Take-Profit) | Gameplay | Beta | In Review | ✅ Done | [stop-loss-take-profit.md](stop-loss-take-profit.md) | 주문 엔진, 스킬 트리 |
 | 24 | 스타트 스크린 (Start Screen) | UI | Alpha | In Review | ✅ Done | [start-screen.md](start-screen.md) | 세이브/로드 |
 | 25 | 인트로 시퀀스 (Intro Sequence) | UI | Alpha | Approved | ✅ Done | [intro-sequence.md](intro-sequence.md) | — |

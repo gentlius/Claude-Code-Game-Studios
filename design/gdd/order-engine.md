@@ -18,12 +18,10 @@
 Beta에서는 세 가지 주문 유형을 지원한다: 시장가 주문(TR0 기본) — 현재가로 즉시
 체결, 지정가 주문(TR1 해금) — 조건 충족 시 자동 체결, 손절/익절 자동 주문(TR2
 해금) — 보유 종목별 감시 조건 충족 시 시장가 매도 자동 발동 (상세: `stop-loss-take-profit.md`).
-공매도(TR3), 레버리지(TR4)는 Sprint 9 이후 구현 예정이다.
+공매도(TR3 — `short-selling.md` Approved), 레버리지(TR4 — `leverage-trading.md` In Review)는 구현 완료됐다.
 
-**가격 모델**: 오더북(`order-book.md`) 구현 전까지는 **가격 관찰자 모델** — 플레이어
-매매가 PriceEngine 가격에 영향을 주지 않으며 현재가로 즉시 체결된다. 오더북 구현 후
-호가 잔량 소진 → 슬리피지 → 가격 영향 모델로 전환된다 (현재 오더북 GDD: In Review,
-코드 미구현).
+**가격 모델**: 오더북(`order-book.md` Approved) 구현 완료 이후 **호가 잔량 소진 모델** — 플레이어
+매매가 호가 잔량을 실제로 소진하며 슬리피지가 발생하고 PriceEngine 가격에 영향을 준다.
 
 ## Player Fantasy
 

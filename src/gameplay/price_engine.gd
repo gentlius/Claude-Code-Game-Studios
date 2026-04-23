@@ -42,10 +42,11 @@ enum SeasonBias { BULL, NEUTRAL, BEAR }
 enum MacroState { TREND_UP = 0, FLAT = 1, TREND_DOWN = 2 }
 
 ## Default macro transition matrix. Matches price_engine_config.json macroTrend.transitionMatrix.
+## Self-prob 0.96 → avg duration 25d per trend (sufficient to dominate a 20-day month).
 const MACRO_TM_DEFAULT: Array = [
-	[0.92, 0.06, 0.02],  # TREND_UP
-	[0.04, 0.93, 0.03],  # FLAT
-	[0.02, 0.06, 0.92],  # TREND_DOWN
+	[0.96, 0.03, 0.01],  # TREND_UP
+	[0.02, 0.96, 0.02],  # FLAT
+	[0.01, 0.03, 0.96],  # TREND_DOWN
 ]
 
 # ── Engine State Enum ──
@@ -1369,9 +1370,9 @@ func _process_stock_tick(stock_id: String, tick_in_day: int) -> void:
 	# Step 2: Pattern layer (GDD Rule 1-1 + 1-6)
 	var pattern_delta: float = _compute_pattern_delta(s["markov_state"], vol)
 
-	# Step 3: Drift layer (GDD Rule 2)
+	# Step 3: Drift layer (GDD Rule 2) — scaled by MacroState (ADR-026 driftScale)
 	var drift_delta: float = _compute_drift_delta(
-		s["current_price"], s["base_price"]
+		s["current_price"], s["base_price"], s.get("macro_state", MacroState.FLAT)
 	)
 
 	# Step 4: Event layer (GDD Rule 3)
@@ -1467,13 +1468,18 @@ func _compute_pattern_delta(state: MarkovState, vol_profile: int) -> float:
 	return raw * VOL_PATTERN_SCALE[vol_profile]
 
 
-## Drift layer: mean reversion toward base_price (GDD Rule 2)
-func _compute_drift_delta(current_price: int, base_price: int) -> float:
+## Drift layer: mean reversion toward base_price (GDD Rule 2).
+## macro_state: ADR-026 MacroState (0=TREND_UP, 1=FLAT, 2=TREND_DOWN).
+## During TREND_UP/DOWN, k_drift is scaled by driftScale (default 0.2) so price can
+## deviate ~11% from base before mean-reversion catches up (vs 0.875% at full k_drift).
+func _compute_drift_delta(current_price: int, base_price: int, macro_state: int = MacroState.FLAT) -> float:
 	if base_price == 0:
 		return 0.0
+	var drift_scales: Array = _macro_cfg.get("driftScale", [0.2, 1.0, 0.2]) as Array
+	var ds: float = float(drift_scales[macro_state]) if macro_state < drift_scales.size() else 1.0
 	var deviation_ratio: float = (float(current_price) - float(base_price)) / float(base_price)
 	var intensity: float = _drift_intensity(deviation_ratio)
-	return -k_drift * deviation_ratio * intensity
+	return -k_drift * ds * deviation_ratio * intensity
 
 
 ## Non-linear drift intensity (GDD Rule 2-3)
@@ -2171,6 +2177,8 @@ func _apply_macro_bias_to_matrix(matrix: Array, macro_state: int) -> Array:
 ## Roll MacroState transitions for all stocks at end of each trading day (ADR-026).
 ## Rebuilds _transition_matrices with biased matrix for next day's M1 simulation.
 ## MacroState is intentionally NOT reset in _reset_season_mechanics() — season continuity.
+## ADR-026 seasonBias: BULL/BEAR nudges the FLAT row of macro_tm so trending months occur
+## more/less often — clean separation of "when trends happen" vs "how strong they are".
 func _roll_macro_states() -> void:
 	# Select macro transition matrix: per-archetype override or default
 	var arch_macros: Dictionary = {}
@@ -2185,6 +2193,10 @@ func _roll_macro_states() -> void:
 	var vol_mults: Array = _macro_cfg.get("volMultiplier",
 		[[1.15, 1.45], [0.75, 1.05], [1.05, 1.35]]) as Array
 
+	# Load seasonBias macro nudge params from config
+	var sbmn: Variant = _macro_cfg.get("seasonBiasMacroNudge", {})
+	var season_bias_nudge: Dictionary = sbmn as Dictionary if sbmn is Dictionary else {}
+
 	for stock_id: String in _stock_states:
 		var s: Dictionary = _stock_states[stock_id]
 		if s.get("is_etf", false):
@@ -2195,8 +2207,35 @@ func _roll_macro_states() -> void:
 		if macro_tm.is_empty():
 			macro_tm = default_macro_tm
 
+		# Apply seasonBias nudge to the FLAT row (index 1) of macro_tm.
+		# BULL → more TREND_UP; BEAR → more TREND_DOWN. No-op for NEUTRAL.
+		var bias: SeasonBias = s.get("season_bias", SeasonBias.NEUTRAL) as SeasonBias
+		var effective_macro_tm: Array = macro_tm  # reference; deep-copy only if nudge needed
+		if bias != SeasonBias.NEUTRAL and not season_bias_nudge.is_empty():
+			var nudge_key: String = "BULL" if bias == SeasonBias.BULL else "BEAR"
+			var nudge: Variant = season_bias_nudge.get(nudge_key, {})
+			if nudge is Dictionary and not (nudge as Dictionary).is_empty():
+				var nd: Dictionary = nudge as Dictionary
+				var flat_to_up: float   = float(nd.get("flatToUp",   0.0))
+				var flat_to_down: float = float(nd.get("flatToDown", 0.0))
+				# Deep copy macro_tm so we don't mutate the shared config array
+				effective_macro_tm = []
+				for row_src: Variant in macro_tm:
+					effective_macro_tm.append((row_src as Array).duplicate())
+				# Nudge FLAT row (index 1): [FLAT→UP, FLAT→FLAT, FLAT→DOWN]
+				var flat_row: Array = effective_macro_tm[MacroState.FLAT] as Array
+				flat_row[MacroState.TREND_UP]   = maxf(0.0, float(flat_row[MacroState.TREND_UP])   + flat_to_up)
+				flat_row[MacroState.TREND_DOWN] = maxf(0.0, float(flat_row[MacroState.TREND_DOWN]) + flat_to_down)
+				# Renormalize FLAT row
+				var flat_sum: float = 0.0
+				for v: Variant in flat_row:
+					flat_sum += maxf(0.0, float(v))
+				if flat_sum > 0.0:
+					for fi: int in range(3):
+						flat_row[fi] = maxf(0.0, float(flat_row[fi])) / flat_sum
+
 		var macro: int = s.get("macro_state", MacroState.FLAT)
-		var row: Array = macro_tm[macro] as Array
+		var row: Array = effective_macro_tm[macro] as Array
 		var roll: float = _rng.randf()
 		var cumulative: float = 0.0
 		for j: int in range(3):

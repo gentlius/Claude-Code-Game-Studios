@@ -78,8 +78,9 @@ void MarkovGenerator::_copy_defaults() {
     std::memcpy(_bvr_min,  DEFAULT_BVR_MIN,  sizeof(_bvr_min));
     std::memcpy(_bvr_max,  DEFAULT_BVR_MAX,  sizeof(_bvr_max));
     std::memcpy(_svm,      DEFAULT_SVM,      sizeof(_svm));
-    std::memcpy(_macro_tm, DEFAULT_MACRO_TM, sizeof(_macro_tm));
-    std::memcpy(_macro_vm, DEFAULT_MACRO_VM, sizeof(_macro_vm));
+    std::memcpy(_macro_tm,          DEFAULT_MACRO_TM, sizeof(_macro_tm));
+    std::memcpy(_macro_vm,          DEFAULT_MACRO_VM, sizeof(_macro_vm));
+    std::memcpy(_macro_drift_scale, DEFAULT_MACRO_DS, sizeof(_macro_drift_scale));
     _macro_bias = DEFAULT_MACRO_BIAS;
 }
 
@@ -191,6 +192,13 @@ void MarkovGenerator::set_config(Dictionary cfg) {
         // biasFactor scalar
         if (mt.has("biasFactor"))
             _macro_bias = static_cast<double>(mt["biasFactor"]);
+
+        // driftScale: Array[3] — k_drift multiplier per MacroState [TREND_UP, FLAT, TREND_DOWN]
+        if (mt.has("driftScale")) {
+            Array ds = mt["driftScale"];
+            for (int i = 0; i < 3 && i < ds.size(); ++i)
+                _macro_drift_scale[i] = static_cast<double>(ds[i]);
+        }
 
         // volMultiplier: Array[3] of Array[2] [min, max]
         if (mt.has("volMultiplier")) {
@@ -460,7 +468,7 @@ Dictionary MarkovGenerator::generate_stock_m1(
                 intensity = 1.0 + (THRESHOLD_HARD - THRESHOLD_SOFT) * 4.0
                                 + (r - THRESHOLD_HARD) * 16.0;
             }
-            double drift = -K_DRIFT * dev * intensity * NT;
+            double drift = -K_DRIFT * _macro_drift_scale[macro_state] * dev * intensity * NT;
 
             // ── Price update ─────────────────────────────────────────────
             double next_price = std::max(current_price * (1.0 + pattern_delta + drift), 100.0);

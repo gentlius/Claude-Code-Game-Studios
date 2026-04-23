@@ -86,10 +86,11 @@ class MarkovGenerator : public RefCounted {
     // ── Macro trend layer (ADR-026) ──
     // Day-granularity 3-state Markov: 0=TREND_UP, 1=FLAT, 2=TREND_DOWN.
     // MacroState biases M1 micro-state transition matrix so weekly/monthly charts trend.
+    // Self-prob 0.96 → avg duration 25d per trend (sufficient to dominate a 20-day month).
     static constexpr double DEFAULT_MACRO_TM[3][3] = {
-        { 0.92, 0.06, 0.02 },  // TREND_UP
-        { 0.04, 0.93, 0.03 },  // FLAT
-        { 0.02, 0.06, 0.92 },  // TREND_DOWN
+        { 0.96, 0.03, 0.01 },  // TREND_UP
+        { 0.02, 0.96, 0.02 },  // FLAT
+        { 0.01, 0.03, 0.96 },  // TREND_DOWN
     };
     // volMultiplier[macro_state][0=min, 1=max] — drawn once per day
     static constexpr double DEFAULT_MACRO_VM[3][2] = {
@@ -98,10 +99,14 @@ class MarkovGenerator : public RefCounted {
         { 1.05, 1.35 },  // TREND_DOWN: elevated (panic) volume
     };
     static constexpr double DEFAULT_MACRO_BIAS = 3.0;
+    // driftScale[macro_state]: k_drift multiplier per MacroState.
+    // 0.2 during TREND_UP/DOWN allows ~11% equilibrium deviation (vs 0.875% at 1.0).
+    static constexpr double DEFAULT_MACRO_DS[3] = { 0.2, 1.0, 0.2 };
 
-    double _macro_tm[3][3]   = {};
-    double _macro_vm[3][2]   = {};    // vol multiplier [state][min/max]
-    double _macro_bias       = DEFAULT_MACRO_BIAS;
+    double _macro_tm[3][3]         = {};
+    double _macro_vm[3][2]         = {};    // vol multiplier [state][min/max]
+    double _macro_bias             = DEFAULT_MACRO_BIAS;
+    double _macro_drift_scale[3]   = {};    // k_drift multiplier per MacroState
 
     // Per-archetype macro 3×3 matrices (keyed by archetype string).
     struct MacroArchMatrix { double tm[3][3]; };

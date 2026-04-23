@@ -193,6 +193,8 @@ func append_season_m1(stock_id: String, tick_prices: Array, tick_volumes: Array)
 		m1_vol_arr.resize(target)
 
 	# Append new M1 bars (one per TICKS_PER_M1 ticks).
+	# Prices from live tick_prices are already tick-aligned by PriceEngine.round_to_tick()
+	# at injection time (process_tick → final_price). No extra rounding needed here.
 	var n_ticks: int = tick_prices.size()
 	for i: int in range(n_m1):
 		if existing_count >= M1_CACHE_BARS:

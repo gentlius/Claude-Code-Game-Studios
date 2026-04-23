@@ -1260,9 +1260,10 @@ func sync_prices_from_prehistory() -> void:
 		var state: Dictionary = _stock_states[stock_id]
 		if state.get("is_etf", false):
 			continue
-		var last_close: int = M1CacheManager.get_last_prehistory_close(stock_id)
-		if last_close <= 0:
+		var raw: int = M1CacheManager.get_last_prehistory_close(stock_id)
+		if raw <= 0:
 			continue
+		var last_close: int = round_to_tick(float(raw))
 		state["current_price"]     = last_close
 		state["prev_day_close"]    = last_close
 		state["season_open_price"] = last_close

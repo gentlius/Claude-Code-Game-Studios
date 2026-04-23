@@ -419,12 +419,19 @@ func _reseed_session() -> void:
 func _on_season_start() -> void:
 	_season_count += 1  # ADR-025: track which season we are entering (1 = first)
 	# ADR-026: persist this season's D1 candles to M1CacheManager ring buffer
-	# before _reset_season_mechanics() clears ohlcv_daily.
+	# before _reset_season_mechanics() clears ohlcv_daily / tick_prices.
+	# append_season_m1() must be called alongside append_season_d1() so the M1 chart
+	# ring buffer stays continuous across season boundaries (chart-renderer.md §5-3).
 	if M1CacheManager.is_batch_done():
 		for stock_id: String in _stock_states:
 			var s: Dictionary = _stock_states[stock_id]
-			if not s.get("is_etf", false) and not s.get("ohlcv_daily", []).is_empty():
+			if s.get("is_etf", false):
+				continue
+			if not s.get("ohlcv_daily", []).is_empty():
 				M1CacheManager.append_season_d1(stock_id, s["ohlcv_daily"])
+			var tp: Array = s.get("tick_prices", [])
+			if not tp.is_empty():
+				M1CacheManager.append_season_m1(stock_id, tp, s.get("tick_volumes", []))
 	_reset_season_mechanics()
 
 
@@ -1242,9 +1249,11 @@ func init_first_season() -> void:
 	_engine_state = EngineState.READY
 
 
-## 새 게임 시 M1 프리히스토리 배치 생성 완료 후 호출 (로드 게임에서는 호출 금지).
-## 프리히스토리 마지막 종가를 current_price / prev_day_close / season_open_price / base_price에
-## 덮어써 차트 연속성을 보장한다 (ETF 제외 — ETF는 EtfManager가 별도 주입).
+## 새 게임 시 M1 캐시 배치 생성 완료 후 호출 (로드 게임에서는 호출 금지).
+## M1CacheManager._m1_ohlc의 마지막 종가로 current_price / prev_day_close /
+## season_open_price / base_price를 덮어써 차트 연속성을 보장한다 (ETF 제외).
+## 시즌 2 이후: _on_season_start()의 append_season_m1()이 M1 링 버퍼 마지막 종가를
+## 이전 시즌 종가로 갱신하므로, 이 함수는 시즌 간 연속성도 자동으로 보장한다.
 ## GDD: design/gdd/chart-renderer.md §5-3 "프리히스토리 연속성"
 func sync_prices_from_prehistory() -> void:
 	for stock_id: String in _stock_states:

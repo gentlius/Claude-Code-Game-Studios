@@ -140,7 +140,8 @@ func get_m1_candles(stock_id: String) -> Array[Dictionary]:
 
 ## 프리히스토리 마지막 M1 bar의 종가를 반환.
 ## PriceEngine.sync_prices_from_prehistory()가 호출 — 새 게임 시 프리히스토리 끝 가격으로
-## current_price를 맞춰 차트 연속성을 보장한다.
+## current_price를 맞춰 차트 연속성을 보장한다. append_season_m1() 이후에는
+## 마지막 라이브 시즌의 종가를 반환한다 (M1 링 버퍼가 실시간 시즌 데이터를 포함하므로).
 ## 캐시가 없거나 bar 수가 0이면 0 반환 (호출부에서 0 == skip 처리).
 func get_last_prehistory_close(stock_id: String) -> int:
 	var count: int = _m1_count.get(stock_id, 0)
@@ -148,6 +149,74 @@ func get_last_prehistory_close(stock_id: String) -> int:
 		return 0
 	# PackedInt32Array: 4 ints per bar [open, high, low, close]
 	return _m1_ohlc[stock_id][(count - 1) * 4 + 3]
+
+
+## 런타임 시즌 종료 시 시즌의 tick 데이터를 M1 bar로 집계해 in-memory 캐시에 누적.
+## PriceEngine._on_season_start()가 append_season_d1()과 함께 호출한다.
+## GameClock.TICKS_PER_MINUTE = 4 틱을 1 M1 bar로 집계한다 (OHLC + vol sum).
+## M1_CACHE_BARS 초과분은 오래된 것부터 제거 (링 버퍼 슬라이딩 윈도우).
+## 시즌이 완전히 거래되지 않은 경우 (완전하지 않은 틱 그룹) 마지막 불완전 bar는 무시한다.
+## [param stock_id]: 종목 ID.
+## [param tick_prices]: PriceEngine._stock_states[stock_id]["tick_prices"] — 이번 시즌 틱 가격.
+## [param tick_volumes]: PriceEngine._stock_states[stock_id]["tick_volumes"] — 이번 시즌 틱 거래량.
+func append_season_m1(stock_id: String, tick_prices: Array, tick_volumes: Array) -> void:
+	const TICKS_PER_M1: int = 4  # GameClock.TICKS_PER_MINUTE — 4 ticks per M1 bar
+	if tick_prices.size() < TICKS_PER_M1 or not _m1_ohlc.has(stock_id):
+		return
+
+	var n_m1: int = tick_prices.size() / TICKS_PER_M1  # complete M1 bars only
+
+	var existing_count: int = _m1_count.get(stock_id, 0)
+	var m1_ohlc_arr: PackedInt32Array   = _m1_ohlc.get(stock_id, PackedInt32Array())
+	var m1_vol_arr:  PackedFloat32Array = _m1_vol.get(stock_id, PackedFloat32Array())
+
+	# Ring buffer: if appending n_m1 bars would exceed M1_CACHE_BARS, shift out oldest first.
+	if existing_count + n_m1 > M1_CACHE_BARS:
+		var drop: int = existing_count + n_m1 - M1_CACHE_BARS
+		drop = mini(drop, existing_count)
+		var keep: int = existing_count - drop
+		for i: int in range(keep):
+			var src: int = (i + drop) * 4
+			var dst: int = i * 4
+			m1_ohlc_arr[dst]     = m1_ohlc_arr[src]
+			m1_ohlc_arr[dst + 1] = m1_ohlc_arr[src + 1]
+			m1_ohlc_arr[dst + 2] = m1_ohlc_arr[src + 2]
+			m1_ohlc_arr[dst + 3] = m1_ohlc_arr[src + 3]
+			m1_vol_arr[i] = m1_vol_arr[i + drop]
+		existing_count = keep
+
+	# Ensure packed arrays are large enough.
+	var target: int = mini(existing_count + n_m1, M1_CACHE_BARS)
+	if m1_ohlc_arr.size() < target * 4:
+		m1_ohlc_arr.resize(target * 4)
+	if m1_vol_arr.size() < target:
+		m1_vol_arr.resize(target)
+
+	# Append new M1 bars (one per TICKS_PER_M1 ticks).
+	var n_ticks: int = tick_prices.size()
+	for i: int in range(n_m1):
+		if existing_count >= M1_CACHE_BARS:
+			break
+		var tb: int = i * TICKS_PER_M1
+		var t0: int = int(tick_prices[tb])
+		var t1: int = int(tick_prices[tb + 1]) if tb + 1 < n_ticks else t0
+		var t2: int = int(tick_prices[tb + 2]) if tb + 2 < n_ticks else t0
+		var t3: int = int(tick_prices[tb + 3]) if tb + 3 < n_ticks else t0
+		var bar_base: int = existing_count * 4
+		m1_ohlc_arr[bar_base]     = t0                              # open
+		m1_ohlc_arr[bar_base + 1] = maxi(t0, maxi(t1, maxi(t2, t3)))  # high
+		m1_ohlc_arr[bar_base + 2] = mini(t0, mini(t1, mini(t2, t3)))  # low
+		m1_ohlc_arr[bar_base + 3] = t3                              # close
+		var vol: float = 0.0
+		for j: int in range(TICKS_PER_M1):
+			if tb + j < tick_volumes.size():
+				vol += float(tick_volumes[tb + j])
+		m1_vol_arr[existing_count] = vol
+		existing_count += 1
+
+	_m1_ohlc[stock_id]  = m1_ohlc_arr
+	_m1_vol[stock_id]   = m1_vol_arr
+	_m1_count[stock_id] = existing_count
 
 
 ## 런타임 시즌 종료 시 D1 캔들을 in-memory 캐시에 누적 (ADR-026).

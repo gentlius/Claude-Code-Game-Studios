@@ -644,6 +644,12 @@ func test_m1_cache_manager_prehistory_close_api():
 		"get_last_prehistory_close 존재")
 
 
+func test_m1_cache_manager_append_season_m1_api():
+	## 시즌 M1 tick 데이터 누적 메서드 존재 (chart-renderer.md §5-3 시즌 간 연속성)
+	assert_true(M1CacheManager.has_method("append_season_m1"),
+		"append_season_m1 존재")
+
+
 # ── PriceEngine (ADR-024 — 차트 연속성) ─────────────────────────────────────
 
 func test_price_engine_sync_prehistory_api():

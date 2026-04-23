@@ -138,6 +138,18 @@ func get_m1_candles(stock_id: String) -> Array[Dictionary]:
 	return get_aggregated_m1(stock_id, 1)
 
 
+## 프리히스토리 마지막 M1 bar의 종가를 반환.
+## PriceEngine.sync_prices_from_prehistory()가 호출 — 새 게임 시 프리히스토리 끝 가격으로
+## current_price를 맞춰 차트 연속성을 보장한다.
+## 캐시가 없거나 bar 수가 0이면 0 반환 (호출부에서 0 == skip 처리).
+func get_last_prehistory_close(stock_id: String) -> int:
+	var count: int = _m1_count.get(stock_id, 0)
+	if count == 0 or not _m1_ohlc.has(stock_id):
+		return 0
+	# PackedInt32Array: 4 ints per bar [open, high, low, close]
+	return _m1_ohlc[stock_id][(count - 1) * 4 + 3]
+
+
 ## 런타임 시즌 종료 시 D1 캔들을 in-memory 캐시에 누적 (ADR-026).
 ## PriceEngine._reset_season_mechanics()가 ohlcv_daily를 초기화하기 전에 호출한다.
 ## 새 D1 bars를 링 버퍼에 append하고 D1_CACHE_BARS 초과분은 오래된 것부터 제거한다.

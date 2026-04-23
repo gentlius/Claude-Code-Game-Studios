@@ -1242,6 +1242,24 @@ func init_first_season() -> void:
 	_engine_state = EngineState.READY
 
 
+## 새 게임 시 M1 프리히스토리 배치 생성 완료 후 호출 (로드 게임에서는 호출 금지).
+## 프리히스토리 마지막 종가를 current_price / prev_day_close / season_open_price / base_price에
+## 덮어써 차트 연속성을 보장한다 (ETF 제외 — ETF는 EtfManager가 별도 주입).
+## GDD: design/gdd/chart-renderer.md §5-3 "프리히스토리 연속성"
+func sync_prices_from_prehistory() -> void:
+	for stock_id: String in _stock_states:
+		var state: Dictionary = _stock_states[stock_id]
+		if state.get("is_etf", false):
+			continue
+		var last_close: int = M1CacheManager.get_last_prehistory_close(stock_id)
+		if last_close <= 0:
+			continue
+		state["current_price"]     = last_close
+		state["prev_day_close"]    = last_close
+		state["season_open_price"] = last_close
+		state["base_price"]        = last_close
+
+
 ## Resets per-season mechanics (Markov state, season bias, tick/OHLCV history, VI, CB,
 ## market index baseline) for all stocks. current_price and prev_day_close are preserved
 ## so prices carry forward naturally across seasons. Called every season start (Season 1

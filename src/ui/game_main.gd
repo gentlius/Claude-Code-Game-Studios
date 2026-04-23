@@ -122,6 +122,8 @@ func _on_intro_finished() -> void:
 	_intro = null
 	# 인트로 종료 시 배치 생성이 완료됐으면 바로 진입, 아직이면 로딩 화면 대기.
 	if M1CacheManager.is_batch_done():
+		# 새 게임: 프리히스토리 마지막 종가로 current_price 동기화 (차트 연속성).
+		PriceEngine.sync_prices_from_prehistory()
 		_load_main_screen()
 	else:
 		_show_cache_loading()
@@ -176,6 +178,10 @@ func _on_cache_loading_done() -> void:
 	if is_instance_valid(_cache_loading):
 		_cache_loading.queue_free()
 	_cache_loading = null
+	# 새 게임 전용: 프리히스토리 마지막 종가로 current_price 동기화 (차트 연속성).
+	# 로드 게임은 _on_slot_selected()에서 이 함수를 거치지만 _pending_initial_save == false이므로 skip.
+	if _pending_initial_save:
+		PriceEngine.sync_prices_from_prehistory()
 	_load_main_screen()
 
 

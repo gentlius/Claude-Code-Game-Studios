@@ -634,3 +634,19 @@ func test_lifestyle_manager_real_estate_maintenance_constant():
 	## 부동산 유지비율 상수 존재 (GDD lifestyle-spending.md §F3)
 	assert_true("REAL_ESTATE_MAINTENANCE_RATE" in LifestyleManager,
 		"REAL_ESTATE_MAINTENANCE_RATE 상수 존재")
+
+
+# ── M1CacheManager (ADR-024 — 차트 연속성) ──────────────────────────────────
+
+func test_m1_cache_manager_prehistory_close_api():
+	## 프리히스토리 마지막 종가 반환 메서드 존재 (chart-renderer.md §5-3)
+	assert_true(M1CacheManager.has_method("get_last_prehistory_close"),
+		"get_last_prehistory_close 존재")
+
+
+# ── PriceEngine (ADR-024 — 차트 연속성) ─────────────────────────────────────
+
+func test_price_engine_sync_prehistory_api():
+	## 프리히스토리 가격 동기화 메서드 존재 (chart-renderer.md §5-3)
+	assert_true(PriceEngine.has_method("sync_prices_from_prehistory"),
+		"sync_prices_from_prehistory 존재")

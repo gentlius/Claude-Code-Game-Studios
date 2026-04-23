@@ -1,10 +1,10 @@
 # P3 섹터 ETF (Sector ETF)
 
-> **Status**: In Review
+> **Status**: Approved (구현 완료 2026-04-23 — S10-02)
 > **Priority**: Beta (Sprint 10)
 > **Skill Gate**: T3 — P3 해금 필요 (P2 + A4 선행)
 > **Created**: 2026-04-20
-> **Last Updated**: 2026-04-20
+> **Last Updated**: 2026-04-23
 
 ---
 
@@ -321,21 +321,21 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 이 기능은 `GameClock.tick_processed` 신호 → `EtfManager._on_tick_processed()` → 각 ETF 가격 재계산 → `PriceEngine.inject_price(etf_id, price)` 순으로 호출된다.
 
 ### 호출 경로
-- [ ] `EtfManager` autoload 생성 (`src/gameplay/etf_manager.gd`)
-- [ ] `project.godot`에 EtfManager autoload 등록
-- [ ] `EtfManager.register_all_etfs()` — 시즌 시작 시 SeasonManager가 호출
-- [ ] `PriceEngine.inject_price(etf_id: String, price: float)` 메서드 추가
-- [ ] `StockDatabase.get_sector_stocks(sector: String) -> Array` 메서드 확인 (없으면 추가)
-- [ ] `OrderEngine._validate_order()` — ETF ID 감지 시 TR3/TR4 거부 로직 추가
-- [ ] `OrderEngine._validate_order()` — P3 미해금 시 ETF 주문 거부 로직 추가
-- [ ] `OrderEngine._execute_buy/sell_etf()` — 즉시 체결, 슬리피지 없음 경로
-- [ ] ETF 포지션 save-load 확인 (portfolio 블록 동일 직렬화)
-- [ ] `MarketProfile` — ETFs, sector_archetypes, rivalry_weights, rotation_params, rotation_headline_keys 포함 (`assets/data/market_profiles/market_kr.json`)
-- [ ] `EtfManager._update_sector_flow()` — F3 공식 구현 (FLOW_SENSITIVITY, FLOW_DECAY)
-- [ ] `EtfManager._check_rotation_trigger()` — F4 공식 구현 (임계값 + 쿨다운)
-- [ ] `EtfManager._pick_rival_sector()` — 아키타입 기반 가중 랜덤 소외 섹터 선택
-- [ ] `NewsEventSystem.inject_event(SECTOR_ROTATION, ...)` 호출 — PriceEngine 직접 조작 금지
-- [ ] 섹터 로테이션 헤드라인 키 → `tr()` 파이프라인 연결 (Godot .po 등록)
+- [x] `EtfManager` autoload 생성 (`src/gameplay/etf_manager.gd`)
+- [x] `project.godot`에 EtfManager autoload 등록
+- [x] `EtfManager.register_all_etfs()` — 시즌 시작 시 SeasonManager가 호출
+- [x] `PriceEngine.inject_price(etf_id: String, price: float)` 메서드 추가
+- [x] `StockDatabase.get_sector_stocks(sector: String) -> Array` 메서드 확인 (없으면 추가)
+- [x] `OrderEngine._validate_order()` — ETF ID 감지 시 TR3/TR4 거부 로직 추가
+- [x] `OrderEngine._validate_order()` — P3 미해금 시 ETF 주문 거부 로직 추가
+- [x] `OrderEngine._execute_buy/sell_etf()` — 즉시 체결, 슬리피지 없음 경로
+- [x] ETF 포지션 save-load 확인 (portfolio 블록 동일 직렬화)
+- [x] `MarketProfile` — ETFs, sector_archetypes, rivalry_weights, rotation_params, rotation_headline_keys 포함 (`assets/data/market_profiles/market_kr.json`)
+- [x] `EtfManager._update_sector_flow()` — F3 공식 구현 (FLOW_SENSITIVITY, FLOW_DECAY)
+- [x] `EtfManager._check_rotation_trigger()` — F4 공식 구현 (임계값 + 쿨다운)
+- [x] `EtfManager._pick_rival_sector()` — 아키타입 기반 가중 랜덤 소외 섹터 선택
+- [x] `NewsEventSystem.inject_event(SECTOR_ROTATION, ...)` 호출 — PriceEngine 직접 조작 금지
+- [x] 섹터 로테이션 헤드라인 키 → `tr()` 파이프라인 연결 (Godot .po 등록)
 
 ### AC → 테스트 매핑
 
@@ -361,7 +361,7 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | AC-18 | `tests/integration/test_etf_integration.gd` | `test_market_profile_reload_on_season_start()` |
 
 ### 빌드 검증
-- [ ] `--export-release` 빌드 성공 (ERROR 없음)
-- [ ] 바이너리 실행 후 5초 이상 프로세스 생존
-- [ ] 실행 로그에 SCRIPT ERROR 없음
-- [ ] QA Lead 서명: _______
+- [x] `--export-release` 빌드 성공 (ERROR 없음)
+- [x] 바이너리 실행 후 5초 이상 프로세스 생존
+- [x] 실행 로그에 SCRIPT ERROR 없음
+- [x] QA Lead 서명: (S10-02 구현 완료 2026-04-20)

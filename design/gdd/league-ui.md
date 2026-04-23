@@ -1,7 +1,7 @@
 # League & Season UI
 
 *Created: 2026-04-03*
-*Status: In Review*
+*Status: In Review (S2-02 구현 완료 — AC 검증·빌드검증 잔여)*
 *Sprint: S2-02*
 
 ---

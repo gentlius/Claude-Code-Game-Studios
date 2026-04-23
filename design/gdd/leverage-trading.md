@@ -1,8 +1,8 @@
 # TR4 레버리지 거래 (Leverage Trading)
 
-> **Status**: In Review (게임플레이 시스템 구현 완료 2026-04-17 — S10-03 UI 완료: 포지션 패널·마진콜 팝업·엔딩 연결 — 빌드 검증 대기)
+> **Status**: In Review (S10-03 Beta 구현 완료 — Steam 업적·Polish UI·빌드검증 잔여)
 > **Author**: user + game-designer
-> **Last Updated**: 2026-04-17
+> **Last Updated**: 2026-04-23
 > **Implements Pillar**: 판단이 곧 실력 (Judgment is King), 체감있는 성장 (Feel the Growth)
 > **Skill Prerequisite**: TR4 (requires TR3 공매도 해금)
 

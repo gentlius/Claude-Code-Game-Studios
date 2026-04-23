@@ -1,9 +1,9 @@
 # 엔딩 & Steam 업적 (Endings & Achievements)
 
-> **Status**: In Review
+> **Status**: In Review (S10-03 Beta 구현 완료 — Steam·DLC·Polish 항목 잔여)
 > **Author**: game-designer + creative-director
 > **Created**: 2026-04-20
-> **Last Updated**: 2026-04-20
+> **Last Updated**: 2026-04-23
 > **Implements Pillar**: 판단이 곧 실력 (Judgment is King), 체감있는 성장 (Feel the Growth)
 
 ---

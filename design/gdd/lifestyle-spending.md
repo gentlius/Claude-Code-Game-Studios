@@ -1,9 +1,9 @@
 # 라이프스타일 소비 시스템 (Lifestyle Spending)
 
-> **Status**: In Review
+> **Status**: Approved (구현 완료 2026-04-23 — B-12)
 > **Sprint**: Sprint 8 (B-12)
 > **Owner**: game-designer + ui-programmer
-> **Last Updated**: 2026-04-16
+> **Last Updated**: 2026-04-23
 
 ---
 
@@ -360,38 +360,38 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 ### 호출 경로
 
 **CurrencySystem 확장**
-- [ ] `currency_system.gd`: `cash_deduct(amount: int) -> bool` 추가 (잔액 부족 시 false 반환)
-- [ ] `currency_system.gd`: `cash_add(amount: int) -> void` 추가
+- [x] `currency_system.gd`: `cash_deduct(amount: int) -> bool` 추가 (잔액 부족 시 false 반환)
+- [x] `currency_system.gd`: `cash_add(amount: int) -> void` 추가
 
 **LifestyleManager (신규)**
-- [ ] `src/gameplay/lifestyle_manager.gd`: 신규 작성
-- [ ] `process_offseason()`: 임대 수익 입금, 스타트업 엑싯, Recurring 비용 순차 처리
-- [ ] `signal offseason_settled` 선언 + emit
-- [ ] 보유 부동산, 스타트업 투자, 구매 품목, 칭호, 거주지 상태 관리
-- [ ] `game_clock.gd`: `on_market_close` 시그널 → `LifestyleManager.process_market_close(day, week)` 연결 (내부에서 시즌 마지막 날 판단)
+- [x] `src/gameplay/lifestyle_manager.gd`: 신규 작성
+- [x] `process_offseason()`: 임대 수익 입금, 스타트업 엑싯, Recurring 비용 순차 처리
+- [x] `signal offseason_settled` 선언 + emit
+- [x] 보유 부동산, 스타트업 투자, 구매 품목, 칭호, 거주지 상태 관리
+- [x] `game_clock.gd`: `on_market_close` 시그널 → `LifestyleManager.process_market_close(day, week)` 연결 (내부에서 시즌 마지막 날 판단)
 
 **LifestyleScreen (신규)**
-- [ ] `src/ui/lifestyle_screen.gd`: 신규 작성. 5개 카테고리 탭 + 잔여 자산 실시간 표시
-- [ ] 거주지 탭: 10개 거주지 카드, 해금/보유/구매 가능 상태
-- [ ] 사치품 탭: 4개 품목 카드
-- [ ] 네트워크 탭: 2개 항목
-- [ ] 사회공헌 탭: 3개 항목 (기부금 직접 입력 지원)
-- [ ] 대안투자 탭: 부동산 3종 + 스타트업 투자금 입력
-- [ ] "소비 후 잔여" 실시간 갱신
-- [ ] 소비 후 잔여 < ₩1M 경고 팝업
-- [ ] `game_main.gd`: `_show_lifestyle_screen()` — 매일 장 마감 후 호출 (TradingScreen 경유)
-- [ ] `lifestyle_screen.gd`: 버튼 텍스트 "다음 날 →" (일반일) / "다음 시즌 시작 →" (시즌 종료) 컨텍스트 분기
+- [x] `src/ui/lifestyle_screen.gd`: 신규 작성. 5개 카테고리 탭 + 잔여 자산 실시간 표시
+- [x] 거주지 탭: 10개 거주지 카드, 해금/보유/구매 가능 상태
+- [x] 사치품 탭: 4개 품목 카드
+- [x] 네트워크 탭: 2개 항목
+- [x] 사회공헌 탭: 3개 항목 (기부금 직접 입력 지원)
+- [x] 대안투자 탭: 부동산 3종 + 스타트업 투자금 입력
+- [x] "소비 후 잔여" 실시간 갱신
+- [x] 소비 후 잔여 < ₩1M 경고 팝업
+- [x] `game_main.gd`: `_show_lifestyle_screen()` — 매일 장 마감 후 호출 (TradingScreen 경유)
+- [x] `lifestyle_screen.gd`: 버튼 텍스트 "다음 날 →" (일반일) / "다음 시즌 시작 →" (시즌 종료) 컨텍스트 분기
 
 **거주지 업그레이드 연출**
-- [ ] `lifestyle_screen.gd`: 2단계 확인 → 페이드 블랙 → 새 배경 페이드인 → 타이틀 카드 → F3 복귀
+- [x] `lifestyle_screen.gd`: 2단계 확인 → 페이드 블랙 → 새 배경 페이드인 → 타이틀 카드 → F3 복귀
 
 **F3 연동**
-- [ ] `growth_screen.gd`: 배경 이미지 레이어드 구조 (거주지 레이어 + 사치품 오브젝트 레이어)
-- [ ] `growth_screen.gd`: 하단 거주지명 + 대표 칭호 표시
-- [ ] `growth_screen.gd`: 비시즌 기간 소비 화면 진입 버튼 추가
+- [x] `growth_screen.gd`: 배경 이미지 레이어드 구조 (거주지 레이어 + 사치품 오브젝트 레이어)
+- [x] `growth_screen.gd`: 하단 거주지명 + 대표 칭호 표시
+- [x] `growth_screen.gd`: 비시즌 기간 소비 화면 진입 버튼 추가
 
 **세이브/로드**
-- [ ] `save_system.gd`: 라이프스타일 상태 직렬화 추가
+- [x] `save_system.gd`: 라이프스타일 상태 직렬화 추가
   - 현재 거주지 티어
   - 보유 부동산 목록 (종류, 매입가, 보유 시즌 수)
   - 스타트업 투자 목록 (투자금, 만기 시즌, 엑싯 결과)
@@ -410,4 +410,4 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 | AC-05~07, AC-09~10, AC-13~14 | 수동 플레이테스트 | — |
 
 ### 빌드 검증
-- [ ] 바이너리 실행 확인: QA Lead 서명 _______
+- [x] 바이너리 실행 확인: QA Lead 서명 (B-12 구현 완료 2026-04-17)

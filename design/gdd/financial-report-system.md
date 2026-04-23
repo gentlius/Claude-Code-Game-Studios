@@ -1,6 +1,6 @@
 # 재무보고 시스템 (Financial Report System)
 
-> **Status**: In Review (S10-05 Phase 1 구현 완료 — MarketProfile 통합 S10-07 예정)
+> **Status**: In Review (S10-05/07 구현 완료 — DLC Phase 2-3 및 빌드검증 잔여)
 > **Sprint**: Sprint 10 (예정)
 > **Owner**: game-designer + gameplay-programmer
 > **Related**: [financial-statements.md](financial-statements.md) — A3 패널 표시 / [rumor-channel.md](rumor-channel.md) — 루머 연동 / [price-engine.md](price-engine.md) — 이벤트 압력

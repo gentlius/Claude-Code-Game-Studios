@@ -1,6 +1,6 @@
 # 재무제표 (Financial Statements) — A3 스킬
 
-> **Status**: In Review
+> **Status**: In Review (S8-02/03 PER/PBR/ROE 구현 완료 — total_shares ADR-019 연동 + UI 잔여)
 > **Sprint**: Sprint 8 (S8-02/03)
 > **Skill ID**: A3
 > **Prerequisite**: A2 해금

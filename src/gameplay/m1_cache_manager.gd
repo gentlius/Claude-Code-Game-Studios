@@ -22,7 +22,7 @@ const MINUTES_PER_DAY: int = 390
 ## 1 시즌 거래일 수.
 const DAYS_PER_SEASON: int = 20
 ## 캐시 파일 버전 — 이 값이 변경되면 디스크 캐시 전체 무효화 후 재생성 (ADR-024).
-const CACHE_VERSION: int = 7  ## Bumped: round_to_tick() applied to all M1/D1 OHLC in generate_stock_m1_cache()
+const CACHE_VERSION: int = 8  ## Bumped: round_to_tick() moved into C++ MarkovGenerator (4670b2d) — forces regen of v7 unrounded caches
 ## 캐시 루트 디렉토리 (user:// 아래). 슬롯별 격리 → _cache_dir() 참조.
 const CACHE_ROOT: String = "user://m1_cache/"
 

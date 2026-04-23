@@ -170,8 +170,9 @@ func test_price_engine_api():
 	# 52주 최고/최저 API (GDD order-book.md §3-5 블록6)
 	assert_true(PriceEngine.has_method("get_week52_high"),      "get_week52_high 존재")
 	assert_true(PriceEngine.has_method("get_week52_low"),       "get_week52_low 존재")
-	# 프리히스토리 D1 생성 API (ADR-023: 가격 생성 규칙 단일 소유)
-	assert_true(PriceEngine.has_method("generate_synthetic_d1"), "generate_synthetic_d1 존재")
+	# 호가 단위 API (ADR-002, data-driven via MarketProfile)
+	assert_true(PriceEngine.has_method("get_tick_size"),  "get_tick_size 존재")
+	assert_true(PriceEngine.has_method("round_to_tick"),  "round_to_tick 존재")
 
 
 # ── SkillTree ────────────────────────────────────────────────────────
@@ -559,6 +560,7 @@ func test_market_profile_api():
 	assert_true(MarketProfile.has_method("get_dlc_achievements"),     "get_dlc_achievements 존재")
 	assert_true(MarketProfile.has_method("apply_macro_context"),      "apply_macro_context 존재")
 	assert_true(MarketProfile.has_method("reset_macro_context"),      "reset_macro_context 존재")
+	assert_true(MarketProfile.has_method("get_tick_table"),           "get_tick_table 존재")
 
 
 # ── M1CacheManager (ADR-024 Phase 1: M1-first 2-tier 캐시) ──────────────────

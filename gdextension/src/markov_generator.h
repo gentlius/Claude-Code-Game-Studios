@@ -116,20 +116,35 @@ class MarkovGenerator : public RefCounted {
     // macro_state: 0=TREND_UP (boosts cols 0,1), 1=FLAT (no-op), 2=TREND_DOWN (boosts cols 3,4).
     void _apply_macro_bias(const double in_m[7][7], double out_m[7][7], int macro_state) const;
 
-    // ── KRX tick-size rounding (ADR-002) ──
-    // Mirrors PriceEngine.get_tick_size() / round_to_tick() in GDScript exactly.
-    static inline int krx_tick_size(int price) noexcept {
-        if (price <   1000) return 1;
-        if (price <   5000) return 5;
-        if (price <  10000) return 10;
-        if (price <  50000) return 50;
-        if (price < 100000) return 100;
-        if (price < 500000) return 500;
-        return 1000;
+    // ── Tick-size table (ADR-002, DLC extensibility) ──
+    // Data-driven: loaded from MarketProfile JSON via set_config("tickTable").
+    // Each entry: {threshold (exclusive upper bound), tick_size}.
+    // Replaces hardcoded krx_tick_size() — DLC markets pass their own table.
+    static constexpr int MAX_TICK_ENTRIES = 16;
+    struct TickEntry { int threshold; int tick_size; };
+    // KRX defaults — used when set_config() has not been called or tickTable is absent.
+    static constexpr TickEntry DEFAULT_TICK_TABLE[7] = {
+        {    1000,    1 },
+        {    5000,    5 },
+        {   10000,   10 },
+        {   50000,   50 },
+        {  100000,  100 },
+        {  500000,  500 },
+        { 2147483647, 1000 },  // INT_MAX — catch-all
+    };
+    TickEntry _tick_table[MAX_TICK_ENTRIES];
+    int       _tick_table_size = 0;
+
+    int _get_tick_size(int price) const noexcept {
+        for (int i = 0; i < _tick_table_size; ++i) {
+            if (price < _tick_table[i].threshold)
+                return _tick_table[i].tick_size;
+        }
+        return _tick_table_size > 0 ? _tick_table[_tick_table_size - 1].tick_size : 1;
     }
-    static inline int round_to_tick(double raw) noexcept {
-        int r = static_cast<int>(std::lround(raw));
-        int ts = krx_tick_size(r);
+    int round_to_tick(double raw) const noexcept {
+        int r  = static_cast<int>(std::lround(raw));
+        int ts = _get_tick_size(r);
         return static_cast<int>(std::lround(raw / static_cast<double>(ts))) * ts;
     }
 

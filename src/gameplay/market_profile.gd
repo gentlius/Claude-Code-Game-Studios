@@ -112,6 +112,16 @@ func get_rotation_headline(direction: String) -> String:
 	return str(keys[_rng.randi() % keys.size()])
 
 
+# ── Public API: Tick Size ──
+
+## Returns the tick size table for the active market.
+## Each entry is [exclusiveUpperBound: int, tickSize: int].
+## Last entry's upper bound acts as a catch-all (INT_MAX = 2147483647).
+## DLC markets define their own tables in their JSON profile.
+func get_tick_table() -> Array:
+	return _active_profile.get("tickTable", [])
+
+
 # ── Public API: Trading ──
 
 ## Returns a trading parameter by key (e.g. "commission", "sell_tax", "margin_rate_min").

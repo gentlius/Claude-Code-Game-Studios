@@ -128,7 +128,7 @@ func get_aggregated_d1(stock_id: String, d1_per_candle: int) -> Array[Dictionary
 
 
 ## OhlcvHistory 의존성 역전: D1 캔들을 Array[Dictionary] 형태로 반환.
-## OhlcvHistory._generate_pre_history() 가 PriceEngine.generate_synthetic_d1() 대신 호출한다.
+## M1-first 방식으로 생성된 D1 집계 데이터를 OhlcvHistory._generate_pre_history() 에 제공.
 func get_d1_candles(stock_id: String) -> Array[Dictionary]:
 	return get_aggregated_d1(stock_id, 1)
 

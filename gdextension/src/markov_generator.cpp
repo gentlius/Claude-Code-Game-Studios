@@ -82,6 +82,12 @@ void MarkovGenerator::_copy_defaults() {
     std::memcpy(_macro_vm,          DEFAULT_MACRO_VM, sizeof(_macro_vm));
     std::memcpy(_macro_drift_scale, DEFAULT_MACRO_DS, sizeof(_macro_drift_scale));
     _macro_bias = DEFAULT_MACRO_BIAS;
+    // Tick table: KRX defaults (overridden by set_config when tickTable key is present).
+    static_assert(sizeof(DEFAULT_TICK_TABLE) / sizeof(DEFAULT_TICK_TABLE[0]) <= MAX_TICK_ENTRIES,
+                  "DEFAULT_TICK_TABLE exceeds MAX_TICK_ENTRIES");
+    constexpr int N = sizeof(DEFAULT_TICK_TABLE) / sizeof(DEFAULT_TICK_TABLE[0]);
+    std::memcpy(_tick_table, DEFAULT_TICK_TABLE, sizeof(TickEntry) * N);
+    _tick_table_size = N;
 }
 
 // ── set_config ───────────────────────────────────────────────────────────────
@@ -234,6 +240,21 @@ void MarkovGenerator::set_config(Dictionary cfg) {
                 _macro_arch_matrices[akey_str] = mam;
             }
         }
+    }
+
+    // tickTable: Array[N] of Array[2] [exclusiveUpperBound, tickSize]
+    // Overrides KRX defaults; absent key = keep defaults from _copy_defaults().
+    if (cfg.has("tickTable")) {
+        Array tt = cfg["tickTable"];
+        int count = 0;
+        for (int i = 0; i < tt.size() && count < MAX_TICK_ENTRIES; ++i) {
+            Variant v = tt[i];
+            if (v.get_type() != Variant::ARRAY) continue;
+            Array pair = v;
+            if (pair.size() < 2) continue;
+            _tick_table[count++] = { static_cast<int>(pair[0]), static_cast<int>(pair[1]) };
+        }
+        if (count > 0) _tick_table_size = count;
     }
 
     _cfg_loaded = true;

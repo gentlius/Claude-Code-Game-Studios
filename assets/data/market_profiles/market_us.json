@@ -5,6 +5,9 @@
   "display_name_en": "US NASDAQ",
   "description": "US NASDAQ stub profile for DLC expansion testing. See docs/architecture/ADR-021.",
 
+  "_comment_tickTable": "NASDAQ tick size table (USD cents, $0.01 minimum). DLC stub — all prices use 1-cent ticks. See ADR-002.",
+  "tickTable": [[2147483647, 1]],
+
   "trading": {
     "commission": 0.0005,
     "sell_tax": 0.0,

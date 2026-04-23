@@ -5,6 +5,9 @@
   "display_name_en": "Korea KOSPI",
   "description": "Korea Stock Exchange (KOSPI) market profile. See design/gdd/financial-report-system.md §7, docs/architecture/ADR-021.",
 
+  "_comment_tickTable": "KRX 호가 단위 테이블 (ADR-002). 각 항목: [가격상한(exclusive), 호가단위]. 마지막 항목은 catch-all. DLC 시장 추가 시 해당 시장 JSON에 독립 테이블 정의.",
+  "tickTable": [[1000, 1], [5000, 5], [10000, 10], [50000, 50], [100000, 100], [500000, 500], [2147483647, 1000]],
+
   "trading": {
     "commission": 0.00015,
     "sell_tax": 0.002,

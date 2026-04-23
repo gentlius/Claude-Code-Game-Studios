@@ -70,13 +70,24 @@ var _title_definitions: Array[Dictionary] = [
 	{"titleId": "요트클럽",    "condition": "has_luxury", "itemId": "yacht_berth"},
 ]
 
-## Startup exit probabilities (GDD §F5).
+## Startup exit probabilities — B-grade (GDD §F5).
 var STARTUP_IPO_CHANCE: float    = 0.20
 var STARTUP_MA_CHANCE: float     = 0.70   ## cumulative: 0.20 + 0.50
 var STARTUP_IPO_MIN: float       = 2.0
 var STARTUP_IPO_MAX: float       = 5.0
 var STARTUP_MA_MIN: float        = 1.0
 var STARTUP_MA_MAX: float        = 1.5
+
+## Startup exit probabilities — C-grade (GDD §F5, rebalanced 2026-04-20).
+var STARTUP_C_IPO_CHANCE: float  = 0.15
+var STARTUP_C_MA_CHANCE: float   = 0.30  ## cumulative: 0.15 + 0.15
+
+## Real estate maintenance cost deducted each season (GDD §F3, lifestyle-spending §3-2).
+const REAL_ESTATE_MAINTENANCE_RATE: float = 0.005
+
+## Scholarship buff: news delay reduction in ticks, valid for first trading day of next season.
+## Set by purchase_network_item("scholarship"). See: design/gdd/lifestyle-spending.md §3-2.
+const SCHOLARSHIP_NEWS_DELAY_REDUCTION: int = 5
 
 ## Donation amount limits (GDD §3-2). Overridden by lifestyle_config.json.
 var DONATION_MIN: int = 1_000_000
@@ -105,6 +116,13 @@ var _recurring_costs: Array[Dictionary] = []
 ## Cached sum of all tangible asset purchase prices.
 var _tangible_value_cache: int = 0
 
+## True after scholarship purchased — activates at start of the NEXT season (day 0 only).
+## Cleared when the next season starts (transitions to _scholarship_buff_day0_active).
+var _scholarship_buff_pending: bool = false
+## True on day 0 of the season immediately following scholarship purchase.
+## Cleared at end of day 0 market close. Used by get_news_delay_buff_ticks().
+var _scholarship_buff_day0_active: bool = false
+
 
 # ── Lifecycle ──
 
@@ -114,6 +132,9 @@ func _ready() -> void:
 	# SeasonManager dependency removed — GameClock is the sole timer source.
 	# GDD: lifestyle-spending.md §3-1
 	GameClock.on_market_close.connect(_on_market_close)
+	# Scholarship buff lifecycle: pending → active on season start → cleared after day 0.
+	GameClock.on_market_close.connect(_tick_scholarship_buff)
+	GameClock.on_season_start.connect(_on_season_start_scholarship)
 
 
 # ── Config Loading ──
@@ -283,6 +304,8 @@ func mark_luxury_owned(item_id: String) -> void:
 
 ## Purchase a network or social contribution item: deducts cash, marks owned, grants XP.
 ## GDD §3-2: 네트워크/사회공헌 구매 통합 API.
+## Special case: "scholarship" grants no XP; instead sets scholarship news delay buff
+## (active for first trading day of next season). See: SCHOLARSHIP_NEWS_DELAY_REDUCTION.
 ## Returns false if already owned or insufficient cash.
 func purchase_network_item(item_id: String, cost: int, xp_bonus: int, is_recurring: bool) -> bool:
 	if _owned_luxury.has(item_id):
@@ -292,10 +315,21 @@ func purchase_network_item(item_id: String, cost: int, xp_bonus: int, is_recurri
 	_owned_luxury[item_id] = true
 	if is_recurring:
 		add_recurring_cost(item_id, cost)
-	if xp_bonus > 0:
+	if item_id == "scholarship":
+		# GDD lifestyle-spending.md §3-2: 장학재단 → 다음 시즌 첫 거래일 뉴스 딜레이 −5틱
+		# Buff is pending until the NEXT season starts (not immediate).
+		_scholarship_buff_pending = true
+	elif xp_bonus > 0:
 		XpSystem.grant_lifestyle_xp(xp_bonus)
 	_check_and_grant_titles()
 	return true
+
+
+## Returns the active scholarship news delay reduction in ticks (0 if no buff).
+## Only non-zero on day 0 of the season immediately after scholarship purchase.
+## Called by NewsEventSystem.get_news_delay(). GDD lifestyle-spending.md §3-2.
+func get_news_delay_buff_ticks() -> int:
+	return SCHOLARSHIP_NEWS_DELAY_REDUCTION if _scholarship_buff_day0_active else 0
 
 
 ## Purchase a social contribution item: deducts cash, marks owned, grants XP.
@@ -319,14 +353,16 @@ func donate(amount: int) -> bool:
 
 ## Record a startup angel investment (대안 투자 — 스타트업 엔젤).
 ## GDD §3-2: seasons_to_exit is 3~6 (random at investment time).
+## grade: "B" (standard) or "C" (lower-quality, riskier). Defaults to "B".
 ## Returns false if insufficient cash_assets.
-func invest_startup(amount: int, seasons_to_exit: int, rng_seed: int) -> bool:
+func invest_startup(amount: int, seasons_to_exit: int, rng_seed: int, grade: String = "B") -> bool:
 	if not CurrencySystem.cash_deduct(amount):
 		return false
 	var entry: Dictionary = {
 		"amount": amount,
 		"seasons_remaining": seasons_to_exit,
 		"rng_seed": rng_seed,
+		"grade": grade,
 	}
 	_startups.append(entry)
 	return true
@@ -350,12 +386,17 @@ func process_market_close(_current_day: int = 0, _current_week: int = 0) -> void
 
 func _process_rental_income() -> void:
 	for asset: Dictionary in _tangible_assets:
+		var purchase_price: int = asset.get("purchase_price", 0)
 		var rate: float = _get_rental_rate(asset.get("type", ""))
-		if rate <= 0.0:
-			continue
-		var income: int = int(float(asset.get("purchase_price", 0)) * rate)
-		if income > 0:
-			CurrencySystem.cash_add(income)
+		# Rental income (GDD §F3)
+		if rate > 0.0:
+			var income: int = int(float(purchase_price) * rate)
+			if income > 0:
+				CurrencySystem.cash_add(income)
+		# Maintenance cost deducted each season (GDD §F3, REAL_ESTATE_MAINTENANCE_RATE = 0.5%/시즌)
+		var maintenance: int = int(float(purchase_price) * REAL_ESTATE_MAINTENANCE_RATE)
+		if maintenance > 0:
+			CurrencySystem.cash_deduct(maintenance)
 
 
 func _get_rental_rate(property_type: String) -> float:
@@ -383,13 +424,17 @@ func _process_startup_exits(tick_season: bool) -> void:
 
 func _resolve_startup_exit(startup: Dictionary) -> void:
 	var amount: int = startup.get("amount", 0)
+	var grade: String = startup.get("grade", "B")
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = startup.get("rng_seed", 0)
 	var roll: float = rng.randf()
 	var multiplier: float = 0.0
-	if roll < STARTUP_IPO_CHANCE:
+	# Grade-specific cumulative probability thresholds (GDD §F5).
+	var ipo_threshold: float = STARTUP_C_IPO_CHANCE if grade == "C" else STARTUP_IPO_CHANCE
+	var ma_threshold: float  = STARTUP_C_MA_CHANCE  if grade == "C" else STARTUP_MA_CHANCE
+	if roll < ipo_threshold:
 		multiplier = rng.randf_range(STARTUP_IPO_MIN, STARTUP_IPO_MAX)
-	elif roll < STARTUP_MA_CHANCE:
+	elif roll < ma_threshold:
 		multiplier = rng.randf_range(STARTUP_MA_MIN, STARTUP_MA_MAX)
 	# 폐업: multiplier stays 0.0
 	var proceeds: int = int(float(amount) * multiplier)
@@ -446,6 +491,20 @@ func _on_market_close() -> void:
 	process_market_close(GameClock.get_current_day(), GameClock.get_current_week())
 
 
+## Activates scholarship buff at the start of the next season (pending → active).
+func _on_season_start_scholarship() -> void:
+	if _scholarship_buff_pending:
+		_scholarship_buff_pending = false
+		_scholarship_buff_day0_active = true
+
+
+## Clears the scholarship day-0 buff at end of the first trading day.
+## Day 0 is the first trading day; buff expires after market close.
+func _tick_scholarship_buff() -> void:
+	if _scholarship_buff_day0_active and GameClock.get_current_day() == 0:
+		_scholarship_buff_day0_active = false
+
+
 # ── Serialization ──
 
 ## Returns serializable state for SaveSystem.
@@ -458,6 +517,8 @@ func get_save_data() -> Dictionary:
 		"startups": _startups.duplicate(true),
 		"recurring_costs": _recurring_costs.duplicate(true),
 		"tangible_value_cache": _tangible_value_cache,
+		"scholarship_buff_pending": _scholarship_buff_pending,
+		"scholarship_buff_day0_active": _scholarship_buff_day0_active,
 	}
 
 
@@ -483,6 +544,8 @@ func load_save_data(data: Dictionary) -> void:
 		if r is Dictionary:
 			_recurring_costs.append(r as Dictionary)
 	_tangible_value_cache = data.get("tangible_value_cache", 0)
+	_scholarship_buff_pending = data.get("scholarship_buff_pending", false)
+	_scholarship_buff_day0_active = data.get("scholarship_buff_day0_active", false)
 	tangible_value_changed.emit(_tangible_value_cache)
 
 
@@ -495,3 +558,5 @@ func reset() -> void:
 	_startups.clear()
 	_recurring_costs.clear()
 	_tangible_value_cache = 0
+	_scholarship_buff_pending = false
+	_scholarship_buff_day0_active = false

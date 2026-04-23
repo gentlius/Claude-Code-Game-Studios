@@ -34,6 +34,9 @@ var RANK_XP_TABLE: Array[int] = [500, 350, 250, 150, 150, 50]
 var COMPLETION_BONUS_XP: int = 20
 ## Completion bonus: minimum filled orders required (mirrors SeasonManager.MIN_TRADES_FOR_RANK concept)
 var COMPLETION_MIN_TRADES: int = 5
+## Comeback bonus multiplier: applied when returning to official league after ≥ 2 consecutive
+## free-market seasons (GDD §4-7). Loaded from xp_config.json.
+var COMEBACK_XP_MULTIPLIER: float = 1.20
 
 var DAILY_RETURN_MULTIPLIERS: Array[Array] = [
 	[3.0, 3.0],   # alpha ≥ +3%
@@ -311,31 +314,40 @@ func _on_market_close() -> void:
 
 
 ## Called by SeasonManager at season end. Grants season bonus XP.
-## Implements GDD §3-1 step ⑤ and §4-7 free-market XP penalty rules.
+## Implements GDD §3-1 step ⑤ and §4-7 free-market XP rules.
+## is_comeback: True when player is returning to official league after ≥ 2 consecutive
+## free-market seasons — that season's total rank+return XP is multiplied by COMEBACK_XP_MULTIPLIER.
 ## See: design/gdd/season-manager.md §3-4, §4-7
 func grant_season_bonus(
 	final_rank: int,
 	is_free_market: bool,
 	season_return_pct: float,
-	season_trade_count: int
+	season_trade_count: int,
+	is_comeback: bool = false
 ) -> void:
 	# Free-market participants receive no rank bonus XP (no official ranking).
 	# Official league participants receive full season XP based on rank + return.
 	if not is_free_market:
 		var breakdown: Dictionary = _calculate_season_xp(final_rank, season_return_pct)
+		var total_xp: int = breakdown["xp"]
+		# Comeback bonus: ×COMEBACK_XP_MULTIPLIER on first official season after 2+ free-market
+		# seasons (GDD §4-7). Applied to rank+return XP only, not the completion bonus.
+		if is_comeback:
+			total_xp = int(floor(float(total_xp) * COMEBACK_XP_MULTIPLIER))
 		_last_season_breakdown = {
 			"base_xp": BASE_SEASON_XP,
 			"rank_bonus": breakdown["rank_bonus"],
 			"return_bonus": breakdown["return_bonus"],
-			"total_xp": breakdown["xp"],
+			"total_xp": total_xp,
 			"final_rank": final_rank,
 			"season_return_pct": season_return_pct,
+			"is_comeback": is_comeback,
 		}
-		_grant_xp(breakdown["xp"], "season_bonus")
+		_grant_xp(total_xp, "season_bonus")
 
 	# Completion bonus: 20 XP for any participant (free-market or official)
 	# who finishes with return_pct >= 0% AND at least 5 filled orders.
-	# No XP penalty applies to the completion bonus (GDD §3-4, §4-7).
+	# No comeback multiplier applies to the completion bonus (GDD §3-4, §4-7).
 	# See: design/gdd/season-manager.md AC-12, AC-19
 	if season_return_pct >= 0.0 and season_trade_count >= COMPLETION_MIN_TRADES:
 		_grant_xp(COMPLETION_BONUS_XP, "completion_bonus")

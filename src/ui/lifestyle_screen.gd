@@ -69,7 +69,7 @@ const NETWORK_ITEMS: Array = [
 
 ## Social contribution items: {item_id, name, min_tier, xp_bonus, is_variable_cost}
 const SOCIAL_ITEMS: Array = [
-	{"item_id": "scholarship",  "name": "장학재단 설립",     "cost": 500_000_000, "min_tier": 6, "recurring": false, "xp_bonus": 50, "is_variable_cost": false},
+	{"item_id": "scholarship",  "name": "장학재단 설립",     "cost": 500_000_000, "min_tier": 6, "recurring": false, "xp_bonus": 0,  "is_variable_cost": false},  ## GDD: 다음 시즌 첫 거래일 뉴스 딜레이 −5틱 (XP 아님)
 	{"item_id": "social_biz",   "name": "사회적 기업 후원",  "cost": 10_000_000,  "min_tier": 4, "recurring": true,  "xp_bonus": 5,  "is_variable_cost": false},
 	{"item_id": "donation",     "name": "공익 캠페인 기부",  "cost": 0,           "min_tier": 2, "recurring": false, "xp_bonus": 0,  "is_variable_cost": true},
 ]

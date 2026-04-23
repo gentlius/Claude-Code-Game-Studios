@@ -118,6 +118,10 @@ var FREE_MARKET_THRESHOLD: int = 1_000_000
 var HANGANG_THRESHOLD: int = 10_000
 ## Total assets at/above this at season end → Master ending.
 var ENDING_THRESHOLD: int = 100_000_000_000
+## Consecutive free-market seasons required to earn comeback bonus on return (GDD §4-7).
+var COMEBACK_BONUS_SEASONS: int = 2
+## XP multiplier applied to the comeback season's total XP grant (GDD §4-7).
+var COMEBACK_XP_MULTIPLIER: float = 1.20
 
 # ── State ──
 
@@ -136,6 +140,14 @@ var _last_week_trade_count: int = 0
 
 ## Whether an ending has already been triggered this session (prevents double-fire).
 var _ending_triggered: bool = false
+
+## Consecutive seasons spent in free-market mode (resets when returning to official league).
+## Used to determine comeback bonus eligibility (GDD §4-7).
+var _consecutive_free_market_seasons: int = 0
+
+## True when this season qualifies for the comeback XP bonus (first official season
+## after ≥ COMEBACK_BONUS_SEASONS consecutive free-market seasons).
+var _is_comeback_season: bool = false
 
 # ── Lifecycle ──
 
@@ -201,9 +213,11 @@ func _load_config() -> void:
 	if cfg.has("weeklyPrizeXp"):      WEEKLY_PRIZE_XP      = int(cfg["weeklyPrizeXp"])
 	if cfg.has("minTradesForRank"):   MIN_TRADES_FOR_RANK  = int(cfg["minTradesForRank"])
 	if cfg.has("totalParticipants"):  TOTAL_PARTICIPANTS   = int(cfg["totalParticipants"])
-	if cfg.has("freeMarketThreshold"): FREE_MARKET_THRESHOLD = int(cfg["freeMarketThreshold"])
-	if cfg.has("hangangThreshold"):   HANGANG_THRESHOLD    = int(cfg["hangangThreshold"])
-	if cfg.has("endingThreshold"):    ENDING_THRESHOLD     = int(cfg["endingThreshold"])
+	if cfg.has("freeMarketThreshold"):  FREE_MARKET_THRESHOLD    = int(cfg["freeMarketThreshold"])
+	if cfg.has("hangangThreshold"):    HANGANG_THRESHOLD        = int(cfg["hangangThreshold"])
+	if cfg.has("endingThreshold"):     ENDING_THRESHOLD         = int(cfg["endingThreshold"])
+	if cfg.has("comebackBonusSeasons"): COMEBACK_BONUS_SEASONS  = int(cfg["comebackBonusSeasons"])
+	if cfg.has("comebackXpMultiplier"): COMEBACK_XP_MULTIPLIER  = float(cfg["comebackXpMultiplier"])
 	if cfg.has("gradeThresholds") and cfg["gradeThresholds"] is Array:
 		var arr: Array = cfg["gradeThresholds"]
 		var loaded: Array[float] = []
@@ -237,9 +251,15 @@ func start_season() -> bool:
 	if total_assets < FREE_MARKET_THRESHOLD:
 		_current_tier = TIER_FREE_MARKET
 		_is_free_market = true
+		_is_comeback_season = false
+		_consecutive_free_market_seasons += 1
 	else:
 		_current_tier = _assign_tier(total_assets)
 		_is_free_market = false
+		# Comeback bonus: earned when returning to official league after ≥ COMEBACK_BONUS_SEASONS
+		# consecutive free-market seasons (GDD §4-7).
+		_is_comeback_season = _consecutive_free_market_seasons >= COMEBACK_BONUS_SEASONS
+		_consecutive_free_market_seasons = 0
 		on_tier_assigned.emit(_current_tier, get_tier_name(_current_tier))
 
 		# Initialise AI competitors (GDD §3-3 AI contract)
@@ -453,7 +473,9 @@ func _on_season_end() -> void:
 		_grant_season_prize(final_rank)
 
 	# Step ⑤: Season XP — delegated to XpSystem.
-	XpSystem.grant_season_bonus(final_rank, _is_free_market, season_return_pct, season_trade_count)
+	# is_comeback: first official season after ≥ COMEBACK_BONUS_SEASONS consecutive free-market
+	# seasons → XP × COMEBACK_XP_MULTIPLIER (GDD §4-7).
+	XpSystem.grant_season_bonus(final_rank, _is_free_market, season_return_pct, season_trade_count, _is_comeback_season)
 
 	# Step ⑥: Check Master ending (GDD §3-1, EC-03).
 	var post_liquidation_assets: int = CurrencySystem.get_sim_cash()

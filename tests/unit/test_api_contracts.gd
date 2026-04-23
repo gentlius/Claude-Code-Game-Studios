@@ -612,3 +612,25 @@ func test_price_engine_has_markov_ext_helpers():
 		"_init_markov_ext 존재 (Phase 3 wiring)")
 	assert_true(PriceEngine.has_method("_build_markov_cfg"),
 		"_build_markov_cfg 존재 (Phase 3 cfg builder)")
+
+
+# ── GDD 2차 개정 API (2026-04-23) ─────────────────────────────────────────────
+## RUMOR_ACCURACY 0.70→0.55, 장학재단 뉴스 딜레이 버프, 부동산 유지비,
+## 대차 수수료, 컴백 보너스 — design/gdd 전체 2차 크로스 리뷰 수정분
+
+func test_lifestyle_manager_scholarship_buff_api():
+	## 장학재단 구매 → 다음 시즌 첫 거래일 뉴스 딜레이 −5틱 (GDD lifestyle-spending.md §3-2)
+	assert_true(LifestyleManager.has_method("get_news_delay_buff_ticks"),
+		"get_news_delay_buff_ticks 존재")
+
+
+func test_short_selling_borrow_fee_constant():
+	## 대차 수수료율 상수 존재 (GDD short-selling.md §F7)
+	assert_true("BORROW_FEE_RATE_DAILY" in ShortSellingSystem,
+		"BORROW_FEE_RATE_DAILY 상수 존재")
+
+
+func test_lifestyle_manager_real_estate_maintenance_constant():
+	## 부동산 유지비율 상수 존재 (GDD lifestyle-spending.md §F3)
+	assert_true("REAL_ESTATE_MAINTENANCE_RATE" in LifestyleManager,
+		"REAL_ESTATE_MAINTENANCE_RATE 상수 존재")

@@ -19,6 +19,9 @@ signal on_short_position_closed(stock_id: String, pnl: int)
 const CONFIG_PATH: String = "res://assets/data/short_selling_config.json"
 ## Regulatory floor: margin_rate must not be below 1.20 (120%). AC S10-06e.
 const MIN_MARGIN_RATE: float = 1.20
+## Daily borrow fee rate: 0.03%/day ≈ annual 6% (GDD §F7, design/gdd/short-selling.md).
+## daily_fee = open_price × quantity × BORROW_FEE_RATE_DAILY
+const BORROW_FEE_RATE_DAILY: float = 0.0003
 
 var _margin_rate: float = 1.40
 var _margin_call_threshold: float = 0.20
@@ -43,6 +46,7 @@ var _borrow_pool: Dictionary = {}
 func _ready() -> void:
 	_load_config()
 	GameClock.on_season_start.connect(_init_pools)
+	GameClock.on_market_close.connect(_process_daily_borrow_fee)
 
 
 func _load_config() -> void:
@@ -250,6 +254,16 @@ func liquidate_all_for_season_end() -> void:
 		on_short_position_closed.emit(stock_id, pnl)
 
 	_positions.clear()
+
+
+## Deducts daily borrow fee from sim_cash for all open short positions.
+## Called on every market close. GDD §F7: daily_fee = open_price × quantity × BORROW_FEE_RATE_DAILY.
+## If sim_cash is insufficient the fee is skipped (position remains open — margin check will fire).
+func _process_daily_borrow_fee() -> void:
+	for pos: Dictionary in _positions.values():
+		var daily_fee: int = int(float(pos["open_price"]) * float(pos["quantity"]) * BORROW_FEE_RATE_DAILY)
+		if daily_fee > 0:
+			CurrencySystem.sim_deduct(daily_fee)
 
 
 ## Resets all state. Called by GameMain (new game) and tests (before_each).

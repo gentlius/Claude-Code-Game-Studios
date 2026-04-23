@@ -376,8 +376,12 @@ func get_season_stats() -> Dictionary:
 
 
 ## Returns the current news delay in ticks based on SkillTree unlocks.
+## Applies the 장학재단 scholarship buff (−5 ticks) for the first trading day
+## of the season after purchase. See: design/gdd/lifestyle-spending.md §3-2.
 func get_news_delay() -> int:
-	return SkillTree.get_news_delay_ticks()
+	var base: int = SkillTree.get_news_delay_ticks()
+	var reduction: int = LifestyleManager.get_news_delay_buff_ticks()
+	return maxi(0, base - reduction)
 
 
 ## External event injection (ADR-022 EventSource pipeline).
@@ -740,8 +744,9 @@ func _maybe_emit_rumor(entry: Dictionary, template: Dictionary, direction: int) 
 func _get_rumor_advance_ticks() -> int:
 	return SkillTree.RUMOR_LEAD_MINUTES * GameClock.TICKS_PER_MINUTE
 
-## Direction accuracy: 70% chance rumor direction matches real event (GDD F6).
-const RUMOR_ACCURACY: float = 0.70
+## Direction accuracy: 55% chance rumor direction matches real event (GDD F6).
+## was: 0.70 before B-09 fix (2026-04-20)
+const RUMOR_ACCURACY: float = 0.55
 
 ## Schedules FAKE_RUMOR_PER_DAY fake rumor ticks for the current trading day.
 ## Called by _on_market_open(). Ticks are stored in _fake_rumor_ticks and
@@ -771,7 +776,7 @@ func _emit_rumor_if_eligible(
 	if _rng.randf() > prob:
 		return
 
-	# Direction: 70% accurate, 30% inverted (GDD F6 rumor_accuracy = 0.70)
+	# Direction: 55% accurate, 45% inverted (GDD F6 rumor_accuracy = 0.55)
 	var rumor_direction: int = real_direction
 	if _rng.randf() > RUMOR_ACCURACY:
 		rumor_direction = -real_direction

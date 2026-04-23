@@ -5,51 +5,102 @@ argument-hint: "[scan|add|prioritize|report]"
 user-invocable: true
 allowed-tools: Read, Glob, Grep, Write
 ---
-When this skill is invoked:
 
-1. **Parse the subcommand** from the argument:
-   - `scan` — Scan the codebase for tech debt indicators
-   - `add` — Add a new tech debt entry manually
-   - `prioritize` — Re-prioritize the existing debt register
-   - `report` — Generate a summary report of current debt status
+## Phase 1: Parse Subcommand
 
-2. **For `scan`**:
-   - Search the codebase for debt indicators:
-     - `TODO` comments (count and categorize)
-     - `FIXME` comments (these are bugs disguised as debt)
-     - `HACK` comments (workarounds that need proper solutions)
-     - `@deprecated` markers
-     - Duplicated code blocks (similar patterns in multiple files)
-     - Files over 500 lines (potential god objects)
-     - Functions over 50 lines (potential complexity)
-   - Categorize each finding:
-     - **Architecture Debt**: Wrong abstractions, missing patterns, coupling issues
-     - **Code Quality Debt**: Duplication, complexity, naming, missing types
-     - **Test Debt**: Missing tests, flaky tests, untested edge cases
-     - **Documentation Debt**: Missing docs, outdated docs, undocumented APIs
-     - **Dependency Debt**: Outdated packages, deprecated APIs, version conflicts
-     - **Performance Debt**: Known slow paths, unoptimized queries, memory issues
-   - Update the debt register at `docs/tech-debt-register.md`
+Determine the mode from the argument:
 
-3. **For `add`**:
-   - Prompt for: description, category, affected files, estimated fix effort, impact if left unfixed
-   - Append to the debt register
+- `scan` — Scan the codebase for tech debt indicators
+- `add` — Add a new tech debt entry manually
+- `prioritize` — Re-prioritize the existing debt register
+- `report` — Generate a summary report of current debt status
 
-4. **For `prioritize`**:
-   - Read the debt register
-   - Score each item by: `(impact_if_unfixed * frequency_of_encounter) / fix_effort`
-   - Re-sort the register by priority score
-   - Recommend which items to include in the next sprint
+If no subcommand is provided, output usage and stop. Verdict: **FAIL** — missing required subcommand.
 
-5. **For `report`**:
-   - Read the debt register
-   - Generate summary statistics:
-     - Total items by category
-     - Total estimated fix effort
-     - Items added vs resolved since last report
-     - Trending direction (growing / stable / shrinking)
-   - Flag any items that have been in the register for more than 3 sprints
-   - Output the report
+---
+
+## Phase 2A: Scan Mode
+
+Search the codebase for debt indicators:
+
+- `TODO` comments (count and categorize)
+- `FIXME` comments (these are bugs disguised as debt)
+- `HACK` comments (workarounds that need proper solutions)
+- `@deprecated` markers
+- Duplicated code blocks (similar patterns in multiple files)
+- Files over 500 lines (potential god objects)
+- Functions over 50 lines (potential complexity)
+
+Categorize each finding:
+
+- **Architecture Debt**: Wrong abstractions, missing patterns, coupling issues
+- **Code Quality Debt**: Duplication, complexity, naming, missing types
+- **Test Debt**: Missing tests, flaky tests, untested edge cases
+- **Documentation Debt**: Missing docs, outdated docs, undocumented APIs
+- **Dependency Debt**: Outdated packages, deprecated APIs, version conflicts
+- **Performance Debt**: Known slow paths, unoptimized queries, memory issues
+
+Present the findings to the user.
+
+Ask: "May I write these findings to `docs/tech-debt-register.md`?"
+
+If yes, update the register (append new entries, do not overwrite existing ones). Verdict: **COMPLETE** — scan findings written to register.
+
+If no, stop here. Verdict: **BLOCKED** — user declined write.
+
+---
+
+## Phase 2B: Add Mode
+
+Prompt for: description, category, affected files, estimated fix effort, impact if left unfixed.
+
+Present the new entry to the user.
+
+Ask: "May I append this entry to `docs/tech-debt-register.md`?"
+
+If yes, append the entry. Verdict: **COMPLETE** — entry added to register.
+
+If no, stop here. Verdict: **BLOCKED** — user declined write.
+
+---
+
+## Phase 2C: Prioritize Mode
+
+Read the debt register at `docs/tech-debt-register.md`.
+
+Score each item by: `(impact_if_unfixed × frequency_of_encounter) / fix_effort`
+
+Re-sort the register by priority score and recommend which items to include in the next sprint.
+
+Present the re-prioritized register to the user.
+
+Ask: "May I write the re-prioritized register back to `docs/tech-debt-register.md`?"
+
+If yes, write the updated file. Verdict: **COMPLETE** — register re-prioritized and saved.
+
+If no, stop here. Verdict: **BLOCKED** — user declined write.
+
+---
+
+## Phase 2D: Report Mode
+
+Read the debt register. Generate summary statistics:
+
+- Total items by category
+- Total estimated fix effort
+- Items added vs resolved since last report
+- Trending direction (growing / stable / shrinking)
+
+Flag any items that have been in the register for more than 3 sprints.
+
+Output the report to the user. This mode is read-only — no files are written. Verdict: **COMPLETE** — debt report generated.
+
+---
+
+## Phase 3: Next Steps
+
+- Run `/sprint-plan` to schedule high-priority debt items into the next sprint.
+- Run `/tech-debt report` at the start of each sprint to track debt trends over time.
 
 ### Debt Register Format
 

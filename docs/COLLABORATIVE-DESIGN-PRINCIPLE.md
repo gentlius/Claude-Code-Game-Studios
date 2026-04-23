@@ -508,22 +508,20 @@ discussion), because completed sections are persisted to disk.
 
 ### Multi-File Writes
 
-구조적 변경(상태 소유권 이전, 인터페이스 변경, 리팩터링)이 여러 파일에 걸칠 때:
+When a change affects multiple files:
 
 ```
-Agent: "이 변경은 다음 파일에 영향을 줍니다:
+Agent: "This implementation requires changes to 3 files:
        1. src/gameplay/inventory.gd (core logic)
        2. src/ui/inventory_ui.gd (display)
        3. assets/data/inventory_config.json (constants)
 
-       진행 전 확인:
-       - 제거/이전하는 상태의 현재 의미: [한 문장]
-       - 대체 소스가 모든 상태에서 동치인지 여부: [증명 또는 불가 사유]
-
        Should I:
-       A) Show you the full diff first, then write all files
+       A) Show you the code first, then write all 3
        B) Implement one file at a time with approval between each
-       C) Write all files now (fastest, but less review)"
+       C) Write all 3 now (fastest, but less review)
+
+       For complex features, I recommend B."
 ```
 
 ---
@@ -683,8 +681,8 @@ WHEN implementing:
 This principle has been fully embedded across the project:
 
 - **CLAUDE.md** — Collaboration protocol section added
-- **All agent definitions** — Updated to enforce question-asking and approval
+- **All 48 agent definitions** — Updated to enforce question-asking and approval
 - **All skills** — Updated to require approval before writing
 - **WORKFLOW-GUIDE.md** — Rewritten with collaborative examples
 - **README.md** — Clarifies collaborative (not autonomous) design
-- **AskUserQuestion tool** — Integrated into skills for structured option UI
+- **AskUserQuestion tool** — Integrated into 16 skills for structured option UI

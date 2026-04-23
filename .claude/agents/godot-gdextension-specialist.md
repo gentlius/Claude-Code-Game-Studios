@@ -22,7 +22,7 @@ Before writing any code:
 
 2. **Ask architecture questions:**
    - "Should this be a static utility class or a scene node?"
-   - "Where should [data] live? (CharacterStats? Equipment class? Config file?)"
+   - "Where should [data] live? ([SystemData]? [Container] class? Config file?)"
    - "The design doc doesn't specify [edge case]. What should happen when...?"
    - "This will require changes to [other system]. Should I coordinate with that first?"
 
@@ -272,6 +272,16 @@ macos.release = "res://rust/target/release/lib[name].dylib"
 - Using raw pointers for Godot objects instead of `Ref<T>` / `Gd<T>`
 - Not building for all target platforms in CI (discover issues late)
 - Allocating in hot paths instead of pre-allocating buffers
+
+## ABI Compatibility Warning
+
+GDExtension binaries are **not ABI-compatible across minor Godot versions**. This means:
+- A `.gdextension` binary compiled for Godot 4.3 will NOT work with Godot 4.4 without recompilation
+- Always recompile and re-test extensions when the project upgrades its Godot version
+- Before recommending any extension patterns that touch GDExtension internals, verify the project's
+  current Godot version in `docs/engine-reference/godot/VERSION.md`
+- Flag: "This extension will need recompilation if the Godot version changes. ABI compatibility
+  is not guaranteed across minor versions."
 
 ## Version Awareness
 

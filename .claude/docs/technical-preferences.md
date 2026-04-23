@@ -10,6 +10,18 @@
 - **Rendering**: Vulkan (Forward+) — 웹 export 시 Compatibility (OpenGL 3)
 - **Physics**: Jolt (4.6 기본)
 
+## Input & Platform
+
+<!-- Written by /setup-engine. Read by /ux-design, /ux-review, /test-setup, /team-ui, and /dev-story -->
+<!-- to scope interaction specs, test helpers, and implementation to the correct input methods. -->
+
+- **Target Platforms**: [TO BE CONFIGURED — e.g., PC, Console, Mobile, Web]
+- **Input Methods**: [TO BE CONFIGURED — e.g., Keyboard/Mouse, Gamepad, Touch, Mixed]
+- **Primary Input**: [TO BE CONFIGURED — the dominant input for this game]
+- **Gamepad Support**: [TO BE CONFIGURED — Full / Partial / None]
+- **Touch Support**: [TO BE CONFIGURED — Full / Partial / None]
+- **Platform Notes**: [TO BE CONFIGURED — any platform-specific UX constraints]
+
 ## Naming Conventions
 
 - **Classes**: PascalCase (e.g., `GameClock`, `PriceEngine`)
@@ -71,3 +83,30 @@
 - [ADR-024](../../docs/architecture/024-price-engine-gdextension.md) — PriceEngine GDExtension 마이그레이션: M1-first 배치 생성(D1→M1 확장 폐기), 2-tier 캐시(M1 7800bars+D1 5200bars), C++ MarkovGenerator(Phase 3)
 - [ADR-025](../../docs/architecture/025-stock-archetype-markov-matrices.md) — 종목 아키타입 Markov 행렬: 6종 아키타입별 비대칭 전환 행렬 + seasonDrift, per-stock 행렬 선택(C++ archetype_key 파라미터)
 - [ADR-026](../../docs/architecture/026-macro-trend-layer.md) — 매크로 추세 레이어: 일봉 3-state Markov (driftScale + self-prob 0.96 + seasonBias→macro_tm 리다이렉트, CACHE_VERSION=6)
+
+## Engine Specialists
+
+<!-- Written by /setup-engine when engine is configured. -->
+<!-- Read by /code-review, /architecture-decision, /architecture-review, and team skills -->
+<!-- to know which specialist to spawn for engine-specific validation. -->
+
+- **Primary**: godot-specialist
+- **Language/Code Specialist**: godot-gdscript-specialist
+- **Shader Specialist**: godot-shader-specialist
+- **UI Specialist**: godot-specialist (UI/Control nodes)
+- **Additional Specialists**: godot-gdextension-specialist (C++/GDExtension)
+- **Routing Notes**: GDScript files → gdscript-specialist; .cpp/.h in gdextension/ → gdextension-specialist; .gdshader → shader-specialist; all others → godot-specialist
+
+### File Extension Routing
+
+<!-- Skills use this table to select the right specialist per file type. -->
+<!-- If a row says [TO BE CONFIGURED], fall back to Primary for that file type. -->
+
+| File Extension / Type | Specialist to Spawn |
+|-----------------------|---------------------|
+| Game code (`.gd`) | godot-gdscript-specialist |
+| Shader / material files (`.gdshader`) | godot-shader-specialist |
+| UI / screen files (`.tscn` with Control root) | godot-specialist |
+| Scene / prefab / level files (`.tscn`, `.tres`) | godot-specialist |
+| Native extension / plugin files (`.cpp`, `.h`, `SConstruct`) | godot-gdextension-specialist |
+| General architecture review | godot-specialist |

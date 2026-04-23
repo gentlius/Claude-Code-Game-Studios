@@ -1016,12 +1016,12 @@ func generate_stock_m1_cache(
 				float(base_price) * HARD_CLAMP_MAX_RATIO
 			)
 
-			# M1 OHLC with proportional wick.
-			var m1_open: int  = roundi(current_price)
-			var m1_close: int = roundi(next_price)
+			# M1 OHLC with proportional wick — all values tick-aligned (ADR-002).
+			var m1_open: int  = round_to_tick(current_price)
+			var m1_close: int = round_to_tick(next_price)
 			var swing: float  = absf(next_price - current_price) * rng.randf_range(0.2, 0.6)
-			var m1_high: int  = roundi(maxf(current_price, next_price) + swing)
-			var m1_low: int   = roundi(minf(current_price, next_price) - swing)
+			var m1_high: int  = round_to_tick(maxf(current_price, next_price) + swing)
+			var m1_low: int   = round_to_tick(minf(current_price, next_price) - swing)
 
 			# Volume: base range × state multiplier.
 			var bvr: Array = cfg_bvr[vol_profile]
@@ -1050,15 +1050,15 @@ func generate_stock_m1_cache(
 		# Snap last M1 close to current_price for cross-day continuity.
 		if m1_total > 0:
 			var last_pos: int = (m1_total - 1) % m1_capacity
-			m1_ohlc[last_pos * 4 + 3] = roundi(current_price)
+			m1_ohlc[last_pos * 4 + 3] = round_to_tick(current_price)
 
-		# Write D1 bar to rolling D1 buffer.
+		# Write D1 bar to rolling D1 buffer — tick-aligned (ADR-002).
 		var d1_pos: int  = d1_total % d1_capacity
 		var d1_base: int = d1_pos * 4
 		d1_ohlc[d1_base]     = day_open
-		d1_ohlc[d1_base + 1] = roundi(day_high)
-		d1_ohlc[d1_base + 2] = roundi(maxf(day_low, 100.0))
-		d1_ohlc[d1_base + 3] = roundi(current_price)
+		d1_ohlc[d1_base + 1] = round_to_tick(day_high)
+		d1_ohlc[d1_base + 2] = round_to_tick(maxf(day_low, 100.0))
+		d1_ohlc[d1_base + 3] = round_to_tick(current_price)
 		d1_vol[d1_pos] = day_volume
 		d1_total += 1
 
@@ -1260,10 +1260,9 @@ func sync_prices_from_prehistory() -> void:
 		var state: Dictionary = _stock_states[stock_id]
 		if state.get("is_etf", false):
 			continue
-		var raw: int = M1CacheManager.get_last_prehistory_close(stock_id)
-		if raw <= 0:
+		var last_close: int = M1CacheManager.get_last_prehistory_close(stock_id)
+		if last_close <= 0:
 			continue
-		var last_close: int = round_to_tick(float(raw))
 		state["current_price"]     = last_close
 		state["prev_day_close"]    = last_close
 		state["season_open_price"] = last_close

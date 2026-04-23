@@ -183,9 +183,20 @@ func _init_season() -> void:
 		_rotation_cooldowns[sector] = 0
 		_sector_return_history[sector] = [] as Array[float]
 
-	# Inject initial ETF prices into PriceEngine cache
-	for etf_id: String in _etf_prices:
-		PriceEngine.inject_price(etf_id, _etf_prices[etf_id])
+	# Compute actual ETF prices from current stock prices (post-prehistoric close) and
+	# inject into PriceEngine. Must run before seeding return history below.
+	_recalculate_all_etf_prices()
+
+	# Seed sector_return_history with the current return so that at tick 0
+	# prev_avg == current_return → momentum ≈ 0 → no false rotation events.
+	# Without this, every sector fires a rotation on tick 0 because the
+	# ETF prices jump from ETF_BASE_PRICE to actual prehistoric-close-derived values.
+	for sector: String in _sector_etfs:
+		var initial_return: float = _get_sector_return(sector)
+		var seed_history: Array[float] = [] as Array[float]
+		for _i: int in range(_flow_lookback_ticks):
+			seed_history.append(initial_return)
+		_sector_return_history[sector] = seed_history
 
 	_initialized = true
 

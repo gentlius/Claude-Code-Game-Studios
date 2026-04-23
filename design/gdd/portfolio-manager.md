@@ -64,17 +64,31 @@ PortfolioSummary {
 SimPortfolio extends BasePortfolio {  # "Sim" = simulation (게임 경제). 예수금 직접 투자.
     season_id: string
     season_start_deposit: int   # 시즌 시작 시 예수금 스냅샷 (= CurrencySystem.auto_deposit_to_sim() 입금액. 첫 시즌: 1,000,000, 이후 tier_threshold)
+    prev_day_close_assets: int  # 전일 장마감 총 자산 스냅샷 — XpSystem 일일 알파 계산 전용.
+                                # 초기값: season_start_deposit (시즌 첫날은 전일 데이터 없으므로 대체).
+                                # on_market_close() 호출 시 현재 _cached_total_assets로 갱신 (XP 계산 이후).
+
+    # --- 레버리지 포지션 (B-03: LeverageManager Hard 의존 추가) ---
+    # LeverageManager가 포지션을 생성/소멸할 때 직접 호출. 포트폴리오는 equity 기여분만 추적.
+    add_leverage_holding(position_id, stock_id, quantity, open_price, borrowed, multiplier)
+    remove_leverage_holding(position_id)
+    get_all_leverage_positions() -> Array[LeveragePosition]  # LeveragePosition: position_id, stock_id, position_market_value, borrowed, accrued_interest
 
     update_valuation(price_provider, sim_cash, reserved_cash)
-                                # 틱별 호출. 평가 갱신 + 캐시 갱신
-    get_return_rate(): float    # 캐시된 최신 수익률 반환 (파라미터 불필요)
+                                # 틱별 호출. 평가 갱신 + 캐시 갱신. 레버리지 equity도 포함.
+    get_return_rate(): float    # 캐시된 최신 수익률 반환 — 시즌 누적 기준 (파라미터 불필요)
+    get_daily_return_rate(): float  # 전일 대비 당일 총 자산 등락률 (%) — XpSystem 전용.
+                                    # = (get_total_assets() - prev_day_close_assets) / prev_day_close_assets × 100
+                                    # prev_day_close_assets = 0이면 0.0 반환.
+    on_market_close()           # 장 마감 시 prev_day_close_assets 스냅샷 갱신.
+                                # XpSystem.process_daily_xp() 실행 이후에 호출되어야 함 (당일 XP 계산에 금일 자산 사용 방지).
     get_total_assets(): int     # 캐시된 최신 대회 계좌 평가금액 반환 (= account_total_value. 현금·유형 자산 미포함)
     get_portfolio_summary(): PortfolioSummary
                                 # 캐시된 값으로 PortfolioSummary 조립.
                                 # 내부적으로 SkillTree.get_max_holdings()를 호출하여 슬롯 정보를 조회한다.
                                 # sim_cash, reserved_cash는 update_valuation에서
                                 # 캐시된 값 사용 (추가 외부 조회 불필요)
-    reset()                     # 시즌 종료 시 전체 초기화
+    reset()                     # 시즌 종료 시 전체 초기화 (prev_day_close_assets = 0, leverage_positions 클리어)
 }
 
 // 향후 확장: 수수료, 배당, 공매도 등 고급 기능 추가 시
@@ -182,9 +196,16 @@ update_valuation(price_provider, sim_cash, reserved_cash):
         holding.unrealized_pnl_pct = holding.unrealized_pnl / holding.total_invested × 100
         total_stock_value += holding.current_value
 
-    // Step 2: 캐시 갱신 (get_total_assets, get_return_rate의 반환값)
+    // Step 2: 레버리지 equity 합산 (B-03)
+    total_leverage_equity = 0
+    for each pos in leverage_positions:
+        pos.position_market_value = price_provider.get_current_price(pos.stock_id) × pos.quantity
+        equity_i = pos.position_market_value - pos.borrowed - pos.accrued_interest
+        total_leverage_equity += max(0, equity_i)  # 음수 equity는 margin call 대상 — 0 클램프
+
+    // Step 3: 캐시 갱신 (get_total_assets, get_return_rate의 반환값)
     // _cached_total_assets = account_total_value (대회 계좌 평가금액, 현금·유형 자산 미포함)
-    _cached_total_assets = sim_cash + reserved_cash + total_stock_value
+    _cached_total_assets = sim_cash + reserved_cash + total_stock_value + total_leverage_equity
     _cached_return_rate = (_cached_total_assets - season_start_deposit) / season_start_deposit × 100
     _cached_sim_cash = sim_cash
     _cached_reserved_cash = reserved_cash
@@ -269,8 +290,13 @@ realized_pnl = (sell_price - avg_buy_price) × sell_quantity
 ### F4. 대회 내 계좌 총 평가금액
 
 ```
-account_total_value = sim_cash + reserved_cash + Σ(holding_i.quantity × current_price_i)
+account_total_value = sim_cash + reserved_cash
+                    + Σ(holding_i.quantity × current_price_i)
+                    + Σ(max(0, position_market_value_j - borrowed_j - accrued_interest_j))
 ```
+
+레버리지 포지션의 equity 기여분 = `position_market_value - borrowed - accrued_interest`.
+음수 equity는 마진콜 대상이므로 0으로 클램프 (부채가 총 자산을 음수로 만들지 않음).
 
 > **주의**: `account_total_value`는 3층 자산 구조의 2층(대회 계좌)만 반영한다.
 > 현금 자산(`cash_assets`) 및 유형 자산(`tangible_assets`)은 포함하지 않는다.
@@ -280,7 +306,10 @@ account_total_value = sim_cash + reserved_cash + Σ(holding_i.quantity × curren
 |----------|------|-------|--------|-------------|
 | `sim_cash` | int | 0+ | 재화 시스템 | 예수금 잔액 (지정가 예약금 차감 후) |
 | `reserved_cash` | int | 0+ | 주문 엔진 | 미체결 지정가 매수 주문의 예약금 합계. `Σ(pending_buy_limit.reserved_cash)` |
-| `account_total_value` | int | 0+ | calculated | 현금 + 예약금 + 보유 주식 평가액 (= `get_total_assets()` 반환값) |
+| `position_market_value_j` | int | 0+ | 가격 엔진 | 레버리지 포지션 j의 현재 시가 총액 |
+| `borrowed_j` | int | 0+ | LeverageManager | 포지션 j의 차입금 |
+| `accrued_interest_j` | int | 0+ | LeverageManager | 포지션 j의 누적 이자 |
+| `account_total_value` | int | 0+ | calculated | 현금 + 예약금 + 주식 평가액 + 레버리지 equity (= `get_total_assets()` 반환값) |
 
 `reserved_cash`는 `sim_cash`에서 이미 선차감된 금액이다. 총 자산에 합산하지 않으면
 지정가 매수 제출 시 총 자산이 예약금만큼 감소하여 플레이어에게 오해를 줄 수 있다.
@@ -289,6 +318,19 @@ account_total_value = sim_cash + reserved_cash + Σ(holding_i.quantity × curren
 
 **예시**: sim_cash=300,000, reserved_cash=200,000, 스타칩 10주×71,500=715,000
 - `account_total_value = 300,000 + 200,000 + 715,000 = 1,215,000원`
+
+### F4-b. 일일 수익률 (XpSystem 전용)
+
+```
+daily_return_rate = (account_total_value_today - prev_day_close_assets) / prev_day_close_assets × 100
+```
+
+`prev_day_close_assets`는 전일 `on_market_close` 시점의 `account_total_value` 스냅샷.
+시즌 첫 거래일: `prev_day_close_assets = season_start_deposit`.
+
+`get_daily_return_rate()`가 `get_return_rate()`와 다른 점:
+- `get_return_rate()` = 시즌 누적 수익률 (시즌 시작 대비)
+- `get_daily_return_rate()` = 전일 대비 당일 수익률 (XP alpha 계산용)
 
 ### F5. 대회 수익률
 
@@ -326,9 +368,7 @@ else:
 
 | Variable | Default | Range | Owner | Description |
 |----------|---------|-------|-------|-------------|
-| `max_holdings_p0` | 3 | 1~5 | config | P0 동시 보유 종목 수 |
-| `max_holdings_p1` | 5 | 3~7 | config | P1 동시 보유 종목 수 |
-| `max_holdings_p2` | 10 | 5~15 | config | P2 동시 보유 종목 수 |
+| ~~`max_holdings_p0/p1/p2`~~ | — | — | **`skill-tree.md`** | **단일 소유자: `skill-tree.md §Tuning Knobs` (MAX_HOLDINGS_T0/T1/T2). 이 GDD는 해당 값을 직접 정의하지 않으며 `SkillTree.get_max_holdings()`로 런타임에 조회한다.** |
 | `season_start_deposit` | 변동 (tier_threshold) | N/A | 재화 시스템 | 시즌 시작 시 예수금 자동 입금액 (= `CurrencySystem.auto_deposit_to_sim()` 결과, 첫 시즌 1,000,000) |
 
 > **초기화 순서**: `season_start_deposit`는 `on_season_start` 시그널 수신 시 `CurrencySystem.get_season_start_deposit()`을 호출하여 스냅샷한다. XP 시스템도 동일 시점에 동일 값을 스냅샷하므로 단일 소스(CurrencySystem)에서 읽어 일관성을 보장한다.
@@ -360,7 +400,8 @@ else:
 | 포트폴리오 UI | UI가 참조 | 보유 종목/손익 표시. **Soft** |
 | 트레이딩 스크린 | UI가 참조 | 사이드바 요약 표시. **Soft** |
 | 스킬 트리 | 포트폴리오가 참조 | `get_max_holdings()` → max_holdings 결정. **Soft** (미구현 시 P0 기본값 3) |
-| 경험치 시스템 | XP가 참조 (역방향 Hard) | `get_return_rate()` → 일일/시즌 수익률 산출. **Soft** (포트폴리오 입장 — 포트폴리오는 XP 없이도 작동). **역방향**: `xp-system.md` (Approved)가 이 시스템에 **Hard** 의존 — 이 시스템이 In Review 상태이므로 xp-system 구현 전에 Approved 전환 필수. 상단 Note 참조. |
+| 경험치 시스템 | XP가 참조 | `get_daily_return_rate()` → 전일 대비 당일 수익률 (일일 알파 XP 계산 전용). `get_return_rate()` → 시즌 누적 수익률. **Soft** (포트폴리오 입장) |
+| **LeverageManager** | **LeverageManager → 포트폴리오** | **`add_leverage_holding()`, `remove_leverage_holding()` 포지션 생성/소멸 시 직접 호출. `get_all_leverage_positions()` equity 계산용. Hard (leverage-trading.md 구현 시)** |
 
 이 시스템은 재화 시스템, 종목 DB에 의존하는 Core 시스템이다.
 
@@ -397,7 +438,7 @@ else:
 | Question | Owner | Deadline | Resolution |
 |----------|-------|----------|------------|
 | 시즌 종료 강제 청산의 정확한 시점 — 마지막 틱 종가 vs 장 마감 후 별도 처리 | game-designer | 시즌 관리 GDD 시 | 잠정 결정: MARKET_CLOSED 직후 ①~③(청산+스냅샷) 실행, 리포트 확인 후 ④~⑤(리셋). 시즌/대회 관리가 오케스트레이터. 시즌 관리 GDD에서 최종 확정 |
-| 거래 내역 시즌 간 보존 여부 — 이전 시즌 기록 열람 가능? | game-designer | 세이브/로드 GDD 시 | 미정. 영향: TransactionRecord 보관 범위 (현 설계: 시즌 내 전체 보존). 세이브/로드 GDD에서 결정 전까지 현 범위 유지. |
+| 거래 내역 시즌 간 보존 여부 — 이전 시즌 기록 열람 가능? | game-designer | 세이브/로드 GDD 시 | **확정 (4-B)**: 현 시즌 내 전체 보존, 시즌 종료 시 아카이브(열람 전용). save-load-system.md §직렬화 대상에 `transaction_history_archive: Array[Array]` 추가 필요. 열람 UI는 F2 리그 화면 하위 탭으로 Sprint 10 이후 구현. |
 | RealPortfolio 확장 시 수수료/배당 처리 | systems-designer | 확장 시점 | 향후 |
 
 ---
@@ -423,6 +464,16 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `PortfolioManager.get_all_holdings() -> Array[Dictionary]` 존재
 - [x] `PortfolioManager.update_valuation(cash, reserved)` 존재
 - [x] `PortfolioManager.reset()` 존재
+> **Sprint 11+ 구현 백로그 (B-03/B-04 — 크로스 리뷰 2026-04-23 신규 API 명세):**
+> 아래 항목은 LeverageManager 통합(B-03)과 일별 수익률 XP 연동(B-04) 구현 시 추가한다.
+> 현 스프린트 체크리스트 대상이 아니며, 구현 착수 시 해당 스프린트 DoD로 이관한다.
+>
+> - `PortfolioManager.get_daily_return_rate() -> float` — prev_day_close_assets 대비 당일 수익률 (B-04)
+> - `PortfolioManager.on_market_close()` — prev_day_close_assets 스냅샷 저장 (B-04)
+> - `PortfolioManager.add_leverage_holding(stock_id, qty, entry_price, collateral)` — 레버리지 포지션 추가 (B-03)
+> - `PortfolioManager.remove_leverage_holding(position_id)` — 레버리지 포지션 제거 (B-03)
+> - `PortfolioManager.get_all_leverage_positions() -> Array[LeveragePosition]` — 전체 포지션 조회 (B-03)
+> - `update_valuation` — 레버리지 equity (시가 - 부채) 합산 로직 추가 (B-03)
 
 ### AC → 테스트 매핑
 

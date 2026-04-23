@@ -160,12 +160,12 @@ max_holdings = HOLDINGS_TABLE[highest_portfolio_tier]
 ### F3. 루머 정확도
 
 ```
-rumor_accuracy = RUMOR_BASE_ACCURACY  # 70%
+rumor_accuracy = RUMOR_BASE_ACCURACY  # 0.55 (55%) — B-09: 0.70에서 하향. 루머 단독 지배 전략 차단.
 rumor_lead_time = RUMOR_LEAD_TICKS    # 뉴스 발생 60틱 (게임시간 15분, 실시간 약 11.5초 at 1x) 전
 ```
 
 루머 메시지는 실제 뉴스의 종목명과 방향(호재/악재)을 포함하되,
-정확도 미달 시 방향이 반전됨 (30% 확률로 잘못된 힌트).
+정확도 미달 시 방향이 반전됨 (45% 확률로 잘못된 힌트).
 
 ### F4. 레버리지 배율
 
@@ -230,12 +230,16 @@ equity_ratio  = (position_market_value - borrowed - accrued_interest) / position
 | SKILL_COST | 1 (전체 동일) | 1~3 | 스킬 해금 속도 | 2+로 올리면 초반 성장감 급감 |
 | NEWS_DELAY_T0 | 20틱 (게임 5분, 실시간 ~3.8초) | 10~40 | 초기 정보 불이익 크기 | 너무 크면 뉴스 시스템 무용 |
 | NEWS_DELAY_T1 | 8틱 (게임 2분, 실시간 ~1.5초) | 4~15 | S1 해금 가치 | T0과 차이 적으면 해금 동기 부족 |
-| RUMOR_BASE_ACCURACY | 70% | 50~90% | 루머 채널 가치 | 90%+면 확실한 선행 정보 = 밸런스 파괴 |
+| RUMOR_BASE_ACCURACY | 55% | 50~80% | 루머 채널 가치 (B-09: 70%→55%. 교차 검증 없이 장기 수익 불가 설계) | 65%+: 교차 검증 없이 양수 EV 재발생. 80%+: 지배 전략 재등장 |
 | RUMOR_LEAD_TICKS | 60틱 (게임 15분, 실시간 ~11.5초) | 30~120 | 루머 선행 시간 | 120+면 과도한 이점 |
 | LEVERAGE_MULTIPLIERS | 2×/3×/5× | 각 배율 ±50% | 레버리지 위험/보상 | 5×는 6% 하락 시 마진콜, 고위험 |
 | MAX_HOLDINGS_T0 | 3 | 2~5 | 초기 분산 제한 | 2이면 집중 투자 강제 |
 | MAX_HOLDINGS_T1 | 5 | 4~7 | 중간 분산 | — |
 | MAX_HOLDINGS_T2 | 10 | 8~15 | 완전 분산 | 종목 수 초과 시 UI 복잡도 증가 |
+
+> **소유권 선언 (B-07)**: `MAX_HOLDINGS_T*` 값의 단일 소유자는 이 파일이다.
+> `portfolio-manager.md`는 런타임에 `SkillTree.get_max_holdings()`로 조회하며, 독립적인 tuning knob 정의를 가지지 않는다.
+> 이 값을 변경할 때는 이 파일만 수정한다.
 
 ## Acceptance Criteria
 

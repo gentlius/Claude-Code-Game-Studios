@@ -973,6 +973,8 @@ rumor_accuracy = 0.70  # 30% 확률로 방향 반전
 | 뉴스 피드 UI | UI가 뉴스 텍스트를 소비 | NewsQueueEntry 전달. **Soft** (UI 없이도 이벤트 생성 가능) |
 | 스킬 트리 | 뉴스/이벤트가 참조 | 딜레이 레벨 조회. **Soft** (미구현 시 S0 기본값). 역방향 참조: `skill-tree.md` §Dependencies — S2(뉴스 딜레이 단축) 스킬이 이 시스템에 의존 |
 | 시즌/대회 관리 | 뉴스/이벤트가 참조 | 시즌 테마 조회. **Soft** (미구현 시 기본 가중치) |
+| rumor-channel.md (S3) | S3 스킬이 이 시스템에 의존 | `_schedule_event()` 호출 시 `has_rumor_channel()` 체크 → `on_rumor_hint` 시그널 emit. **Soft** (S3 미해금 시 무동작). (4-A: 역방향 참조) |
+| financial-report-system.md | FinancialReportSystem이 이 시스템에 주입 | `inject_event(FINANCIAL_REPORT, ...)` 경로로 실적 발표 이벤트 주입 (ADR-022). **Hard**. (4-A: 역방향 참조) |
 
 ## Tuning Knobs
 
@@ -983,6 +985,7 @@ rumor_accuracy = 0.70  # 30% 확률로 방향 반전
 | `scope_weight_macro` | 0.10 | 0.05~0.3 | 시장 전체 충격 빈번 | MACRO 희소화 |
 | `NEWS_DELAY_T0` | 5분(=20틱) | 3~10분 | 정보 격차 심화. 너무 높으면 이탈 위험 (10분=40틱은 M1 10캔들 지연으로 인과관계 단절 느낌) | T0도 빠른 반응. S1 업그레이드 가치 감소 위험 → T1도 같이 조정 필요 |
 | `max_single_impact` | 0.15 | 0.10~0.25 | 극단적 이벤트 허용 (VI 빈번) | 가격 변동 상한 제한 (안정적 시장) |
+> **⚠️ 연동 경고 (4-D)**: `max_single_impact` 변경 시 `order-engine.md`의 `pre_market_buffer_pct`도 동일한 값으로 갱신해야 한다. PRE_MARKET 예약금 버퍼는 이 값을 기준으로 설계됐기 때문이다. 두 값이 불일치하면 MEGA 이벤트 발생 시 PRE_MARKET 시장가 매수가 예약금 부족으로 REJECTED되거나 불필요하게 과잉 차감된다. |
 | `rumor_advance_ticks` | 60틱 | 20~120 | 루머 가치 증가. 너무 높으면 S3 OP | 선행 시간 감소. 루머 실질 가치 하락 |
 | `fake_rumor_per_day` | 2 | 0~4 | 루머 신뢰도 하락 | 루머 과신 가능 |
 | `overnight_individual_prob` | 0.05 | 0.02~0.10 | 프리마켓 뉴스 풍부 | 조용한 아침 |

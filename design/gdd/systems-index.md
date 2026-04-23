@@ -227,3 +227,5 @@ GDD가 아닌 디자인 보조 문서. 여기에 없는 `design/*.md` 파일은 
 | [residence-art-direction.md](../residence-art-direction.md) | 거주지 배경 이미지 스타일 기준 + 에셋 현황 | 2026-04-15 | Draft |
 | [residence-image-prompts.md](../residence-image-prompts.md) | 11티어 거주지 AI 이미지 생성 프롬프트 | 2026-04-15 | Active |
 | [narrative/tier-up-lines.md](../narrative/tier-up-lines.md) | 티어업 시 표시되는 서사 훅 텍스트 (브론즈→실버 등) | 2026-04-15 | Draft |
+| [gdd-cross-review-2026-04-23.md](../gdd-cross-review-2026-04-23.md) | 전체 GDD 크로스 리뷰 리포트 (일관성 + 게임디자인 홀리즘, BLOCKING 9건) | 2026-04-23 | Active |
+| [economy-balance.md](../economy-balance.md) | cash_assets·sim_cash·XP 전체 수도꼭지/배수구 분석, 지배 전략 위험 지도 | 2026-04-23 | Active |

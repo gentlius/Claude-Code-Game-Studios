@@ -50,7 +50,9 @@ Progression 시스템이다. 일일 장 마감 시 시장 대비 초과 수익(A
 
 ```
 market_return_pct = 전체 종목 당일 단순 평균 등락률
-player_return_pct = (장 마감 총 자산 - 전일 장 마감 총 자산) / 전일 장 마감 총 자산 × 100
+player_return_pct = PortfolioManager.get_daily_return_rate()
+                  # = (account_total_value_today - prev_day_close_assets) / prev_day_close_assets × 100
+                  # prev_day_close_assets: portfolio-manager.md §SimPortfolio.on_market_close()에서 스냅샷
 alpha_pct = player_return_pct - market_return_pct
 daily_xp = floor(BASE_DAILY_XP × daily_alpha_multiplier(alpha_pct))
 ```
@@ -135,7 +137,7 @@ required_xp(level) = BASE_LEVEL_XP × (level ^ LEVEL_EXPONENT)
 | 시스템 | 방향 | 인터페이스 |
 |--------|------|-----------|
 | 주문 엔진 | → XP | `on_order_filled` — 일일 거래 유무 판정용 (체결 1건 이상 시 일일 보너스 활성화) |
-| 포트폴리오 | → XP | `get_return_rate()` → 일일/시즌 수익률 산출 (player_return_pct) |
+| 포트폴리오 | → XP | `get_daily_return_rate()` → 전일 대비 당일 수익률 (player_return_pct, 일일 알파 전용). `get_return_rate()` → 시즌 누적 수익률 (시즌 보너스용) |
 | 가격 엔진 | → XP | `get_market_avg_return_pct()` → 전체 종목 단순 평균 등락률 산출 (market_return_pct) |
 | 게임 시계 | → XP | `on_market_close` → 일일 보너스 산출 |
 | 시즌 관리 | → XP | `on_season_end` → 시즌 보너스 산출 (※ 시즌 관리 GDD 미설계 — provisional). `final_rank: int` (1-indexed) |
@@ -159,7 +161,7 @@ daily_xp = floor(BASE_DAILY_XP × daily_alpha_multiplier(alpha_pct))
 | BASE_DAILY_XP | 30 | 10~100 | 일일 기본 XP |
 | daily_alpha_multiplier | 테이블 참조 | 0.5~3.0 | alpha_pct 구간별 배율 |
 | market_return_pct | 산출값 | −∞~+∞ | 전체 종목 단순 평균 등락률 (%) |
-| player_return_pct | 산출값 | −100~+∞ | 플레이어 당일 총자산 등락률 (%) |
+| player_return_pct | 산출값 | −100~+∞ | 플레이어 당일 총자산 등락률 (%) — `PortfolioManager.get_daily_return_rate()` 반환값 |
 | alpha_pct | 산출값 | −∞~+∞ | 플레이어 수익률 − 시장 평균 |
 
 daily_alpha_multiplier 테이블 (Detailed Design 규칙 1-1 참조):
@@ -280,7 +282,7 @@ get_cumulative_xp_for_level(target_level) = Σ required_xp(lv) for lv = 1 to (ta
 | 시스템 | 의존 유형 | 데이터 |
 |--------|----------|--------|
 | 주문 엔진 | Soft | `on_order_filled` — 일일 거래 유무 판정용 (체결 1건 이상 시 일일 보너스 활성화) |
-| 포트폴리오 관리 | Hard | `get_return_rate()` → 일일/시즌 수익률 (player_return_pct) |
+| 포트폴리오 관리 | Hard | `get_daily_return_rate()` → 전일 대비 당일 수익률 (일일 알파 player_return_pct). `get_return_rate()` → 시즌 누적 수익률 (시즌 보너스 return_bonus용) |
 | 가격 엔진 | Hard | `get_market_avg_return_pct()` → 전체 종목 단순 평균 등락률 (market_return_pct) |
 | 게임 시계 | Hard | `on_market_close`, `on_season_end` 시그널 |
 | 시즌/대회 관리 | Soft | `final_rank: int` (1-indexed, 미설계 — MVP에서는 하드코딩 가능) |
@@ -317,7 +319,7 @@ get_cumulative_xp_for_level(target_level) = Σ required_xp(lv) for lv = 1 to (ta
 | AC-6 | 한 번에 2+ 레벨업 시 각 레벨마다 포인트 부여 | 유닛 테스트: 대량 XP 부여 후 포인트 == 레벨-1 |
 | AC-7 | XP/레벨/스킬 포인트가 시즌 리셋 시 영구 유지 | 시즌 리셋 전후 값 비교 테스트 |
 | AC-8 | `on_level_up` 시그널이 레벨업 시 정확히 1회 발신 | 시그널 카운트 테스트 |
-| AC-9 | 시즌 1회 평균 XP가 ~1,400~1,800 범위 (경쟁 플레이어 기준, 20거래일, alpha +1~+3%, 3위 가정). 하위 플레이어 기준 ~550 XP 이상. | 시뮬레이션 테스트로 밸런스 확인 (market_return_pct mock 포함) |
+| AC-9 | 시즌 1회 평균 XP가 ~1,900 범위 (경쟁 플레이어 기준, 20거래일, alpha +1~+3%, 3위 가정 — §F4 추정치와 일치). 하위 플레이어 기준 ~550 XP 이상. | 시뮬레이션 테스트로 밸런스 확인 (market_return_pct mock 포함) |
 
 ## Open Questions
 

@@ -238,8 +238,8 @@ season_return_rate = (account_total_value - season_start_deposit) / season_start
 | 시즌 참가비 도입 여부 (예수금에서 차감) | game-designer | 확장 시점 | 미정 |
 | 수수료 시스템 도입 여부 (매매 수수료) | systems-designer | 확장 시점 | MVP 0% 확정 |
 | 예수금 이자 시스템 도입 여부 | economy-designer | 확장 시점 | 향후 |
-| 상금 스케일링: 참가자 수에 따른 상금 조정 필요 여부 | economy-designer | 시즌 관리 GDD 시 | 미정 |
-| 목표 달성 시 엔딩/특별 콘텐츠 (조건 A: 현금 자산 1,000억 / 조건 B: 총 자산 1조) | game-designer | 확장 시점 | 미정. season-manager.md "투자의 거장" 업적과 연동 검토 필요 |
+| 상금 스케일링: 참가자 수에 따른 상금 조정 필요 여부 | economy-designer | 시즌 관리 GDD 시 | **확정 (4-B)**: 고정 배율 방식 채택. 참가자 수 연동 없음. season-manager.md §4-6 PRIZE_RATE 표가 단일 소스. |
+| 목표 달성 시 엔딩/특별 콘텐츠 (조건 A: 현금 자산 1,000억 / 조건 B: 총 자산 1조) | game-designer | 확장 시점 | **확정 (4-B)**: 조건 A 채택. `cash_assets ≥ 100,000,000,000원` 시 "투자의 거장" 엔딩 발동. season-manager.md §3-5, endings-achievements.md §3-1 참조. 조건 B(총 자산 1조)는 미채택. |
 
 ---
 

@@ -1229,6 +1229,7 @@ EXTREME 변동성(메디진, base_price=180,000원) + 대형 이벤트 1회, vol
 | 트레이딩 스크린 | UI가 가격 엔진에 의존 | `on_price_updated` 시그널 구독. **Soft** |
 | AI 경쟁자 시스템 | 양방향 | MVP: AI가 가격 데이터 읽기만 함 (단방향, **Soft**). 향후: AI 매매 주문량 + 주문 잔량(매수/매도 대기) 비율이 가격에 영향 → 오더북 레이어 추가 시 **Hard** 양방향 의존. 가격 엔진이 AI 주문 풀을 입력으로 받아 수급 기반 가격 보정 |
 | EtfManager | EtfManager가 이 시스템에 의존 | `get_current_price(etf_id)` — ETF 현재가 조회. `PriceEngine.inject_price(etf_id, price)` — ETF 시가총액 가중 가격 주입 (S10-02 추가 API). **Hard** |
+| StopLossTakeProfit | StopTakeSystem이 이 시스템에 의존 | `get_current_price(stock_id)`, `get_daily_limits(stock_id)` — 매 틱 손절/익절 조건 판정에 사용. **Hard** (4-A: 역방향 참조 추가) |
 
 ## Tuning Knobs
 

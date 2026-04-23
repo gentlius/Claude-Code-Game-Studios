@@ -171,11 +171,13 @@ Order {
    - 새 종목 매수 && effective_holding_count >= max_holdings: REJECTED ("보유 종목 한도 초과")
    - 이미 보유 종목 또는 큐 내 선행 BUY에 동일 종목 존재: 슬롯 검증 면제
 
-7. 잔액 검증 (BUY만)
-   - MARKET (MARKET_OPEN/PAUSED): current_price × quantity > available_cash → REJECTED ("잔액 부족")
-   - MARKET (PRE_MARKET): ceil(current_price × (1 + pre_market_buffer_pct)) × quantity > available_cash → REJECTED ("잔액 부족")
-   - LIMIT: limit_price × quantity > available_cash → REJECTED ("잔액 부족")
+7. 잔액 검증 (BUY만) — B-08 fix: 수수료 포함 실제 차감액으로 검증
+   buy_fee_rate = TradingFees.get_buy_fee_rate()  # trading-fees.md 위임. 현재 ~0.00015
+   - MARKET (MARKET_OPEN/PAUSED): ceil(current_price × quantity × (1 + buy_fee_rate)) > available_cash → REJECTED ("잔액 부족")
+   - MARKET (PRE_MARKET): ceil(current_price × (1 + pre_market_buffer_pct) × quantity × (1 + buy_fee_rate)) > available_cash → REJECTED ("잔액 부족")
+   - LIMIT: ceil(limit_price × quantity × (1 + buy_fee_rate)) > available_cash → REJECTED ("잔액 부족")
    - available_cash = get_sim_cash() (이미 다른 지정가/PRE_MARKET 예약에 차감된 금액은 제외된 상태)
+   - 주의: 수수료 미포함 시 잔액 = price×qty인 경우 검증 통과 후 실제 체결 시 잔액 부족 발생 가능 (B-08 수정 이유)
 
 8. 보유 수량 검증 (SELL만)
    - quantity > available_quantity → REJECTED ("보유 수량 부족")
@@ -465,18 +467,25 @@ max_buyable = floor(available_cash / reference_price)
 **예시**: available_cash=500,000, current_price=65,000
 → `max_buyable = floor(500,000 / 65,000) = 7주`
 
-### F4. 수수료 (향후)
+### F4. 수수료 (W-01 갱신 — trading-fees.md 위임)
 
 ```
-fee = floor(trade_value × fee_rate)
-// MVP: fee_rate = 0
+# 매수: trade_value + 수수료
+buy_deduct = ceil(trade_value × (1 + TradingFees.get_buy_fee_rate()))  # ~0.00015
+
+# 매도: trade_value - 수수료 (증권거래세 포함)
+sell_credit = floor(trade_value × (1 - TradingFees.get_sell_fee_rate()))  # ~0.0025
 ```
+
+> **W-01 (Stale 제거)**: `fee_rate = 0` 표기 폐기. 수수료 정의는 `trading-fees.md` 단일 소유.
+> 검증은 §3 Step 7에서 `TradingFees.get_buy_fee_rate()` 위임 방식으로 구현 (B-08).
 
 ### 변수 마스터 테이블
 
 | Variable | Default | Range | Owner | Description |
 |----------|---------|-------|-------|-------------|
-| `fee_rate` | 0.0 | 0~0.003 | config | 매매 수수료율. MVP=0 |
+| `buy_fee_rate` | ~0.00015 | 0~0.003 | trading-fees.md | 매수 수수료율. 이 GDD에서 직접 정의하지 않음 |
+| `sell_fee_rate` | ~0.0025 | 0~0.005 | trading-fees.md | 매도 수수료율(증권거래세 포함). 이 GDD에서 직접 정의하지 않음 |
 | `max_pending_limit_orders` | 10 | 3~20 | config | 동시 미체결 지정가 한도 |
 | `limit_order_expiry` | DAILY | DAILY (MVP 고정. GTC 확장은 Open Questions 참조) | config | 지정가 만료 정책. MVP=당일 |
 | `limit_price_warn_range` | 0.30 | 0.10~0.50 | config | 지정가 경고 범위 (현재가 대비 ±%) |
@@ -534,7 +543,7 @@ fee = floor(trade_value × fee_rate)
 
 | Parameter | Current Value | Safe Range | Effect of Increase | Effect of Decrease |
 |-----------|--------------|------------|-------------------|-------------------|
-| `fee_rate` | 0% | 0~0.3% | 거래 비용 증가. 단타 억제 | 자유로운 매매 |
+| ~~`fee_rate`~~ | — | — | **W-08 stale**: `trading-fees.md` 시스템으로 이전됨. `TradingFees.get_buy_fee_rate()` / `get_sell_fee_rate()` 사용. 이 GDD에서 직접 정의하지 않음. |
 | `max_pending_limit_orders` | 10 | 3~20 | 복잡한 전략 가능 | 주문 관리 단순화 |
 | `limit_order_expiry` | DAILY | DAILY | — | — |
 | `limit_price_warn_range` | 30% | 10~50% | 비현실적 지정가 허용 | 근접 지정가만 허용 |

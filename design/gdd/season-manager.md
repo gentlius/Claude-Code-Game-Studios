@@ -58,9 +58,10 @@
   ⑤ sim_cash 잔액 + 상금 → cash_assets 전환. sim_cash = 0.
        (CurrencySystem.settle_to_cash(prize_amount) 호출)
   ⑥ 시즌 XP 지급
-       - 공식 리그 참가자: `XPSystem.grant_season_bonus(final_rank, is_free_market=false, season_return_pct)`
-       - 프리마켓 참가자: `XPSystem.grant_season_bonus(final_rank=0, is_free_market=true, season_return_pct)`
+       - 공식 리그 참가자: `XPSystem.grant_season_bonus(final_rank, is_free_market=false, season_return_pct, season_trade_count)`
+       - 프리마켓 참가자: `XPSystem.grant_season_bonus(final_rank=0, is_free_market=true, season_return_pct, season_trade_count)`
          → rank_bonus 없음. 완주 보너스(20 XP)는 수익률 ≥ 0% AND 체결 ≥ 5회 충족 시 지급 (§4-7 참조)
+         → `season_trade_count`: SeasonManager가 집계한 시즌 총 체결 건수. xp-system.md §F2 `completion_bonus` 판정에 사용 (B-05)
   ⑦ cash_assets ≥ 100,000,000,000원 → 거장 엔딩 자동 발동
   ⑧ 그 외 → 시즌 결과 화면 표시
   ↓
@@ -69,6 +70,13 @@
   ⑩ 스타트업 엑싯 이벤트 (만기 도달 시) → cash_assets 입금 또는 0원
   ⑪ Recurring 비용 차감 (골프 클럽 연회비 등)
      → 결과: 시즌 결산 자산 확정 (cash_assets 기준)
+
+> **⚠️ 신호 타이밍 주의 (W-07)**: ⑨~⑪은 `LifestyleManager`가 `GameClock.on_market_close`를 수신해 실행하며,
+> ①~⑧은 `SeasonManager`가 `GameClock.on_season_end`를 수신해 실행한다.
+> **실제 실행 순서**: `on_market_close` → ⑨~⑪ (LifestyleManager) → `on_season_end` → ①~⑧ (SeasonManager).
+> 즉 다이어그램의 표기 순서(①→⑧→⑨)와 달리, 시그널 관점에서는 ⑨~⑪이 ①~⑧보다 먼저 실행된다.
+> `game-clock.md`는 이 순서(`on_market_close` before `on_season_end`)를 보장하고 문서화해야 한다.
+> LifestyleManager는 `cash_assets`를 읽을 때 아직 ①~⑧ 정산이 완료되지 않은 상태임을 인지해야 한다.
   ↓
 [라이프스타일 소비 화면] — cash_assets에서 선택 소비 (lifestyle-spending.md 참조)
   ↓
@@ -180,17 +188,20 @@
 | 보상 | 조건 | 현금 | XP | 시즌 당 최대 수령 |
 |------|------|------|----|----------------|
 | 주간 수익률상 | 해당 주 수익률 티어 내 1위 AND 주간 체결 ≥ `MIN_WEEKLY_TRADES` | 티어 진입 기준 자산 × 2% | 50 XP | 4회 (주마다 독립 판정) |
-| 최다 거래상 | 시즌 내 티어 최다 체결 건수 1위 | 티어 진입 기준 자산 × 1% | 30 XP | 1회 |
+| 최고 단타 수익률상 | 시즌 내 당일 왕복(매수→매도 당일 완료) 단건 최고 수익률 1위 (최소 1회 이상 당일 왕복 필요) | 티어 진입 기준 자산 × 1% | 30 XP | 1회 |
 | 첫 거래상 | 시즌 Day 1 티어 내 최초 체결 1명 | — | 30 XP | 1회 |
 | 완주 보너스 | 시즌 종료 시 수익률 ≥ 0% AND 체결 ≥ 5회 | — | 20 XP | 1회 |
 
+> **설계 근거 (W-19)**: "최다 거래상"은 체결 횟수 자체를 보상해 무의미한 거래 남발을 유도하며 "판단이 곧 실력" 필러와 충돌한다.
+> "최고 단타 수익률상"으로 대체하여 타이밍 판단의 질을 보상한다. `xp-system.md`가 체결 횟수 기반 XP를 폐기한 것과 일관된 방향.
+
 **중복 수령 매트릭스** (O = 동시 수령 가능, — = 해당 없음):
 
-| | 순위 보상 | 주간 수익률상 | 최다 거래상 | 첫 거래상 | 완주 보너스 |
+| | 순위 보상 | 주간 수익률상 | 최고 단타 수익률상 | 첫 거래상 | 완주 보너스 |
 |---|:---:|:---:|:---:|:---:|:---:|
 | 순위 보상 | — | O | O | O | O |
 | 주간 수익률상 | O | O(주별 독립) | O | O | O |
-| 최다 거래상 | O | O | — | O | O |
+| 최고 단타 수익률상 | O | O | — | O | O |
 | 첫 거래상 | O | O | O | — | O |
 | 완주 보너스 | O | O | O | O | — |
 
@@ -342,7 +353,7 @@ daily_xp_granted = base_daily_xp × (FREE_MARKET_XP_RATE if is_free_market else 
 | `OrderEngine` | 읽기/쓰기 | 시즌 종료 시 미체결 주문 전량 취소; `season_trade_count` 집계 |
 | `PriceEngine` | 읽기 | `get_current_price(stock_id)` — 실시간 총 자산 계산 및 강제 청산 가격 |
 | `PortfolioManager` | 읽기/쓰기 | 보유 주식 목록 조회; 시즌 종료 강제 청산 실행 |
-| `XPSystem` | 쓰기 | SeasonManager가 시즌 종료 시 `XPSystem.grant_season_bonus(final_rank: int, is_free_market: bool, season_return_pct: float)` 직접 호출. 일일 보너스 XP는 GameClock `on_day_end` 흐름에서 `XPSystem.grant_daily_bonus(is_free_market: bool)` 호출 |
+| `XPSystem` | 쓰기 | SeasonManager가 시즌 종료 시 `XPSystem.grant_season_bonus(final_rank: int, is_free_market: bool, season_return_pct: float, season_trade_count: int)` 직접 호출. 4번째 파라미터 `season_trade_count`는 completion_bonus 판정에 사용 (B-05). 일일 보너스 XP는 GameClock `on_day_end` 흐름에서 `XPSystem.grant_daily_bonus(is_free_market: bool)` 호출 |
 | `GameClock` | 구독 | `on_season_end` 시그널 수신 → 강제 청산 + 정산 실행 |
 | `AiCompetitor` | 쓰기 | 시즌 시작 시 티어별 AI 참가자 생성 및 초기화; 시즌 종료 시 AI 수익률 수집 |
 | `TradingScreen (UI)` | 신호 수신 | `on_season_started`, `on_season_ended`, `on_tier_assigned`, `on_leaderboard_updated` 시그널 구독 |
@@ -381,7 +392,7 @@ daily_xp_granted = base_daily_xp × (FREE_MARKET_XP_RATE if is_free_market else 
 |----------|--------|----------|------|
 | `WEEKLY_PRIZE_RATE` | 0.02 | 0.005 – 0.05 | 주간 수익률상 현금 배율. 높으면 단기 과도 리스크 베팅 유도 가능 |
 | `MIN_WEEKLY_TRADES` | 2 | 1 – 10 | 주간 수익률상 최소 체결 횟수. 낮으면 운 좋은 1회 거래로 수상 가능 |
-| `MOST_TRADES_PRIZE_RATE` | 0.01 | 0.003 – 0.03 | 최다 거래상 현금 배율. 높으면 무의미한 거래 남발 유도 가능 |
+| `BEST_DAYTRADE_PRIZE_RATE` | 0.01 | 0.003 – 0.03 | 최고 단타 수익률상 현금 배율. (W-19: 최다 거래상에서 대체됨) |
 
 ### 7-4. 프리마켓 및 엔딩
 

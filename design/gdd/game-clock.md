@@ -198,6 +198,41 @@ total_season_days = weeks_per_season * 5
 
 **예시**: completed_days=7, day_progress=0.5, weeks_per_season=4 → total_season_days=20, season_progress = (7 + 0.5) / 20 = 0.375
 
+### 틱 처리 순서 (W-05 — 5-Step Tick Order)
+
+매 틱(`on_tick` 시그널) 발행 후 구독자들이 실행되는 순서. GameClock은 순서를 강제하지 않고
+구독자들이 Godot 노드 트리 순서로 실행되므로, 아래 순서가 보장되도록 구독 연결 순서 또는
+`_process()` 우선순위를 구성 단계에서 결정해야 한다.
+
+```
+[Step 1] NewsEventSystem.on_tick()
+  - 예약된 뉴스 이벤트가 만기인지 체크 → 만기면 event_delta 주입 신호 emit
+  - 루머 압력 카운트다운 (RUMOR_LEAD_TICKS 체크)
+  ↓
+[Step 2] PriceEngine.on_tick()
+  - Step 1에서 emit된 event_delta 수신 (signal 경유, 동기)
+  - rumor_delta, player_delta, pattern_delta, drift_delta 계산
+  - 최종 가격 결정 (상하한가 클램프 포함)
+  ↓
+[Step 3] OrderEngine.on_tick() — 3a→3b→3c→3d 순서
+  3a. 지정가 매수 체결 체크 (current_price ≤ limit_price)
+  3b. 지정가 매도 체결 체크 (current_price ≥ limit_price)
+  3c. 체결된 주문 PortfolioManager 반영
+  3d. 미체결 주문 만료 체크 (IOC/당일 주문)
+  ↓
+[Step 4] StopLossTakeProfit.on_tick()
+  - 보유 포지션별 손절/익절 조건 체크 → 조건 충족 시 시장가 주문 즉시 제출 (Step 3와 동일 틱 내 처리)
+  ↓
+[Step 5] LeverageManager.on_tick()
+  - 레버리지 포지션 마진 비율 갱신
+  - equity < 유지증거금 → 마진콜 알림 emit → 다음 틱에 강제 청산 (또는 즉시 청산 정책에 따라)
+```
+
+> **순서 보장 책임**: `game_clock.gd`의 `_on_tick()` 내에서 직접 순서대로 호출하거나,
+> Godot 노드 트리의 자식 순서로 신호 발행 순서를 결정해야 한다.
+> `on_tick` 시그널 단일 emit만으로는 순서가 보장되지 않는다.
+> 구현 단계에서 순서 보장 방식을 ADR로 결정한다.
+
 ---
 
 ## Edge Cases
@@ -206,7 +241,7 @@ total_season_days = weeks_per_season * 5
 |----------|------------------|-----------|
 | 4x 배속 중 뉴스 이벤트 발생 | 자동으로 1x로 감속 + 알림 표시 | 중요 판단 기회를 놓치지 않도록. 필라 "판단이 곧 실력" |
 | 일시정지 중 주문 입력 후 재개 | 재개 후 첫 번째 틱에서 주문 처리 | 일시정지는 분석 시간이지 치트가 아님 |
-| 시즌 마지막 금요일 장 마감 | MARKET_CLOSED → WEEK_END + SEASON_END 동시 발생. 주간+시즌 합산 리포트 표시. **상태머신 순서**: MARKET_CLOSED → WEEK_END 진입 (on_week_end 발행) → 즉시 SEASON_END 전환 (on_season_end 발행). WEEK_END를 먼저 거치므로 주간 정산이 시즌 정산보다 선행한다. | 시즌은 항상 주 단위로 정렬. 금요일에 종료 |
+| 시즌 마지막 금요일 장 마감 (Day 20, I-01) | **전체 실행 시퀀스**: ① `on_market_close` emit → LifestyleManager 자동 정산 실행 (비시즌 수익) → ② 상태: MARKET_CLOSED → WEEK_END 전환 → `on_week_end` emit → SeasonManager 주간 수익률상 산정 → ③ 즉시 SEASON_END 전환 → `on_season_end` emit → SeasonManager 강제 청산 + 시즌 정산 실행 → ④ 시즌 결과 UI 대기 (플레이어 확인 필요) → ⑤ 플레이어 확인 후 `on_season_start` emit → 새 시즌 PRE_MARKET 진입. **주의**: WEEK_END와 SEASON_END는 동일 프레임에서 순차 전환. UI 리포트는 주간+시즌 합산으로 단일 화면 표시. `on_market_close`는 WEEK_END/SEASON_END 전에 발행되므로 LifestyleManager 정산이 선행한다. | 시즌은 항상 주 단위로 정렬. Day 20 금요일에만 발생하는 3중 상태 전환 |
 | 플레이어가 리포트 확인 안 하고 방치 | 무한 대기. 리포트 확인 버튼 클릭 시에만 진행 | 자동 진행하면 정보를 놓칠 수 있음 |
 | PRE_MARKET에서 일시정지 시도 | PRE_MARKET은 시간이 흐르지 않으므로 일시정지 불필요. 플레이어는 확인 버튼 클릭 전까지 자유롭게 뉴스 확인 가능 | 일시정지는 MARKET_OPEN 서브상태 |
 | 시즌 중간에 게임 종료 | 현재 틱/일/주 상태를 세이브. 재개 시 정확히 같은 지점에서 계속 | 진행 상태 보존 |

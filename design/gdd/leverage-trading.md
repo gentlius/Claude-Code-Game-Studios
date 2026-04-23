@@ -70,8 +70,8 @@ on leverage_buy filled:
     equity_used    = ceil(order_value / leverage_multiplier)   # 자기자본 투입분
     borrowed       = order_value - equity_used                 # 차입금
 
-    # 1) 자기자본(증거금)만 현금에서 차감
-    CurrencySystem.cash_deduct(equity_used)
+    # 1) 자기자본(증거금)만 투자 계좌(sim_cash)에서 차감 (B-01 fix: cash_deduct → sim_deduct)
+    CurrencySystem.sim_deduct(equity_used)
 
     # 2) 포트폴리오에 레버리지 포지션으로 추가
     PortfolioManager.add_leverage_holding(
@@ -120,11 +120,11 @@ process_daily_interest(day):
 
         available = CurrencySystem.get_sim_cash()
         if available >= interest:
-            CurrencySystem.cash_deduct(interest)
+            CurrencySystem.sim_deduct(interest)   # B-01 fix: 투자 계좌에서 차감
         else:
             # 현금 부족 → 가용 현금 전액 차감 후 부족분을 차입금에 가산
             shortage = interest - available
-            CurrencySystem.cash_deduct(available)
+            CurrencySystem.sim_deduct(available)  # B-01 fix: 투자 계좌에서 차감
             position.borrowed += shortage   # 이자가 원금화 (복리 효과)
             emit leverage_interest_shortage(position.stock_id, shortage)
             # UI: 경고 토스트 "이자 부족 — 차입금에 가산됨"
@@ -145,10 +145,14 @@ process_daily_interest(day):
 #### Equity 계산
 
 ```
-position_market_value = current_price × quantity         # 포지션 현재 시가
-equity                = position_market_value - borrowed  # 순자산 (자기자본)
-equity_ratio          = equity / position_market_value    # 유지증거금 비율
+position_market_value = current_price × quantity                           # 포지션 현재 시가
+equity                = position_market_value - borrowed - accrued_interest # 순자산 (B-02 fix: accrued_interest 포함)
+equity_ratio          = equity / position_market_value                      # 유지증거금 비율
 ```
+
+> **B-02 수정**: 이전에는 `equity = position_market_value - borrowed`로 정의하여 누적 이자(accrued_interest)를 누락했다.
+> `skill-tree.md §F4`의 정의 `equity = position_market_value - borrowed - accrued_interest`와 일치시켰다.
+> 누적 이자가 클수록 실제 equity가 GDD §3-3 이전 수식보다 낮으므로, 마진콜이 더 일찍 발동한다.
 
 #### 마진콜 발동 조건
 
@@ -220,11 +224,11 @@ on leverage_sell filled:
     net              = proceeds - partial_borrowed - partial_interest
 
     if net > 0:
-        CurrencySystem.cash_add(net)
+        CurrencySystem.sim_add(net)               # B-01 fix: 투자 계좌로 입금
     else:
         loss = abs(net)
         available = CurrencySystem.get_sim_cash()
-        CurrencySystem.cash_deduct(min(loss, available))
+        CurrencySystem.sim_deduct(min(loss, available))  # B-01 fix: 투자 계좌에서 차감
 
     position.borrowed          -= partial_borrowed
     position.accrued_interest  -= partial_interest
@@ -332,13 +336,13 @@ daily_interest = floor(borrowed × daily_rate)
 available_cash = CurrencySystem.get_sim_cash()
 
 if daily_interest ≤ available_cash:
-    # 정상 이자 차감
-    CurrencySystem.cash_deduct(daily_interest)
+    # 정상 이자 차감 (투자 계좌에서)
+    CurrencySystem.sim_deduct(daily_interest)     # B-01 fix: cash_deduct → sim_deduct
     position.accrued_interest += daily_interest
 else:
     # 현금 부족 → 가용 전액 차감 + 부족분 차입금 가산
     shortage = daily_interest - available_cash
-    CurrencySystem.cash_deduct(available_cash)
+    CurrencySystem.sim_deduct(available_cash)     # B-01 fix: cash_deduct → sim_deduct
     position.borrowed        += shortage  # 원금화: 다음 날 이자 계산 기준 증가
     position.accrued_interest += daily_interest
 ```
@@ -432,7 +436,7 @@ net_proceeds     = proceeds - partial_borrowed - partial_interest
 |--------|------|----------|-----------|
 | **OrderEngine** | 레버리지가 의존 | Hard | `submit_order()` 확장: `leverage_multiplier` 파라미터 추가. 기존 9단계 검증 + 레버리지 10-12단계 추가. |
 | **PortfolioManager** | 양방향 | Hard | `add_leverage_holding(stock_id, qty, entry_price, multiplier, borrowed)` 추가. `remove_leverage_holding(stock_id, qty)` 추가. `get_all_leverage_positions()` 추가. PortfolioManager는 레버리지 포지션의 `account_total_value` 기여분 계산 시 `position_market_value`(총 포지션 가치)를 포함하고 `borrowed`를 부채로 차감한다. |
-| **CurrencySystem** | 레버리지가 의존 | Hard | `cash_deduct(equity_used)` — 증거금 차감. `cash_add(net_proceeds)` — 청산 순수익 입금. `get_sim_cash()` — 이자 지급 가용 현금 조회. |
+| **CurrencySystem** | 레버리지가 의존 | Hard | `sim_deduct(equity_used)` — 증거금 차감 (투자 계좌). `sim_add(net_proceeds)` — 청산 순수익 입금 (투자 계좌). `get_sim_cash()` — 이자 지급 가용 현금 조회. **주의: cash_deduct/cash_add(실생활 자금)는 사용하지 않는다. 레버리지는 전부 sim(투자 계좌) 트랜잭션이다.** |
 | **SkillTree** | 레버리지가 참조 | Soft | `has_skill("TR4") -> bool` — 진입 게이팅. |
 | **GameClock** | 레버리지가 의존 | Hard | `on_market_close(day, week)` — 일별 이자 차감 트리거. `on_tick` — 마진콜 체크 트리거 (틱 처리 5번째 단계, StopTakeSystem.check_and_trigger 이후). |
 | **SeasonManager** | 시즌이 레버리지 호출 | Soft | 시즌 종료 Step ①-b에서 `LeverageManager.liquidate_all_positions()` 호출. SeasonManager GDD(§3-1)의 종료 시퀀스에 이 단계 추가 필요. |
@@ -464,6 +468,12 @@ net_proceeds     = proceeds - partial_borrowed - partial_interest
 | `available_multipliers` | Gate | {2, 3, 5} | 부분 집합 | 고배율 접근 허용 시 리스크 노출 증가 | 고배율 제거 시 위험도 감소, 다양성 감소 |
 
 모든 수치는 `assets/data/leverage_config.json`에 외부화. 하드코딩 금지.
+
+> **설계 의도 명시 (W-18)**: 현재 이자율(0.04~0.10%/일)은 20일 시즌 기준 최대 누적 비용 2.0%(5×)로,
+> "확신 있는 포지션에는 5× 레버리지가 합리적 선택"이 되는 수준이다. 이는 의도된 설계다.
+> "고위험 도구"보다는 "분석에 자신 있을 때 쓰는 증폭기"로 포지셔닝한다.
+> 만약 레버리지를 더 고위험 도구로 재포지셔닝하려면 이자율을 0.15~0.25%/일 수준으로 상향한다.
+> 현재 값으로는 5× 이자 20일 = 2.0%, 단 1%만 맞아도 5% 수익이므로 이자를 크게 상회한다.
 
 ---
 

@@ -566,15 +566,16 @@ func test_market_profile_api():
 ## M1+D1 2-tier 프리히스토리 배치 생성·디스크 캐시·메모리 관리 autoload.
 
 func test_m1_cache_manager_api():
-	assert_true(M1CacheManager.has_method("generate_all"),       "generate_all 존재")
-	assert_true(M1CacheManager.has_method("reset"),              "reset 존재")
-	assert_true(M1CacheManager.has_method("clear_slot_cache"),   "clear_slot_cache 존재")
-	assert_true(M1CacheManager.has_method("is_cache_ready"),     "is_cache_ready 존재")
-	assert_true(M1CacheManager.has_method("is_batch_done"),      "is_batch_done 존재")
-	assert_true(M1CacheManager.has_method("get_aggregated_m1"),  "get_aggregated_m1 존재")
-	assert_true(M1CacheManager.has_method("get_aggregated_d1"),  "get_aggregated_d1 존재")
-	assert_true(M1CacheManager.has_method("get_d1_candles"),     "get_d1_candles 존재")
-	assert_true(M1CacheManager.has_method("get_m1_candles"),     "get_m1_candles 존재")
+	assert_true(M1CacheManager.has_method("generate_all"),        "generate_all 존재")
+	assert_true(M1CacheManager.has_method("reset"),               "reset 존재")
+	assert_true(M1CacheManager.has_method("clear_slot_cache"),    "clear_slot_cache 존재")
+	assert_true(M1CacheManager.has_method("is_cache_ready"),      "is_cache_ready 존재")
+	assert_true(M1CacheManager.has_method("is_batch_done"),       "is_batch_done 존재")
+	assert_true(M1CacheManager.has_method("get_aggregated_m1"),   "get_aggregated_m1 존재")
+	assert_true(M1CacheManager.has_method("get_aggregated_d1"),   "get_aggregated_d1 존재")
+	assert_true(M1CacheManager.has_method("get_d1_candles"),      "get_d1_candles 존재")
+	assert_true(M1CacheManager.has_method("get_m1_candles"),      "get_m1_candles 존재")
+	assert_true(M1CacheManager.has_method("append_season_d1"),    "append_season_d1 존재")  # ADR-026
 
 
 func test_m1_cache_manager_signals():

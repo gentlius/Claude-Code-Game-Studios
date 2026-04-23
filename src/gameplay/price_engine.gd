@@ -37,6 +37,17 @@ enum MarkovState {
 
 enum SeasonBias { BULL, NEUTRAL, BEAR }
 
+## Macro trend layer state (ADR-026). Day-granularity upper Markov.
+## FLAT(1) is the initial state; transitions driven by _macro_cfg.transitionMatrix.
+enum MacroState { TREND_UP = 0, FLAT = 1, TREND_DOWN = 2 }
+
+## Default macro transition matrix. Matches price_engine_config.json macroTrend.transitionMatrix.
+const MACRO_TM_DEFAULT: Array = [
+	[0.92, 0.06, 0.02],  # TREND_UP
+	[0.04, 0.93, 0.03],  # FLAT
+	[0.02, 0.06, 0.92],  # TREND_DOWN
+]
+
 # ── Engine State Enum ──
 
 enum EngineState { UNINITIALIZED, READY, RUNNING, PAUSED, END_OF_DAY, SEASON_END }
@@ -239,6 +250,11 @@ var _cfg_vol_pattern_scale: Array = []  ## 4 floats [LOW..EXTREME]
 var _cfg_base_volume_range: Array = []  ## 4 entries: [min_vol, max_vol]
 var _cfg_state_volume_mult: Array = []  ## 7 floats [STRONG_UP..BREAKOUT_DOWN]
 
+## ADR-026: Macro trend layer config loaded from price_engine_config.json "macroTrend".
+## Keys: transitionMatrix (3×3), biasFactor (float), volMultiplier (Array[3][2]),
+##        archetypeMacroMatrices (Dictionary of String→Array[3][3]).
+var _macro_cfg: Dictionary = {}
+
 ## ADR-024 Phase 3: C++ MarkovGenerator instance. null when GDExtension is not loaded.
 ## Falls back to GDScript generate_stock_m1_cache() when null.
 var _markov: Object = null
@@ -309,6 +325,11 @@ func _load_config() -> void:
 	_cfg_base_volume_range = _load_nested_array(parsed, "baseVolumeRange", BASE_VOLUME_RANGE)
 	_cfg_state_volume_mult = _load_float_array(parsed, "stateVolumeMult", STATE_VOLUME_MULT)
 
+	# ── Macro trend layer (ADR-026) ──
+	var macro_json: Variant = parsed.get("macroTrend", {})
+	if macro_json is Dictionary:
+		_macro_cfg = macro_json as Dictionary
+
 
 ## Fallback: populate _cfg_* from compile-time const values when JSON is unavailable.
 func _init_cfg_from_consts() -> void:
@@ -350,6 +371,8 @@ func _build_markov_cfg() -> Dictionary:
 	                           else BASE_VOLUME_RANGE.duplicate(true)
 	cfg["stateVolumeMult"]   = _cfg_state_volume_mult if not _cfg_state_volume_mult.is_empty() \
 	                           else STATE_VOLUME_MULT.duplicate()
+	if not _macro_cfg.is_empty():
+		cfg["macroTrend"] = _macro_cfg
 	return cfg
 
 
@@ -394,6 +417,13 @@ func _reseed_session() -> void:
 
 func _on_season_start() -> void:
 	_season_count += 1  # ADR-025: track which season we are entering (1 = first)
+	# ADR-026: persist this season's D1 candles to M1CacheManager ring buffer
+	# before _reset_season_mechanics() clears ohlcv_daily.
+	if M1CacheManager.is_batch_done():
+		for stock_id: String in _stock_states:
+			var s: Dictionary = _stock_states[stock_id]
+			if not s.get("is_etf", false) and not s.get("ohlcv_daily", []).is_empty():
+				M1CacheManager.append_season_d1(stock_id, s["ohlcv_daily"])
 	_reset_season_mechanics()
 
 
@@ -456,6 +486,11 @@ func initialize_for_load(save_data: Dictionary) -> void:
 		var saved_base: int = int(saved.get("base_price", 0))
 		var base_price_restored: int = saved_base if saved_base > 0 else stock.base_price
 
+		# ADR-026: restore MacroState (default FLAT for pre-ADR-026 saves)
+		var macro_state_restored: int = int(saved.get("macro_state", MacroState.FLAT))
+		if macro_state_restored < MacroState.TREND_UP or macro_state_restored > MacroState.TREND_DOWN:
+			macro_state_restored = MacroState.FLAT
+
 		_stock_states[stock_id] = {
 			"stock_id":           stock_id,
 			"current_price":      cur_price,
@@ -468,6 +503,8 @@ func initialize_for_load(save_data: Dictionary) -> void:
 			"markov_state":       MarkovState.SIDEWAYS,  # session-scoped, not persisted
 			"state_duration":     0,
 			"season_bias":        bias,
+			"macro_state":        macro_state_restored,  # ADR-026: persisted
+			"macro_vol_mult":     1.0,                   # ADR-026: redrawn each day
 			"tick_prices":        tick_prices,
 			"tick_volumes":       tick_volumes,
 			"ohlcv_daily":        ohlcv_daily,
@@ -475,8 +512,9 @@ func initialize_for_load(save_data: Dictionary) -> void:
 			"gradual_events":     [] as Array,
 			"order_book":         {"ask": [], "bid": []},
 		}
-		_transition_matrices[stock_id] = _build_transition_matrix(
-			stock.volatility_profile, bias
+		var base_mat: Array = _build_transition_matrix(stock.volatility_profile, bias)
+		_transition_matrices[stock_id] = _apply_macro_bias_to_matrix(
+			base_mat, macro_state_restored
 		)
 
 	_vi_states.clear()
@@ -517,6 +555,7 @@ func get_save_data() -> Dictionary:
 			"base_price":        s.get("base_price",        0),  ## ADR-025: drifted anchor
 			"season_open_price": s.get("season_open_price", s.get("current_price", 0)),
 			"season_bias":       int(s.get("season_bias", SeasonBias.NEUTRAL)),
+			"macro_state":       int(s.get("macro_state", MacroState.FLAT)),  ## ADR-026
 			"ohlcv_daily":       s.get("ohlcv_daily",       []),
 			"tick_prices":       s.get("tick_prices",        []),
 			"tick_volumes":      s.get("tick_volumes",       []),
@@ -1175,6 +1214,8 @@ func init_first_season() -> void:
 			"markov_state":       MarkovState.SIDEWAYS,
 			"state_duration":     0,
 			"season_bias":        bias,
+			"macro_state":        MacroState.FLAT,  # ADR-026: start FLAT, transitions each day
+			"macro_vol_mult":     1.0,              # ADR-026: redrawn by _roll_macro_states
 			"tick_prices":        [] as Array[int],
 			"tick_volumes":       [] as Array[float],
 			"ohlcv_daily":        [] as Array[Dictionary],
@@ -1182,6 +1223,7 @@ func init_first_season() -> void:
 			"gradual_events":     [] as Array,
 			"order_book":         {"ask": [], "bid": []},
 		}
+		# ADR-026: new-game matrix has no macro bias yet (FLAT = no-op)
 		_transition_matrices[stock_id] = _build_transition_matrix(
 			stock.volatility_profile, bias
 		)
@@ -1240,8 +1282,10 @@ func _reset_season_mechanics() -> void:
 				state["base_price"] = max(1000,
 					round_to_tick(state["base_price"] * (1.0 + stock.season_drift)))
 
-		_transition_matrices[stock_id] = _build_transition_matrix(
-			state["volatility_profile"], bias
+		# ADR-026: Rebuild with macro bias. macro_state persists across season boundaries.
+		var base_mat: Array = _build_transition_matrix(state["volatility_profile"], bias)
+		_transition_matrices[stock_id] = _apply_macro_bias_to_matrix(
+			base_mat, state.get("macro_state", MacroState.FLAT)
 		)
 
 	for stock_id: String in _vi_states:
@@ -1566,8 +1610,9 @@ func _compute_volume(
 	elif tick_in_day >= GameClock.TICKS_PER_DAY - TOD_WINDOW_TICKS:
 		tod_mult = TOD_CLOSE_VOLUME_MULT
 
-	# 4-6: Final volume
-	return base_vol * state_mult * energy_mult * limit_dampen * tod_mult
+	# 4-6: Final volume (ADR-026: macro volume multiplier — drawn once per day in _roll_macro_states)
+	var macro_vol_mult: float = s.get("macro_vol_mult", 1.0)
+	return base_vol * state_mult * energy_mult * limit_dampen * tod_mult * macro_vol_mult
 
 # ── VI / Circuit Breaker (GDD Rules 2-4, 2-5) ──
 
@@ -1634,6 +1679,7 @@ func get_cb_stage() -> int:
 func _end_trading_day() -> void:
 	_engine_state = EngineState.END_OF_DAY
 	_generate_daily_ohlcv()
+	_roll_macro_states()  # ADR-026: transition MacroState + rebuild biased matrices for next day
 	_reset_order_books()
 	_reset_vi_and_circuit_breaker()
 	_prev_day_index = _current_index
@@ -2095,6 +2141,80 @@ func _apply_season_bias_to_row(
 			row[j] += up_bonus / float(up_states.size())
 		elif j in down_states:
 			row[j] += down_penalty / float(down_states.size())
+
+
+## Apply MacroState column bias to a 7×7 transition matrix (ADR-026).
+## TREND_UP(0): multiply STRONG_UP(0) + UPTREND(1) columns by biasFactor then renormalize.
+## FLAT(1): returns matrix unchanged (no allocation — identity op).
+## TREND_DOWN(2): multiply DOWNTREND(3) + STRONG_DOWN(4) columns by biasFactor.
+func _apply_macro_bias_to_matrix(matrix: Array, macro_state: int) -> Array:
+	if macro_state == MacroState.FLAT:
+		return matrix
+	var bias_factor: float = float(_macro_cfg.get("biasFactor", 3.0))
+	var boost_cols: Array[int]
+	if macro_state == MacroState.TREND_UP:
+		boost_cols = [MarkovState.STRONG_UP, MarkovState.UPTREND]
+	else:
+		boost_cols = [MarkovState.DOWNTREND, MarkovState.STRONG_DOWN]
+	var result: Array = []
+	for i: int in range(7):
+		var row: Array[float] = []
+		for j: int in range(7):
+			row.append(float(matrix[i][j]))
+		for col: int in boost_cols:
+			row[col] *= bias_factor
+		_renormalize_row(row)
+		result.append(row)
+	return result
+
+
+## Roll MacroState transitions for all stocks at end of each trading day (ADR-026).
+## Rebuilds _transition_matrices with biased matrix for next day's M1 simulation.
+## MacroState is intentionally NOT reset in _reset_season_mechanics() — season continuity.
+func _roll_macro_states() -> void:
+	# Select macro transition matrix: per-archetype override or default
+	var arch_macros: Dictionary = {}
+	var arch_macro_dict: Variant = _macro_cfg.get("archetypeMacroMatrices", {})
+	if arch_macro_dict is Dictionary:
+		arch_macros = arch_macro_dict as Dictionary
+
+	var default_macro_tm: Array = _macro_cfg.get("transitionMatrix", MACRO_TM_DEFAULT) as Array
+	if default_macro_tm.is_empty():
+		default_macro_tm = MACRO_TM_DEFAULT
+
+	var vol_mults: Array = _macro_cfg.get("volMultiplier",
+		[[1.15, 1.45], [0.75, 1.05], [1.05, 1.35]]) as Array
+
+	for stock_id: String in _stock_states:
+		var s: Dictionary = _stock_states[stock_id]
+		if s.get("is_etf", false):
+			continue
+		var archetype: String = StockDatabase.get_stock(stock_id).archetype \
+			if StockDatabase.get_stock(stock_id) != null else ""
+		var macro_tm: Array = arch_macros.get(archetype, default_macro_tm) as Array
+		if macro_tm.is_empty():
+			macro_tm = default_macro_tm
+
+		var macro: int = s.get("macro_state", MacroState.FLAT)
+		var row: Array = macro_tm[macro] as Array
+		var roll: float = _rng.randf()
+		var cumulative: float = 0.0
+		for j: int in range(3):
+			cumulative += float(row[j])
+			if roll <= cumulative:
+				macro = j
+				break
+		s["macro_state"] = macro
+
+		# Draw daily volume multiplier for next day (stored per-stock for _compute_volume)
+		var vm_range: Array = vol_mults[macro] as Array if macro < vol_mults.size() else [1.0, 1.0]
+		s["macro_vol_mult"] = _rng.randf_range(float(vm_range[0]), float(vm_range[1]))
+
+		# Rebuild transition matrix with season bias + macro bias
+		var base_mat: Array = _build_transition_matrix(
+			s["volatility_profile"], s.get("season_bias", SeasonBias.NEUTRAL)
+		)
+		_transition_matrices[stock_id] = _apply_macro_bias_to_matrix(base_mat, macro)
 
 
 ## Clamp negatives and renormalize a probability row to sum to 1.

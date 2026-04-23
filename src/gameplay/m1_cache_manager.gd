@@ -22,7 +22,7 @@ const MINUTES_PER_DAY: int = 390
 ## 1 시즌 거래일 수.
 const DAYS_PER_SEASON: int = 20
 ## 캐시 파일 버전 — 이 값이 변경되면 디스크 캐시 전체 무효화 후 재생성 (ADR-024).
-const CACHE_VERSION: int = 4  ## Bumped: D1_CACHE_BARS 5200→6000 (300시즌)
+const CACHE_VERSION: int = 5  ## Bumped: MacroState daily bias layer (ADR-026)
 ## 캐시 루트 디렉토리 (user:// 아래). 슬롯별 격리 → _cache_dir() 참조.
 const CACHE_ROOT: String = "user://m1_cache/"
 
@@ -136,6 +136,98 @@ func get_d1_candles(stock_id: String) -> Array[Dictionary]:
 ## M1 캔들을 Array[Dictionary] 형태로 반환.
 func get_m1_candles(stock_id: String) -> Array[Dictionary]:
 	return get_aggregated_m1(stock_id, 1)
+
+
+## 런타임 시즌 종료 시 D1 캔들을 in-memory 캐시에 누적 (ADR-026).
+## PriceEngine._reset_season_mechanics()가 ohlcv_daily를 초기화하기 전에 호출한다.
+## 새 D1 bars를 링 버퍼에 append하고 D1_CACHE_BARS 초과분은 오래된 것부터 제거한다.
+## 캐시를 디스크에 저장하여 다음 세션에서도 누적 D1 히스토리를 유지한다.
+## [param stock_id]: 종목 ID.
+## [param ohlcv_daily]: PriceEngine._stock_states[stock_id]["ohlcv_daily"] — 이번 시즌 D1 배열.
+func append_season_d1(stock_id: String, ohlcv_daily: Array) -> void:
+	if ohlcv_daily.is_empty() or not _d1_ohlc.has(stock_id):
+		return
+
+	var existing_count: int = _d1_count.get(stock_id, 0)
+	var d1_ohlc_arr: PackedInt32Array   = _d1_ohlc.get(stock_id, PackedInt32Array())
+	var d1_vol_arr:  PackedFloat32Array = _d1_vol.get(stock_id, PackedFloat32Array())
+
+	# Expand packed arrays if needed to hold more bars
+	var target_count: int = mini(existing_count + ohlcv_daily.size(), D1_CACHE_BARS)
+	if d1_ohlc_arr.size() < target_count * 4:
+		d1_ohlc_arr.resize(target_count * 4)
+	if d1_vol_arr.size() < target_count:
+		d1_vol_arr.resize(target_count)
+
+	# If new bars would exceed D1_CACHE_BARS, shift out oldest bars first (ring-buffer semantics)
+	var new_bar_count: int = ohlcv_daily.size()
+	if existing_count + new_bar_count > D1_CACHE_BARS:
+		var drop: int = existing_count + new_bar_count - D1_CACHE_BARS
+		# Shift existing bars left by 'drop' positions
+		for i: int in range(existing_count - drop):
+			var src: int = (i + drop) * 4
+			var dst: int = i * 4
+			d1_ohlc_arr[dst]     = d1_ohlc_arr[src]
+			d1_ohlc_arr[dst + 1] = d1_ohlc_arr[src + 1]
+			d1_ohlc_arr[dst + 2] = d1_ohlc_arr[src + 2]
+			d1_ohlc_arr[dst + 3] = d1_ohlc_arr[src + 3]
+			d1_vol_arr[i] = d1_vol_arr[i + drop]
+		existing_count -= drop
+
+	# Append new season bars
+	for candle: Dictionary in ohlcv_daily:
+		if existing_count >= D1_CACHE_BARS:
+			break
+		var base: int = existing_count * 4
+		if base + 3 >= d1_ohlc_arr.size():
+			d1_ohlc_arr.resize(base + 4)
+		if existing_count >= d1_vol_arr.size():
+			d1_vol_arr.resize(existing_count + 1)
+		d1_ohlc_arr[base]     = int(candle.get("open",   0))
+		d1_ohlc_arr[base + 1] = int(candle.get("high",   0))
+		d1_ohlc_arr[base + 2] = int(candle.get("low",    0))
+		d1_ohlc_arr[base + 3] = int(candle.get("close",  0))
+		d1_vol_arr[existing_count] = float(candle.get("volume", 0.0))
+		existing_count += 1
+
+	_d1_ohlc[stock_id]  = d1_ohlc_arr
+	_d1_vol[stock_id]   = d1_vol_arr
+	_d1_count[stock_id] = existing_count
+
+	# Persist updated cache to disk so next session loads the accumulated history
+	var cache_path: String = _stock_cache_path(stock_id)
+	_save_d1_to_disk(cache_path, stock_id)
+
+
+## D1 캐시만 디스크에 저장 (append_season_d1 전용 — M1은 변경 없으므로 생략).
+## 기존 파일에서 버전·시드를 읽어 헤더를 재사용한다. 파일 없으면 skip.
+func _save_d1_to_disk(path: String, stock_id: String) -> void:
+	# Read existing header (version + seed) to preserve them
+	if not FileAccess.file_exists(path):
+		return
+	var rf: FileAccess = FileAccess.open(path, FileAccess.READ)
+	if rf == null:
+		return
+	var version: Variant  = rf.get_var()
+	var seed_val: Variant = rf.get_var()
+	var _m1c: Variant     = rf.get_var()
+	var m1_ohlc: Variant  = rf.get_var()
+	var m1_vol: Variant   = rf.get_var()
+	rf.close()
+
+	var wf: FileAccess = FileAccess.open(path, FileAccess.WRITE)
+	if wf == null:
+		push_error("M1CacheManager: D1 append 저장 실패 — %s" % path)
+		return
+	wf.store_var(version)
+	wf.store_var(seed_val)
+	wf.store_var(_m1c)
+	wf.store_var(m1_ohlc if m1_ohlc is PackedInt32Array else _m1_ohlc.get(stock_id, PackedInt32Array()))
+	wf.store_var(m1_vol  if m1_vol  is PackedFloat32Array else _m1_vol.get(stock_id, PackedFloat32Array()))
+	wf.store_var(_d1_count.get(stock_id, 0))
+	wf.store_var(_d1_ohlc.get(stock_id,  PackedInt32Array()))
+	wf.store_var(_d1_vol.get(stock_id,   PackedFloat32Array()))
+	wf.close()
 
 
 # ── Thread Work ────────────────────────────────────────────────────────────────

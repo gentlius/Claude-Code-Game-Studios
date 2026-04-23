@@ -1,5 +1,5 @@
 {
-    "version": 3,
+    "version": 4,
     "rumorPressureStrength": 0.0005,
 
     "_comment_stateParams": "Markov state parameters — per-tick values (bias/mag ÷ TICKS_PER_MINUTE=4, noiseStd ÷ √4=2). See price-engine.md §1-1.",
@@ -97,6 +97,39 @@
                 [0.058, 0.205, 0.160, 0.060, 0.005, 0.500, 0.012],
                 [0.000, 0.030, 0.103, 0.265, 0.093, 0.009, 0.500]
             ]
+        }
+    },
+
+    "_comment_macroTrend": "Macro trend layer (ADR-026). Day-granularity 3-state Markov (0=TREND_UP, 1=FLAT, 2=TREND_DOWN) biases M1 micro transition matrix so weekly/monthly charts show directional trends. biasFactor multiplies UP-column or DOWN-column probabilities then renormalizes. volMultiplier[state]=[min,max] applied to M1 bar volumes each day.",
+    "macroTrend": {
+        "_comment_transitionMatrix": "Default macro transition matrix. Row=current MacroState, Col=next. Expected durations: UP~12.5d, FLAT~14.3d, DOWN~12.5d (~2.5 trading weeks per trend).",
+        "transitionMatrix": [
+            [0.92, 0.06, 0.02],
+            [0.04, 0.93, 0.03],
+            [0.02, 0.06, 0.92]
+        ],
+        "_comment_biasFactor": "Column multiplier when macro≠FLAT. TREND_UP boosts STRONG_UP(0)+UPTREND(1) columns; TREND_DOWN boosts DOWNTREND(3)+STRONG_DOWN(4) columns. Calibrated at 3.0; safe range [1.5, 5.0].",
+        "biasFactor": 3.0,
+        "_comment_volMultiplier": "Daily volume multiplier range [min, max] per MacroState. Drawn once per day, applied to all M1 bars that day. [TREND_UP, FLAT, TREND_DOWN].",
+        "volMultiplier": [
+            [1.15, 1.45],
+            [0.75, 1.05],
+            [1.05, 1.35]
+        ],
+        "_comment_archetypeMacroMatrices": "Per-archetype overrides for the 3×3 macro transition matrix. Absent archetypes fall back to default transitionMatrix above.",
+        "archetypeMacroMatrices": {
+            "_comment_GROWTH": "UP very sticky (avg 16.7d), DOWN short-lived (avg 7.7d). Reflects structural upward bias.",
+            "GROWTH":           [[0.94, 0.05, 0.01], [0.06, 0.92, 0.02], [0.05, 0.08, 0.87]],
+            "_comment_VALUE_DIVIDEND": "FLAT ultra-sticky (avg 20d). Narrow oscillation around fair value.",
+            "VALUE_DIVIDEND":   [[0.88, 0.10, 0.02], [0.03, 0.95, 0.02], [0.02, 0.10, 0.88]],
+            "_comment_CYCLICAL": "Higher turnover (avg 8.3d each state). Sector/event-driven direction changes.",
+            "CYCLICAL":         [[0.88, 0.08, 0.04], [0.06, 0.87, 0.07], [0.04, 0.08, 0.88]],
+            "_comment_EVENT_DRIVEN": "FLAT sticky (avg 16.7d), explosive moves when events fire. Events add pressure via NewsEventSystem.",
+            "EVENT_DRIVEN":     [[0.85, 0.10, 0.05], [0.03, 0.94, 0.03], [0.05, 0.10, 0.85]],
+            "_comment_RECOVERY_UNCERTAIN": "Slight DOWN bias (avg 14.3d down). A3 financials reveal true direction.",
+            "RECOVERY_UNCERTAIN":[[0.88, 0.08, 0.04], [0.03, 0.91, 0.06], [0.02, 0.05, 0.93]],
+            "_comment_DECLINING_TRAP": "DOWN very sticky (avg 20d). Brief relief rallies trap buyers. seasonDrift -1.5%.",
+            "DECLINING_TRAP":   [[0.85, 0.10, 0.05], [0.02, 0.91, 0.07], [0.01, 0.04, 0.95]]
         }
     },
 

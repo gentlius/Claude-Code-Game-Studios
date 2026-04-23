@@ -83,6 +83,34 @@ class MarkovGenerator : public RefCounted {
     struct ArchMatrix { double tm[7][7]; };
     std::unordered_map<std::string, ArchMatrix> _archetype_matrices;
 
+    // ── Macro trend layer (ADR-026) ──
+    // Day-granularity 3-state Markov: 0=TREND_UP, 1=FLAT, 2=TREND_DOWN.
+    // MacroState biases M1 micro-state transition matrix so weekly/monthly charts trend.
+    static constexpr double DEFAULT_MACRO_TM[3][3] = {
+        { 0.92, 0.06, 0.02 },  // TREND_UP
+        { 0.04, 0.93, 0.03 },  // FLAT
+        { 0.02, 0.06, 0.92 },  // TREND_DOWN
+    };
+    // volMultiplier[macro_state][0=min, 1=max] — drawn once per day
+    static constexpr double DEFAULT_MACRO_VM[3][2] = {
+        { 1.15, 1.45 },  // TREND_UP: elevated volume
+        { 0.75, 1.05 },  // FLAT: subdued volume
+        { 1.05, 1.35 },  // TREND_DOWN: elevated (panic) volume
+    };
+    static constexpr double DEFAULT_MACRO_BIAS = 3.0;
+
+    double _macro_tm[3][3]   = {};
+    double _macro_vm[3][2]   = {};    // vol multiplier [state][min/max]
+    double _macro_bias       = DEFAULT_MACRO_BIAS;
+
+    // Per-archetype macro 3×3 matrices (keyed by archetype string).
+    struct MacroArchMatrix { double tm[3][3]; };
+    std::unordered_map<std::string, MacroArchMatrix> _macro_arch_matrices;
+
+    // Apply MacroState column bias to in_m → out_m (row-wise renormalized).
+    // macro_state: 0=TREND_UP (boosts cols 0,1), 1=FLAT (no-op), 2=TREND_DOWN (boosts cols 3,4).
+    void _apply_macro_bias(const double in_m[7][7], double out_m[7][7], int macro_state) const;
+
     // ── Internal helpers ──
     void _copy_defaults();
     // base_tm: if non-null, used as the source matrix instead of _tm.

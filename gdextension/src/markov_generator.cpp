@@ -70,14 +70,17 @@ MarkovGenerator::MarkovGenerator() {
 }
 
 void MarkovGenerator::_copy_defaults() {
-    std::memcpy(_sp,  DEFAULT_SP,  sizeof(_sp));
-    std::memcpy(_tm,  DEFAULT_TM,  sizeof(_tm));
-    std::memcpy(_vss, DEFAULT_VSS, sizeof(_vss));
-    std::memcpy(_vbs, DEFAULT_VBS, sizeof(_vbs));
-    std::memcpy(_vps, DEFAULT_VPS, sizeof(_vps));
-    std::memcpy(_bvr_min, DEFAULT_BVR_MIN, sizeof(_bvr_min));
-    std::memcpy(_bvr_max, DEFAULT_BVR_MAX, sizeof(_bvr_max));
-    std::memcpy(_svm, DEFAULT_SVM, sizeof(_svm));
+    std::memcpy(_sp,       DEFAULT_SP,       sizeof(_sp));
+    std::memcpy(_tm,       DEFAULT_TM,       sizeof(_tm));
+    std::memcpy(_vss,      DEFAULT_VSS,      sizeof(_vss));
+    std::memcpy(_vbs,      DEFAULT_VBS,      sizeof(_vbs));
+    std::memcpy(_vps,      DEFAULT_VPS,      sizeof(_vps));
+    std::memcpy(_bvr_min,  DEFAULT_BVR_MIN,  sizeof(_bvr_min));
+    std::memcpy(_bvr_max,  DEFAULT_BVR_MAX,  sizeof(_bvr_max));
+    std::memcpy(_svm,      DEFAULT_SVM,      sizeof(_svm));
+    std::memcpy(_macro_tm, DEFAULT_MACRO_TM, sizeof(_macro_tm));
+    std::memcpy(_macro_vm, DEFAULT_MACRO_VM, sizeof(_macro_vm));
+    _macro_bias = DEFAULT_MACRO_BIAS;
 }
 
 // ── set_config ───────────────────────────────────────────────────────────────
@@ -169,6 +172,62 @@ void MarkovGenerator::set_config(Dictionary cfg) {
         }
     }
 
+    // macroTrend: Dictionary { transitionMatrix, biasFactor, volMultiplier, archetypeMacroMatrices }
+    // ADR-026. Falls back to compiled-in defaults if key absent.
+    _macro_arch_matrices.clear();
+    if (cfg.has("macroTrend")) {
+        Dictionary mt = cfg["macroTrend"];
+
+        // 3×3 macro transition matrix
+        if (mt.has("transitionMatrix")) {
+            Array rows = mt["transitionMatrix"];
+            for (int i = 0; i < 3 && i < rows.size(); ++i) {
+                Array row = rows[i];
+                for (int j = 0; j < 3 && j < row.size(); ++j)
+                    _macro_tm[i][j] = static_cast<double>(row[j]);
+            }
+        }
+
+        // biasFactor scalar
+        if (mt.has("biasFactor"))
+            _macro_bias = static_cast<double>(mt["biasFactor"]);
+
+        // volMultiplier: Array[3] of Array[2] [min, max]
+        if (mt.has("volMultiplier")) {
+            Array vm = mt["volMultiplier"];
+            for (int i = 0; i < 3 && i < vm.size(); ++i) {
+                Array pair = vm[i];
+                if (pair.size() >= 2) {
+                    _macro_vm[i][0] = static_cast<double>(pair[0]);
+                    _macro_vm[i][1] = static_cast<double>(pair[1]);
+                }
+            }
+        }
+
+        // archetypeMacroMatrices: Dictionary of named 3×3 matrices
+        if (mt.has("archetypeMacroMatrices")) {
+            Dictionary amd = mt["archetypeMacroMatrices"];
+            Array akeys = amd.keys();
+            for (int k = 0; k < akeys.size(); ++k) {
+                String akey = akeys[k];
+                std::string akey_str = akey.utf8().get_data();
+                if (akey_str.empty() || akey_str[0] == '_') continue;
+                Variant entry_v = amd[akey];
+                // Value is directly a 3-element Array (each element is Array[3])
+                if (entry_v.get_type() != Variant::ARRAY) continue;
+                Array rows3 = entry_v;
+                MacroArchMatrix mam;
+                std::memcpy(mam.tm, DEFAULT_MACRO_TM, sizeof(mam.tm));
+                for (int i = 0; i < 3 && i < rows3.size(); ++i) {
+                    Array row3 = rows3[i];
+                    for (int j = 0; j < 3 && j < row3.size(); ++j)
+                        mam.tm[i][j] = static_cast<double>(row3[j]);
+                }
+                _macro_arch_matrices[akey_str] = mam;
+            }
+        }
+    }
+
     _cfg_loaded = true;
 }
 
@@ -237,6 +296,37 @@ void MarkovGenerator::_build_scaled_matrix(int vp, double out_m[7][7],
     }
 }
 
+// ── _apply_macro_bias ─────────────────────────────────────────────────────────
+// Copies in_m → out_m, multiplying UP columns (0,1) when macro_state==TREND_UP(0)
+// or DOWN columns (3,4) when macro_state==TREND_DOWN(2), then renormalizes each row.
+// FLAT(1): straight copy, no modification.
+
+void MarkovGenerator::_apply_macro_bias(const double in_m[7][7], double out_m[7][7],
+                                         int macro_state) const {
+    if (macro_state == 1) { // FLAT — no bias
+        std::memcpy(out_m, in_m, sizeof(double) * 49);
+        return;
+    }
+    // Columns to boost: TREND_UP→{0=STRONG_UP, 1=UPTREND}, TREND_DOWN→{3=DOWNTREND, 4=STRONG_DOWN}
+    int boost[2];
+    if (macro_state == 0) { boost[0] = 0; boost[1] = 1; }  // TREND_UP
+    else                  { boost[0] = 3; boost[1] = 4; }  // TREND_DOWN
+
+    for (int i = 0; i < 7; ++i) {
+        double row[7];
+        for (int j = 0; j < 7; ++j) row[j] = in_m[i][j];
+        row[boost[0]] *= _macro_bias;
+        row[boost[1]] *= _macro_bias;
+        // Renormalize
+        double total = 0.0;
+        for (int j = 0; j < 7; ++j) total += row[j];
+        if (total > 0.0)
+            for (int j = 0; j < 7; ++j) out_m[i][j] = row[j] / total;
+        else
+            for (int j = 0; j < 7; ++j) out_m[i][j] = in_m[i][j];
+    }
+}
+
 // ── generate_stock_m1 ─────────────────────────────────────────────────────────
 // Algorithm mirrors PriceEngine.generate_stock_m1_cache() line-for-line.
 // archetype_key selects a per-archetype base matrix (ADR-025). Empty = default _tm.
@@ -289,7 +379,37 @@ Dictionary MarkovGenerator::generate_stock_m1(
     const double clamp_lo = std::max(BP * HARD_CLAMP_MIN_RATIO, HARD_CLAMP_ABS_MIN);
     const double clamp_hi = BP * HARD_CLAMP_MAX_RATIO;
 
+    // ── Macro trend layer (ADR-026) ──
+    // Select per-archetype macro matrix if available; else use default _macro_tm.
+    const double (*macro_src)[3] = _macro_tm;
+    if (!archetype_key.is_empty()) {
+        std::string akey = archetype_key.utf8().get_data();
+        auto it = _macro_arch_matrices.find(akey);
+        if (it != _macro_arch_matrices.end())
+            macro_src = it->second.tm;
+    }
+    int    macro_state    = 1;  // start FLAT
+    double day_matrix[7][7];
+    _apply_macro_bias(matrix, day_matrix, macro_state);  // initial day matrix
+    double macro_vol_mult = 1.0;
+
     for (int _day = 0; _day < n_days; ++_day) {
+        // ── MacroState daily transition ──────────────────────────────────
+        {
+            double macro_roll = static_cast<double>(rng.randf());
+            double macro_cum  = 0.0;
+            for (int j = 0; j < 3; ++j) {
+                macro_cum += macro_src[macro_state][j];
+                if (macro_roll <= macro_cum) { macro_state = j; break; }
+            }
+            _apply_macro_bias(matrix, day_matrix, macro_state);
+            // Daily volume multiplier drawn once per day
+            macro_vol_mult = static_cast<double>(rng.randf_range(
+                static_cast<float>(_macro_vm[macro_state][0]),
+                static_cast<float>(_macro_vm[macro_state][1])
+            ));
+        }
+
         int    day_open   = static_cast<int>(std::lround(current_price));
         double day_high   = current_price;
         double day_low    = current_price;
@@ -297,13 +417,13 @@ Dictionary MarkovGenerator::generate_stock_m1(
         bool   first_min  = true;
 
         for (int _min = 0; _min < MINUTES_PER_DAY; ++_min) {
-            // ── State transition ─────────────────────────────────────────
+            // ── State transition (uses day_matrix biased by MacroState) ──
             int min_dur = static_cast<int>(_sp[markov_state][4]);
             if (state_minutes >= min_dur) {
                 double roll       = static_cast<double>(rng.randf());
                 double cumulative = 0.0;
                 for (int j = 0; j < 7; ++j) {
-                    cumulative += matrix[markov_state][j];
+                    cumulative += day_matrix[markov_state][j];
                     if (roll <= cumulative) {
                         if (j != markov_state) {
                             markov_state  = j;
@@ -354,11 +474,12 @@ Dictionary MarkovGenerator::generate_stock_m1(
             int m1_high  = static_cast<int>(std::lround(std::max(current_price, next_price) + swing));
             int m1_low   = static_cast<int>(std::lround(std::min(current_price, next_price) - swing));
 
-            // ── M1 volume ────────────────────────────────────────────────
+            // ── M1 volume (macro_vol_mult applied — ADR-026) ─────────────
             float m1_volume = rng.randf_range(
                 static_cast<float>(_bvr_min[VP]),
                 static_cast<float>(_bvr_max[VP])
-            ) * static_cast<float>(_svm[markov_state]);
+            ) * static_cast<float>(_svm[markov_state])
+              * static_cast<float>(macro_vol_mult);
 
             // ── Write M1 to ring buffer ──────────────────────────────────
             int m1_pos  = m1_total % m1_capacity;

@@ -341,17 +341,15 @@ func _init_cfg_from_consts() -> void:
 	_cfg_state_volume_mult = STATE_VOLUME_MULT.duplicate()
 
 
-## ADR-024 Phase 3: Try to instantiate the C++ MarkovGenerator GDExtension.
-## C++ MarkovGenerator 로드 시도. 실패 시 GDScript 폴백 (느림 — Output 패널 확인).
+## ADR-024 Phase 3: Instantiate the C++ MarkovGenerator GDExtension.
+## GDScript 폴백 없음 — 라이브러리 로드 실패 시 즉시 크래시.
+## DLL 없거나 로드 실패하면 gdextension/bin/windows/ 확인 후 Godot 에디터 재시작.
 func _init_markov_ext() -> void:
-	if not ClassDB.class_exists("MarkovGenerator"):
-		push_warning("PriceEngine: MarkovGenerator GDExtension 미로드 — GDScript 폴백 사용 (느림). " +
-			"gdextension/bin/windows/ 에 DLL 있는지, Godot 에디터 재시작했는지 확인.")
-		return
+	assert(ClassDB.class_exists("MarkovGenerator"),
+		"FATAL: MarkovGenerator GDExtension 미로드. " +
+		"gdextension/bin/windows/ DLL 확인 후 Godot 에디터 재시작 필요.")
 	_markov = ClassDB.instantiate("MarkovGenerator")
-	if _markov == null:
-		push_error("PriceEngine: MarkovGenerator 인스턴스 생성 실패.")
-		return
+	assert(_markov != null, "FATAL: MarkovGenerator 인스턴스 생성 실패.")
 	_markov.set_config(_build_markov_cfg())
 	print("PriceEngine: C++ MarkovGenerator 로드 완료.")
 
@@ -918,189 +916,19 @@ func generate_stock_m1_cache(
 	m1_capacity: int,
 	d1_capacity: int
 ) -> Dictionary:
-	const MINUTES_PER_DAY: int = 390
 	const DAYS_PER_SEASON: int = 20
-	const TICKS_PER_MINUTE: int = 4  # same as GameClock.TICKS_PER_MINUTE
 
 	var n_days: int = stock.history_seasons * DAYS_PER_SEASON
 	var vol_profile: int = stock.volatility_profile
 	var base_price: int = stock.base_price
 	var stock_seed: int = (history_seed ^ hash(stock.stock_id)) & 0x7FFFFFFF
 
-	# ADR-024 Phase 3: delegate to C++ MarkovGenerator when extension is loaded.
+	# ADR-024 Phase 3: C++ MarkovGenerator — GDScript 폴백 없음 (_init_markov_ext 참조).
 	# ADR-025: pass archetype_key so C++ selects the per-archetype transition matrix.
-	if _markov != null:
-		return _markov.generate_stock_m1(
-			vol_profile, base_price, n_days, m1_capacity, d1_capacity, stock_seed,
-			stock.archetype)
-
-	# GDScript fallback (Phase 1 implementation) — active until extension is compiled.
-	var matrix: Array = _build_transition_matrix(vol_profile, SeasonBias.NEUTRAL)
-
-	# Phase 2: use JSON-loaded params so C++ MarkovGenerator can validate against same values.
-	var cfg_sp: Array  = _cfg_state_params if not _cfg_state_params.is_empty() else _array_copy(STATE_PARAMS.values())
-	var cfg_vps: Array = _cfg_vol_pattern_scale if not _cfg_vol_pattern_scale.is_empty() else VOL_PATTERN_SCALE
-	var cfg_bvr: Array = _cfg_base_volume_range if not _cfg_base_volume_range.is_empty() else BASE_VOLUME_RANGE
-	var cfg_svm: Array = _cfg_state_volume_mult if not _cfg_state_volume_mult.is_empty() else STATE_VOLUME_MULT
-
-	var rng := RandomNumberGenerator.new()
-	rng.seed = stock_seed
-
-	# Circular rolling buffers — only keep last m1_capacity M1 bars and d1_capacity D1 bars.
-	var m1_ohlc := PackedInt32Array()
-	m1_ohlc.resize(m1_capacity * 4)
-	var m1_vol := PackedFloat32Array()
-	m1_vol.resize(m1_capacity)
-	var d1_ohlc := PackedInt32Array()
-	d1_ohlc.resize(d1_capacity * 4)
-	var d1_vol := PackedFloat32Array()
-	d1_vol.resize(d1_capacity)
-
-	var current_price: float = float(base_price)
-	var markov_state: int = MarkovState.SIDEWAYS
-	var state_minutes: int = 0
-	var m1_total: int = 0  # total M1 bars generated (rolling index: m1_total % m1_capacity)
-	var d1_total: int = 0  # total D1 bars generated
-
-	for _day: int in range(n_days):
-		var day_open: int = roundi(current_price)
-		var day_high: float = current_price
-		var day_low: float = current_price
-		var day_volume: float = 0.0
-		var is_first_minute: bool = true
-
-		for _min: int in range(MINUTES_PER_DAY):
-			# State transition check every min_duration game-minutes.
-			var params: Array = cfg_sp[markov_state]
-			var min_dur: int = params[4]
-			if state_minutes >= min_dur:
-				var row: Array = matrix[markov_state]
-				var roll: float = rng.randf()
-				var cumulative: float = 0.0
-				for j: int in range(7):
-					cumulative += float(row[j])
-					if roll <= cumulative:
-						if j != markov_state:
-							markov_state = j
-							state_minutes = 0
-						break
-			state_minutes += 1
-
-			# Per-minute delta: scale per-tick params by TICKS_PER_MINUTE.
-			var sp: Array = cfg_sp[markov_state]
-			var n_t: float = float(TICKS_PER_MINUTE)
-			var bias: float  = float(sp[0]) * n_t
-			var mag: float   = rng.randf_range(float(sp[1]), float(sp[2])) * n_t
-			# Box-Muller gaussian: std scales as sqrt(n) for n independent ticks.
-			var u1: float = maxf(rng.randf(), 1e-10)
-			var u2: float = rng.randf()
-			var noise: float = sqrt(-2.0 * log(u1)) * cos(TAU * u2) * float(sp[3]) * sqrt(n_t)
-			var pattern_delta: float = (bias + mag + noise) * float(cfg_vps[vol_profile])
-
-			# Mean-reversion drift (same formula as generate_synthetic_d1).
-			var dev: float = (current_price - float(base_price)) / float(base_price)
-			var r: float = absf(dev)
-			var intensity: float
-			if r < threshold_soft:
-				intensity = 1.0
-			elif r < threshold_hard:
-				intensity = 1.0 + (r - threshold_soft) * 4.0
-			else:
-				intensity = 1.0 + (threshold_hard - threshold_soft) * 4.0 + (r - threshold_hard) * 16.0
-			var drift: float = -k_drift * dev * intensity * n_t
-
-			var next_price: float = maxf(current_price * (1.0 + pattern_delta + drift), 100.0)
-			next_price = clampf(
-				next_price,
-				maxf(float(base_price) * HARD_CLAMP_MIN_RATIO, HARD_CLAMP_ABS_MIN_PRICE),
-				float(base_price) * HARD_CLAMP_MAX_RATIO
-			)
-
-			# M1 OHLC with proportional wick — all values tick-aligned (ADR-002).
-			var m1_open: int  = round_to_tick(current_price)
-			var m1_close: int = round_to_tick(next_price)
-			var swing: float  = absf(next_price - current_price) * rng.randf_range(0.2, 0.6)
-			var m1_high: int  = round_to_tick(maxf(current_price, next_price) + swing)
-			var m1_low: int   = round_to_tick(minf(current_price, next_price) - swing)
-
-			# Volume: base range × state multiplier.
-			var bvr: Array = cfg_bvr[vol_profile]
-			var m1_volume: float = rng.randf_range(float(bvr[0]), float(bvr[1])) \
-				* float(cfg_svm[markov_state])
-
-			# Write to rolling M1 buffer.
-			var m1_pos: int  = m1_total % m1_capacity
-			var m1_base: int = m1_pos * 4
-			m1_ohlc[m1_base]     = m1_open
-			m1_ohlc[m1_base + 1] = m1_high
-			m1_ohlc[m1_base + 2] = m1_low
-			m1_ohlc[m1_base + 3] = m1_close
-			m1_vol[m1_pos] = m1_volume
-			m1_total += 1
-
-			# Accumulate D1 bars from M1 data.
-			if is_first_minute:
-				day_open = m1_open
-				is_first_minute = false
-			day_high    = maxf(day_high, float(m1_high))
-			day_low     = minf(day_low,  float(m1_low))
-			day_volume  += m1_volume
-			current_price = next_price
-
-		# Snap last M1 close to current_price for cross-day continuity.
-		if m1_total > 0:
-			var last_pos: int = (m1_total - 1) % m1_capacity
-			m1_ohlc[last_pos * 4 + 3] = round_to_tick(current_price)
-
-		# Write D1 bar to rolling D1 buffer — tick-aligned (ADR-002).
-		var d1_pos: int  = d1_total % d1_capacity
-		var d1_base: int = d1_pos * 4
-		d1_ohlc[d1_base]     = day_open
-		d1_ohlc[d1_base + 1] = round_to_tick(day_high)
-		d1_ohlc[d1_base + 2] = round_to_tick(maxf(day_low, 100.0))
-		d1_ohlc[d1_base + 3] = round_to_tick(current_price)
-		d1_vol[d1_pos] = day_volume
-		d1_total += 1
-
-	# Reorder circular buffers → chronological PackedArrays.
-	var m1_count: int = mini(m1_total, m1_capacity)
-	var m1_start: int = m1_total % m1_capacity if m1_total > m1_capacity else 0
-	var m1_ohlc_out := PackedInt32Array()
-	m1_ohlc_out.resize(m1_count * 4)
-	var m1_vol_out := PackedFloat32Array()
-	m1_vol_out.resize(m1_count)
-	for i: int in range(m1_count):
-		var src: int = (m1_start + i) % m1_capacity
-		var dst: int = i
-		m1_ohlc_out[dst * 4]     = m1_ohlc[src * 4]
-		m1_ohlc_out[dst * 4 + 1] = m1_ohlc[src * 4 + 1]
-		m1_ohlc_out[dst * 4 + 2] = m1_ohlc[src * 4 + 2]
-		m1_ohlc_out[dst * 4 + 3] = m1_ohlc[src * 4 + 3]
-		m1_vol_out[dst] = m1_vol[src]
-
-	var d1_count: int = mini(d1_total, d1_capacity)
-	var d1_start: int = d1_total % d1_capacity if d1_total > d1_capacity else 0
-	var d1_ohlc_out := PackedInt32Array()
-	d1_ohlc_out.resize(d1_count * 4)
-	var d1_vol_out := PackedFloat32Array()
-	d1_vol_out.resize(d1_count)
-	for i: int in range(d1_count):
-		var src: int = (d1_start + i) % d1_capacity
-		var dst: int = i
-		d1_ohlc_out[dst * 4]     = d1_ohlc[src * 4]
-		d1_ohlc_out[dst * 4 + 1] = d1_ohlc[src * 4 + 1]
-		d1_ohlc_out[dst * 4 + 2] = d1_ohlc[src * 4 + 2]
-		d1_ohlc_out[dst * 4 + 3] = d1_ohlc[src * 4 + 3]
-		d1_vol_out[dst] = d1_vol[src]
-
-	return {
-		"m1_ohlc":  m1_ohlc_out,
-		"m1_vol":   m1_vol_out,
-		"d1_ohlc":  d1_ohlc_out,
-		"d1_vol":   d1_vol_out,
-		"m1_count": m1_count,
-		"d1_count": d1_count,
-	}
+	assert(_markov != null, "FATAL: generate_stock_m1_cache called before MarkovGenerator loaded.")
+	return _markov.generate_stock_m1(
+		vol_profile, base_price, n_days, m1_capacity, d1_capacity, stock_seed,
+		stock.archetype)
 
 
 ## Rumor hint handler (TD-DR-04, GDD §3-5).

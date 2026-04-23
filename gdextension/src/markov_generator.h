@@ -116,6 +116,23 @@ class MarkovGenerator : public RefCounted {
     // macro_state: 0=TREND_UP (boosts cols 0,1), 1=FLAT (no-op), 2=TREND_DOWN (boosts cols 3,4).
     void _apply_macro_bias(const double in_m[7][7], double out_m[7][7], int macro_state) const;
 
+    // ── KRX tick-size rounding (ADR-002) ──
+    // Mirrors PriceEngine.get_tick_size() / round_to_tick() in GDScript exactly.
+    static inline int krx_tick_size(int price) noexcept {
+        if (price <   1000) return 1;
+        if (price <   5000) return 5;
+        if (price <  10000) return 10;
+        if (price <  50000) return 50;
+        if (price < 100000) return 100;
+        if (price < 500000) return 500;
+        return 1000;
+    }
+    static inline int round_to_tick(double raw) noexcept {
+        int r = static_cast<int>(std::lround(raw));
+        int ts = krx_tick_size(r);
+        return static_cast<int>(std::lround(raw / static_cast<double>(ts))) * ts;
+    }
+
     // ── Internal helpers ──
     void _copy_defaults();
     // base_tm: if non-null, used as the source matrix instead of _tm.

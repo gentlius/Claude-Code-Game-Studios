@@ -418,7 +418,7 @@ Dictionary MarkovGenerator::generate_stock_m1(
             ));
         }
 
-        int    day_open   = static_cast<int>(std::lround(current_price));
+        int    day_open   = round_to_tick(current_price);
         double day_high   = current_price;
         double day_low    = current_price;
         double day_volume = 0.0;
@@ -474,13 +474,13 @@ Dictionary MarkovGenerator::generate_stock_m1(
             double next_price = std::max(current_price * (1.0 + pattern_delta + drift), 100.0);
             next_price = std::clamp(next_price, clamp_lo, clamp_hi);
 
-            // ── M1 OHLC with proportional wick ──────────────────────────
-            int m1_open  = static_cast<int>(std::lround(current_price));
-            int m1_close = static_cast<int>(std::lround(next_price));
+            // ── M1 OHLC with proportional wick — KRX tick-aligned (ADR-002) ──
+            int m1_open  = round_to_tick(current_price);
+            int m1_close = round_to_tick(next_price);
             double swing = std::abs(next_price - current_price)
                          * static_cast<double>(rng.randf_range(0.2f, 0.6f));
-            int m1_high  = static_cast<int>(std::lround(std::max(current_price, next_price) + swing));
-            int m1_low   = static_cast<int>(std::lround(std::min(current_price, next_price) - swing));
+            int m1_high  = round_to_tick(std::max(current_price, next_price) + swing);
+            int m1_low   = round_to_tick(std::min(current_price, next_price) - swing);
 
             // ── M1 volume (macro_vol_mult applied — ADR-026) ─────────────
             float m1_volume = rng.randf_range(
@@ -510,19 +510,19 @@ Dictionary MarkovGenerator::generate_stock_m1(
             current_price = next_price;
         }
 
-        // Snap last M1 close for cross-day continuity
+        // Snap last M1 close for cross-day continuity — tick-aligned (ADR-002)
         if (m1_total > 0) {
             int last_pos = (m1_total - 1) % m1_capacity;
-            m1_ohlc_ptr[last_pos * 4 + 3] = static_cast<int>(std::lround(current_price));
+            m1_ohlc_ptr[last_pos * 4 + 3] = round_to_tick(current_price);
         }
 
-        // ── Write D1 bar ─────────────────────────────────────────────────
+        // ── Write D1 bar — KRX tick-aligned (ADR-002) ────────────────────
         int d1_pos  = d1_total % d1_capacity;
         int d1_base = d1_pos * 4;
         d1_ohlc_ptr[d1_base]     = day_open;
-        d1_ohlc_ptr[d1_base + 1] = static_cast<int>(std::lround(day_high));
-        d1_ohlc_ptr[d1_base + 2] = static_cast<int>(std::lround(std::max(day_low, 100.0)));
-        d1_ohlc_ptr[d1_base + 3] = static_cast<int>(std::lround(current_price));
+        d1_ohlc_ptr[d1_base + 1] = round_to_tick(day_high);
+        d1_ohlc_ptr[d1_base + 2] = round_to_tick(std::max(day_low, 100.0));
+        d1_ohlc_ptr[d1_base + 3] = round_to_tick(current_price);
         d1_vol_ptr[d1_pos] = static_cast<float>(day_volume);
         ++d1_total;
     }

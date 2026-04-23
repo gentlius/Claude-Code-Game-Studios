@@ -259,6 +259,71 @@ C++ MarkovGenerator가 `set_config()`에서 로드하며, `generate_stock_m1(arc
 
 자세한 공식은 stock-database.md §F1 참조.
 
+##### 1-8. 매크로 추세 레이어 (ADR-026)
+
+§1-7의 아키타입 행렬은 분 단위 미시 전환을 제어하지만, 미시 Markov는 자기평균화(central limit
+theorem)로 인해 주봉·월봉에서 박스 패턴을 형성한다. **매크로 추세 레이어**는 이를 깨기 위해
+일봉 수준에서 작동하는 **상위 Markov(macro Markov)**를 도입한다.
+
+###### 매크로 상태 정의
+
+| MacroState | 값 | 설명 |
+|------------|----|------|
+| `TREND_UP`   | 0 | 상승 추세일. 다음 날도 상승 추세 유지 확률 92% |
+| `FLAT`       | 1 | 보합일 (초기값). 유지 확률 93% |
+| `TREND_DOWN` | 2 | 하락 추세일. 유지 확률 92% |
+
+평균 지속 일수: UP ≈ 12.5일, FLAT ≈ 14.3일, DOWN ≈ 12.5일 (약 2.5 거래주). 이 지속성이
+주봉·월봉 차트에 방향성을 부여한다.
+
+###### 매크로 바이어스 메커니즘
+
+매 거래일 시작 시(C++ day 루프 최상단, GDScript `_end_trading_day()` 호출 직전):
+
+1. `macro_tm[current_macro_state]` 행 기준으로 다음 MacroState 전환 롤
+2. 선택된 MacroState에 따라 미시 전환 행렬을 컬럼 바이어스 적용:
+   - `TREND_UP`: STRONG_UP(0)·UPTREND(1) 컬럼 × `biasFactor`, 행 재정규화
+   - `FLAT`: 행렬 무변경 (no-op)
+   - `TREND_DOWN`: DOWNTREND(3)·STRONG_DOWN(4) 컬럼 × `biasFactor`, 행 재정규화
+3. 해당 일의 M1 거래량에 `macro_vol_mult` 곱셈 적용
+
+결과: TREND_UP 기간에는 미시 상태가 UPTREND로 더 자주 전환하고, STRONG_DOWN으로의 전환 확률이
+낮아진다. 20일(1시즌) 집계 시 일봉·주봉에서 명확한 상승/하락 추세가 형성된다.
+
+###### 아키타입별 매크로 전환 행렬
+
+| Archetype | 특성 | UP 평균 지속 | DOWN 평균 지속 |
+|-----------|------|------------|--------------|
+| `GROWTH` | UP ultra-sticky | 16.7일 | 7.7일 |
+| `VALUE_DIVIDEND` | FLAT ultra-sticky (20일) | 8.3일 | 8.3일 |
+| `CYCLICAL` | 빠른 전환 (8.3일) | 8.3일 | 8.3일 |
+| `EVENT_DRIVEN` | FLAT 16.7일 → 이벤트에 의존 | 6.7일 | 6.7일 |
+| `RECOVERY_UNCERTAIN` | DOWN 편향 (14.3일) | 8.3일 | 14.3일 |
+| `DECLINING_TRAP` | DOWN ultra-sticky (20일) | 6.7일 | 20.0일 |
+
+###### 시즌 연속성
+
+`macro_state`는 `_reset_season_mechanics()`에서 초기화되지 않는다. 시즌 경계를 넘어도
+MacroState가 유지되어 "1시즌 말 상승 추세 → 2시즌 초 상승 추세 지속" 같은 다시즌 연속 추세가
+형성된다. 플레이어가 200시즌을 플레이하면 최대 300+200=500시즌 분량의 D1 히스토리가
+M1CacheManager 링 버퍼(D1_CACHE_BARS=6000, 300시즌)에 누적된다.
+
+###### 런타임 D1 누적 (`append_season_d1`)
+
+`_on_season_start()`에서 `_reset_season_mechanics()` 호출 전에 `M1CacheManager.append_season_d1()`을
+호출하여 이번 시즌의 D1 캔들을 링 버퍼에 추가한다. 링 버퍼가 D1_CACHE_BARS를 초과하면 오래된
+D1 bars가 자동으로 제거된다.
+
+###### 파라미터 위치
+
+`assets/data/price_engine_config.json` → `macroTrend` 키:
+- `transitionMatrix`: 3×3 기본 전환 행렬
+- `biasFactor`: 컬럼 바이어스 배수 (기본 3.0; 안전 범위 [1.5, 5.0])
+- `volMultiplier[3][2]`: MacroState별 일별 거래량 배수 범위
+- `archetypeMacroMatrices`: 아키타입별 3×3 재정의
+
+C++과 GDScript 양쪽이 동일 JSON에서 로드하여 pre-history/runtime 간 시각적 불연속 없음.
+
 ---
 
 #### 규칙 2. 드리프트 레이어 — 평균 회귀
@@ -1012,6 +1077,40 @@ min_price = max(base_price × 0.15, 1000)
 max_price = base_price × 3.0
 ```
 
+#### F7. 매크로 추세 레이어 (ADR-026)
+
+```
+# 하루 1회 MacroState 전환
+macro_roll = uniform(0, 1)
+macro_state_next = argmin_j { cumsum(macro_tm[macro_state][j]) >= macro_roll }
+
+# 컬럼 바이어스 적용 (행별 독립 정규화)
+if macro_state == TREND_UP:
+    biased_matrix[i][STRONG_UP]  = micro_matrix[i][STRONG_UP]  × biasFactor   # col 0
+    biased_matrix[i][UPTREND]    = micro_matrix[i][UPTREND]    × biasFactor   # col 1
+elif macro_state == TREND_DOWN:
+    biased_matrix[i][DOWNTREND]  = micro_matrix[i][DOWNTREND]  × biasFactor   # col 3
+    biased_matrix[i][STRONG_DOWN]= micro_matrix[i][STRONG_DOWN]× biasFactor   # col 4
+else:  # FLAT
+    biased_matrix = micro_matrix  # no-op
+# 각 행 재정규화: biased_matrix[i][j] /= sum(biased_matrix[i])
+
+# 일별 거래량 배수
+macro_vol_mult = uniform(vol_min[macro_state], vol_max[macro_state])
+tick_volume = ... × macro_vol_mult
+```
+
+| Variable | Default | Range | Description |
+|----------|---------|-------|-------------|
+| `biasFactor` | 3.0 | [1.5, 5.0] | 컬럼 확률 배율. 높을수록 추세 강도 증가 |
+| `macro_tm[3][3]` | §1-8 표 | — | MacroState 전환 행렬 (아키타입별 재정의 가능) |
+| `macro_vol_mult` | UP:[1.15,1.45] FLAT:[0.75,1.05] DOWN:[1.05,1.35] | — | 거래량 배수 범위 |
+
+**예시 (biasFactor=3.0, TREND_UP 상태, SIDEWAYS 행)**:
+기본 SIDEWAYS 행: [0.003, 0.008, 0.975, 0.008, 0.003, 0.002, 0.001]
+바이어스 후: STRONG_UP×3=0.009, UPTREND×3=0.024, 나머지 그대로 → 정규화
+결과: SIDEWAYS→UPTREND 전환 확률 0.8% → ~2.2% (약 2.8배). 하루 390분 누적 시 일봉 방향성 형성.
+
 ### 변수 마스터 테이블
 
 | Variable | Default | Range | Owner | Description |
@@ -1143,6 +1242,9 @@ EXTREME 변동성(메디진, base_price=180,000원) + 대형 이벤트 1회, vol
 | `CB_STAGE1_PCT` | -0.12 | -0.08~-0.15 | 덜 민감한 CB. 큰 폭락만 반응 | 민감한 CB. 작은 하락에도 발동 |
 | `CB_STAGE2_PCT` | -0.20 | -0.15~-0.25 | 조기 마감 기준 완화 | 조기 마감 빈번 |
 | `CB_STAGE1_TICKS` | 20 | 10~40 | 긴 정지. 시장 안정화 | 짧은 정지 |
+| `biasFactor` (macro) | 3.0 | [1.5, 5.0] | 추세 강도 증가. 주봉·월봉 방향성 강화 | 추세 효과 약화. 박스 패턴 재출현 |
+| `macro_tm 자기유지` | 0.92~0.93 | 0.80~0.97 | 추세 지속 기간 증가 (1/(1-p)일) | 추세 빠르게 역전. 잦은 방향 전환 |
+| `macro_vol_mult (TREND_UP)` | [1.15, 1.45] | [1.0, 2.0] | 상승장 거래량 더 뚜렷하게 증가 | 상승장 거래량 차이 없음 |
 
 ## Acceptance Criteria
 
@@ -1174,6 +1276,10 @@ EXTREME 변동성(메디진, base_price=180,000원) + 대형 이벤트 1회, vol
 - [ ] 지수가 매 틱마다 모든 종목 가격 갱신 후 업데이트됨
 - [ ] `get_market_index()`, `get_index_change_pct()`, `get_market_cap()` API가 정확한 값을 반환함
 - [ ] 시즌 초기화 시 기준 시가총액이 재계산되고 지수가 1000.0으로 리셋됨
+- [ ] **ADR-026**: TREND_UP MacroState 기간(≥10일)에 해당 종목 일봉 차트가 상방 편향을 보임
+- [ ] **ADR-026**: MacroState가 시즌 경계를 넘어 유지됨 (저장/로드 후 동일 값 복원)
+- [ ] **ADR-026**: 2시즌 이후 `M1CacheManager.get_d1_candles()`가 이전 시즌 D1 bars를 포함함
+- [ ] **ADR-026**: 주봉(W1) 차트에서 DECLINING_TRAP 종목이 GROWTH 종목보다 평균적으로 하방 편향을 보임
 - [ ] 장 마감 시 `prev_day_close`가 갱신되어 다음 날 상/하한가 기준이 됨
 - [ ] 종목 가격이 전일 종가 ±15% 도달 시 VI 발동, 8틱 동안 해당 종목 가격 동결
 - [ ] VI는 종목당 일 1회까지만 발동
@@ -1229,6 +1335,12 @@ Approved 조건: 아래 전 항목 체크 완료 + QA Lead 서명.
 - [x] `PriceEngine._on_rumor_hint(rumor: Dictionary)` 구현 — `on_rumor_hint` 시그널 연결
 - [x] `PriceEngine.process_tick()` Step 4-c rumor_delta 계산 삽입
 - [x] `price_engine_config.json` — `RUMOR_PRESSURE_STRENGTH: 0.0005` 추가
+- [x] **ADR-026 매크로 추세 레이어**: `price_engine_config.json` v4 — `macroTrend` 섹션 (3×3 전환 행렬, biasFactor=3.0, volMultiplier, archetypeMacroMatrices 6종)
+- [x] **ADR-026**: C++ `MarkovGenerator._apply_macro_bias()` + day 루프 MacroState 전환 롤
+- [x] **ADR-026**: GDScript `PriceEngine.MacroState` enum + `_roll_macro_states()` + `_apply_macro_bias_to_matrix()`
+- [x] **ADR-026**: `macro_state` 저장/로드 + `_reset_season_mechanics()`에서 초기화 제외 (시즌 연속성)
+- [x] **ADR-026**: `M1CacheManager.append_season_d1()` + CACHE_VERSION 5 bump
+- [x] **ADR-026**: `PriceEngine._on_season_start()` — `append_season_d1()` 호출 (D1 링 버퍼 누적)
 
 ### AC → 테스트 매핑
 

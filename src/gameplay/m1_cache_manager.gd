@@ -15,14 +15,14 @@ extends Node
 
 ## M1 캐시 크기: 1시즌 = 20거래일 × 390분. M1/M5/M15 프리히스토리 소스.
 const M1_CACHE_BARS: int = 7800
-## D1 캐시 크기: 260시즌 × 20거래일. D1/W1/MN 프리히스토리 소스.
-const D1_CACHE_BARS: int = 5200
+## D1 캐시 크기: 300시즌 × 20거래일. D1/W1/MN 프리히스토리 소스.
+const D1_CACHE_BARS: int = 6000
 ## 1 거래일 분 수 (GameClock.MINUTES_PER_DAY).
 const MINUTES_PER_DAY: int = 390
 ## 1 시즌 거래일 수.
 const DAYS_PER_SEASON: int = 20
 ## 캐시 파일 버전 — 이 값이 변경되면 디스크 캐시 전체 무효화 후 재생성 (ADR-024).
-const CACHE_VERSION: int = 3  ## Bumped: ADR-025 archetype matrices added to generator
+const CACHE_VERSION: int = 4  ## Bumped: D1_CACHE_BARS 5200→6000 (300시즌)
 ## 캐시 루트 디렉토리 (user:// 아래). 슬롯별 격리 → _cache_dir() 참조.
 const CACHE_ROOT: String = "user://m1_cache/"
 

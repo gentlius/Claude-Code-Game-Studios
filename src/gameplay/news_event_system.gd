@@ -400,7 +400,8 @@ func get_news_delay() -> int:
 ##
 ## Example:
 ##   NewsEventSystem.inject_event("SECTOR_ROTATION", "반도체", 0.055, 1,
-##       "ROTATION_KR_INFLOW_반도체", 8)
+##       "ROTATION_KR_INFLOW_1", 8)
+## headline_key is a tr() msgid from ko.po; {sector} placeholder is substituted automatically.
 func inject_event(
 		event_tag: String,
 		sector: String,
@@ -431,7 +432,7 @@ func inject_event(
 
 	if not headline_key.is_empty():
 		var entry: Dictionary = {
-			"headline": tr(headline_key),  # tr() returns key unchanged when no translation loaded
+			"headline": tr(headline_key).format({"sector": sector}),
 			"body":     "",
 			"impact_hint": "positive" if direction > 0 else "negative",
 			"scope":    "SECTOR",

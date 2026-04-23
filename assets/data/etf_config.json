@@ -52,10 +52,5 @@
     "outflowImpactMax": 0.03,
     "rotationDecayTicks": 8,
     "flowLookbackTicks": 5
-  },
-
-  "rotationHeadlineKeys": {
-    "inflow": "ROTATION_KR_INFLOW",
-    "outflow": "ROTATION_KR_OUTFLOW"
   }
 }

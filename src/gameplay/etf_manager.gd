@@ -57,9 +57,6 @@ var _outflow_impact_max: float = 0.03
 var _rotation_decay_ticks: int = 8
 var _flow_lookback_ticks: int = FLOW_LOOKBACK_DEFAULT
 
-## Rotation headline keys loaded from config
-var _headline_inflow_key: String = "ROTATION_KR_INFLOW"
-var _headline_outflow_key: String = "ROTATION_KR_OUTFLOW"
 
 ## RNG for rotation impact sampling and rival-sector selection.
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -160,9 +157,8 @@ func _load_config() -> void:
 	_rotation_decay_ticks  = rp.get("rotationDecayTicks", 8)
 	_flow_lookback_ticks   = rp.get("flowLookbackTicks", FLOW_LOOKBACK_DEFAULT)
 
-	var hk: Dictionary = cfg.get("rotationHeadlineKeys", {})
-	_headline_inflow_key  = hk.get("inflow", "ROTATION_KR_INFLOW")
-	_headline_outflow_key = hk.get("outflow", "ROTATION_KR_OUTFLOW")
+	# Rotation headline keys are now owned by MarketProfile (ADR-021).
+	# market_kr.json "rotation_headline_keys" → MarketProfile.get_rotation_headline().
 
 
 func _init_season() -> void:
@@ -327,14 +323,14 @@ func _fire_rotation_event(sector: String, direction: String) -> void:
 	if direction == "inflow":
 		impact = _rng.randf_range(_inflow_impact_min, _inflow_impact_max)
 		dir_int = 1
-		headline_key = _headline_inflow_key
+		headline_key = MarketProfile.get_rotation_headline("inflow")
 	else:
 		impact = _rng.randf_range(_outflow_impact_min, _outflow_impact_max)
 		dir_int = -1
-		headline_key = _headline_outflow_key
+		headline_key = MarketProfile.get_rotation_headline("outflow")
 	NewsEventSystem.inject_event(
 		"SECTOR_ROTATION", sector, impact, dir_int,
-		headline_key + "_" + sector, _rotation_decay_ticks
+		headline_key, _rotation_decay_ticks
 	)
 
 

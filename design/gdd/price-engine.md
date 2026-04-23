@@ -2,7 +2,7 @@
 
 > **Status**: In Review (Sprint 10 — MarketProfile tick_size/daily_limit 마이그레이션 미완)
 > **Author**: user + game-designer
-> **Last Updated**: 2026-04-03
+> **Last Updated**: 2026-04-23
 > **Implements Pillar**: 판단이 곧 실력 (Judgment is King), 읽는 재미 (Read the Market)
 
 ## Overview
@@ -212,6 +212,52 @@ pattern_delta = (bias + uniform(mag_min, mag_max) + normal(0, noise_std)) × vol
 > HIGH/EXTREME avg 104.8%로 차이가 1.3배에 불과했다. 패턴 크기 스케일링을
 > 추가해야 변동성 프로필 간 2배+ 차이가 발생한다.
 > (prototypes/price-engine/REPORT.md 참조)
+
+##### 1-7. 종목 아키타입별 비대칭 전환 행렬 (ADR-025)
+
+§1-3의 기준 전환 행렬은 상승/하락 방향이 대칭이다. 대칭 행렬에서 모든 종목은
+장기적으로 base_price로 수렴하여 "시즌 저점 매수 → 시즌 고점 매도"가 항상 유효한
+전략이 된다. 이를 깨기 위해 종목 **아키타입(archetype)**별 비대칭 7×7 행렬을 도입한다.
+
+행렬 선택 우선순위: 아키타입 행렬 → (없으면) §1-3 기본 행렬. §1-4 변동성 스케일링은
+선택된 행렬에 항상 적용된다.
+
+###### 아키타입 정의
+
+| Archetype | 한글명 | 특성 | 대표 종목 | seasonDrift |
+|-----------|--------|------|---------|-------------|
+| `GROWTH` | 성장주 | UPTREND sticky. SIDEWAYS → UPTREND 전환 2:1 우세 | SKL, STC, LEB | +2.5~+3.5% |
+| `VALUE_DIVIDEND` | 방어/배당주 | SIDEWAYS ultra-sticky. 좁은 진폭 | HMC, KRB, PLT | +0.8% |
+| `CYCLICAL` | 경기순환주 | 기본 행렬에 가장 가까움. 거시이벤트가 방향 결정 | SDC, DHI, GRC | 0.0% |
+| `EVENT_DRIVEN` | 이벤트 드리븐 | SIDEWAYS 자기유지 0.995. 뉴스 전까지 완전 정체 | BPH, MDG, HBE | 0.0% |
+| `RECOVERY_UNCERTAIN` | 낙폭과대/가치함정 후보 | 간헐적 반등. 방향 불명. A3 재무제표로만 판별 가능 | NCW, KEP | -0.8~+1.5% |
+| `DECLINING_TRAP` | 구조적 쇠퇴주 | DOWNTREND very sticky(0.986). 단기 반등이 매수 함정 | DWE, PRL | -1.5% |
+
+> **EVENT_DRIVEN 제약**: SIDEWAYS가 사실상 잠겨있어 아키타입 행렬만으로는 거의 움직이지 않는다.
+> `event_tags` 연동 뉴스/이벤트가 런타임 pressure를 공급해야 의미있는 차트가 형성된다.
+> event_tags가 비어있는 EVENT_DRIVEN 종목 배정은 금지.
+
+###### 비대칭도 조정 원칙
+
+Phase 1 런칭: 완전 설계값의 **50% 비대칭도**로 시작. 플레이테스트 결과에 따라 상향.
+
+- 100%: GROWTH는 장기적으로 반드시 우상향 (박스 전략 완전 무력화)
+- 50%: 방향성 편향이 존재하지만 장기 보유 결과는 비결정적 (Phase 1 설정)
+- 0%: §1-3 대칭 행렬과 동일 (아키타입 의미 없음)
+
+###### 아키타입 행렬 저장 위치
+
+`assets/data/price_engine_config.json` → `archetypeMatrices` 키. 7×7 배열, 행 합계 = 1.0.
+C++ MarkovGenerator가 `set_config()`에서 로드하며, `generate_stock_m1(archetype_key)` 호출 시 선택한다.
+
+###### base_price 시즌 드리프트 (season_drift)
+
+아키타입 행렬만으로는 단기 방향성 편향을 만들지만, 여러 시즌에 걸친 장기 추세는
+`season_drift`가 담당한다. 매 시즌 경계(`_on_season_start`, 시즌 2부터)에
+`base_price × (1 + season_drift)`를 복리로 적용한다. 평균 회귀 앵커와
+하드 클램프 창이 함께 이동하여 가격이 새 기준가 주변에서 순환한다.
+
+자세한 공식은 stock-database.md §F1 참조.
 
 ---
 

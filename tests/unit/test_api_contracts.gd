@@ -658,3 +658,27 @@ func test_price_engine_sync_prehistory_api():
 	## 프리히스토리 가격 동기화 메서드 존재 (chart-renderer.md §5-3)
 	assert_true(PriceEngine.has_method("sync_prices_from_prehistory"),
 		"sync_prices_from_prehistory 존재")
+
+
+# ── PriceKernel GDExtension (ADR-027 Phase A) ────────────────────────────────
+## ADR-027 §5: PriceKernel GDExtension 등록 + PriceEngine 연결 계약
+## C++ 메서드는 gdextension/src/price_kernel.cpp에 정의되므로 ClassDB 등록만 검증.
+## 개별 메서드는 has_method() 대신 ClassDB.instantiate() 후 호출 가능 여부로 보장됨.
+
+func test_price_kernel_gdextension_registered():
+	assert_true(ClassDB.class_exists("PriceKernel"),
+		"PriceKernel GDExtension ClassDB 등록됨 (ADR-027)")
+
+func test_price_kernel_instantiates():
+	if not ClassDB.class_exists("PriceKernel"):
+		return
+	var pk: Object = ClassDB.instantiate("PriceKernel")
+	assert_not_null(pk, "PriceKernel 인스턴스 생성 성공")
+	# 9-method API는 gdextension/src/price_kernel.cpp _bind_methods()가 보장:
+	# set_config / init_stock / reset / start_season / start_day /
+	# process_all_ticks / add_player_pressure / set_rumor / inject_event
+
+func test_price_engine_kernel_wiring():
+	## ADR-027 Phase A: PriceEngine이 PriceKernel 초기화 헬퍼를 보유한다.
+	assert_true(PriceEngine.has_method("_init_kernel_ext"),  "_init_kernel_ext 존재")
+	assert_true(PriceEngine.has_method("_build_kernel_cfg"), "_build_kernel_cfg 존재")

@@ -3,6 +3,7 @@
 
 #include "register_types.h"
 #include "markov_generator.h"
+#include "price_kernel.h"
 
 #include <gdextension_interface.h>
 #include <godot_cpp/core/defs.hpp>
@@ -15,13 +16,14 @@ void initialize_markov_generator_module(ModuleInitializationLevel p_level) {
         return;
     }
     ClassDB::register_class<MarkovGenerator>();
+    ClassDB::register_class<PriceKernel>();
 }
 
 void uninitialize_markov_generator_module(ModuleInitializationLevel p_level) {
     if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
         return;
     }
-    // Nothing to clean up — MarkovGenerator is stateless RefCounted.
+    // Nothing to clean up — MarkovGenerator and PriceKernel are RefCounted.
 }
 
 extern "C" {

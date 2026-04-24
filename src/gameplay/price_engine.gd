@@ -265,6 +265,13 @@ var _macro_cfg: Dictionary = {}
 ## Falls back to GDScript generate_stock_m1_cache() when null.
 var _markov: Object = null
 
+## ADR-027 Phase A: C++ PriceKernel — stateful per-tick engine for all non-ETF stocks.
+var _kernel: Object = null
+
+## VI halt countdown tracked GDScript-side for on_vi_released and is_vi_halted() queries.
+## Populated from vi_hits returned by _kernel.process_all_ticks(); decremented each tick.
+var _vi_halt_remaining: Dictionary = {}  ## stock_id → ticks remaining
+
 ## Tick size table loaded from MarketProfile JSON (ADR-002, DLC extensibility).
 ## Each entry: [exclusiveUpperBound: int, tickSize: int]. Last entry is catch-all.
 ## Falls back to KRX hardcoded table when empty (before MarketProfile is loaded).
@@ -280,6 +287,7 @@ func _ready() -> void:
 	NewsEventSystem.on_rumor_hint.connect(_on_rumor_hint)
 	_load_config()
 	_init_markov_ext()
+	_init_kernel_ext()
 	_reseed_session()
 
 
@@ -369,6 +377,17 @@ func _init_markov_ext() -> void:
 	print("PriceEngine: C++ MarkovGenerator 로드 완료.")
 
 
+## ADR-027 Phase A: Instantiate the C++ PriceKernel GDExtension.
+func _init_kernel_ext() -> void:
+	assert(ClassDB.class_exists("PriceKernel"),
+		"FATAL: PriceKernel GDExtension 미로드. " +
+		"gdextension/bin/windows/ DLL 확인 후 Godot 에디터 재시작 필요.")
+	_kernel = ClassDB.instantiate("PriceKernel")
+	assert(_kernel != null, "FATAL: PriceKernel 인스턴스 생성 실패.")
+	_kernel.set_config(_build_kernel_cfg())
+	print("PriceEngine: C++ PriceKernel 로드 완료.")
+
+
 ## Assemble the config Dictionary that C++ MarkovGenerator.set_config() expects.
 ## Keys match price_engine_config.json schema (see assets/data/price_engine_config.json).
 func _build_markov_cfg() -> Dictionary:
@@ -389,6 +408,35 @@ func _build_markov_cfg() -> Dictionary:
 		cfg["macroTrend"] = _macro_cfg
 	if not _tick_table.is_empty():
 		cfg["tickTable"] = _tick_table.duplicate(true)
+	return cfg
+
+
+## Assemble the config Dictionary for C++ PriceKernel.set_config().
+## Extends the MarkovGenerator schema with PriceKernel-specific keys (ADR-027).
+func _build_kernel_cfg() -> Dictionary:
+	var cfg: Dictionary = _build_markov_cfg()
+	cfg["volAmplifier"]           = VOL_AMPLIFIER.duplicate()
+	cfg["energyThreshold"]        = ENERGY_THRESHOLD
+	cfg["energyMaxBoost"]         = ENERGY_MAX_BOOST
+	cfg["limitDampenStart"]       = LIMIT_DAMPEN_START
+	cfg["limitDampenMin"]         = LIMIT_DAMPEN_MIN
+	cfg["todOpenMult"]            = TOD_OPEN_VOLUME_MULT
+	cfg["todCloseMult"]           = TOD_CLOSE_VOLUME_MULT
+	cfg["todWindowTicks"]         = TOD_WINDOW_TICKS
+	cfg["hardClampMinRatio"]      = HARD_CLAMP_MIN_RATIO
+	cfg["hardClampMaxRatio"]      = HARD_CLAMP_MAX_RATIO
+	cfg["hardClampAbsMin"]        = HARD_CLAMP_ABS_MIN_PRICE
+	cfg["dailyLimitPct"]          = DAILY_LIMIT_PCT
+	cfg["kDrift"]                 = k_drift
+	cfg["thresholdSoft"]          = threshold_soft
+	cfg["thresholdHard"]          = threshold_hard
+	cfg["maxSingleImpact"]        = max_single_impact
+	cfg["breakoutForceThreshold"] = breakout_force_threshold
+	cfg["viThreshold"]            = VI_THRESHOLD
+	cfg["viHaltTicks"]            = _minutes_to_ticks(VI_HALT_MINUTES)
+	cfg["viMaxPerDay"]            = VI_MAX_PER_DAY
+	cfg["viCooldownTicks"]        = _minutes_to_ticks(VI_COOLDOWN_MINUTES)
+	cfg["ticksPerDay"]            = GameClock.TICKS_PER_DAY
 	return cfg
 
 
@@ -461,6 +509,7 @@ func initialize_for_load(save_data: Dictionary) -> void:
 	_stock_states.clear()
 	_transition_matrices.clear()
 	_player_pressure.clear()
+	_kernel.reset()
 
 	var stocks_saved: Dictionary = save_data.get("stocks", {})
 	# Backward compat — pre-v2 saves stored a flat {stock_id: price} dict.
@@ -541,12 +590,37 @@ func initialize_for_load(save_data: Dictionary) -> void:
 		)
 
 	_vi_states.clear()
+	_vi_halt_remaining.clear()
 	for stock_id: String in _stock_states:
 		_vi_states[stock_id] = {"halt_remaining": 0, "count_today": 0, "cooldown": 0}
 
 	_cb_stage = 0
 	_cb_halt_remaining = 0
 	_base_market_cap = _compute_total_market_cap()
+
+	# ADR-027 Phase A: restore kernel state from saved fields.
+	# start_day() is NOT called — macro_state and prev_day_close are already restored.
+	for stock_id: String in _stock_states:
+		var s: Dictionary = _stock_states[stock_id]
+		if s.get("is_etf", false):
+			continue
+		var stock: StockData = StockDatabase.get_stock(stock_id)
+		if stock == null:
+			continue
+		_kernel.init_stock(stock_id, {
+			"base_price":          s["base_price"],
+			"current_price":       s["current_price"],
+			"prev_day_close":      s["prev_day_close"],
+			"vol_profile":         s["volatility_profile"],
+			"sector":              stock.sector,
+			"archetype":           stock.archetype,
+			"macro_sensitivity":   s["macro_sensitivity"],
+			"sector_sensitivity":  s["sector_sensitivity"],
+			"is_etf":              false,
+			"macro_state":         int(s.get("macro_state", MacroState.FLAT)),
+		})
+	_kernel.start_season(int(save_data.get("season_count", 1)), {})
+
 	# 저장된 시장지수 복원. 없으면 INDEX_BASE(1000) 유지.
 	var saved_index: float = save_data.get("market_index", 0.0)
 	var saved_prev:  float = save_data.get("prev_day_index", 0.0)
@@ -596,6 +670,7 @@ func get_save_data() -> Dictionary:
 func reset() -> void:
 	_stock_states.clear()
 	_vi_states.clear()
+	_vi_halt_remaining.clear()
 	_player_pressure.clear()
 	_rumor_pressure.clear()
 	_cb_stage = 0
@@ -604,6 +679,7 @@ func reset() -> void:
 	_current_index = 0.0
 	_base_market_cap = 0.0
 	_season_count = 0  ## ADR-025
+	_kernel.reset()
 	_engine_state = EngineState.UNINITIALIZED
 
 
@@ -860,10 +936,7 @@ func _on_rumor_hint(rumor: Dictionary) -> void:
 	var delta_per_tick: float = float(direction) * _rumor_pressure_strength * tier_mult
 	var ticks_remaining: int = SkillTree.RUMOR_LEAD_MINUTES * GameClock.TICKS_PER_MINUTE
 	for stock_id: String in target_ids:
-		_rumor_pressure[stock_id] = {
-			"delta_per_tick": delta_per_tick,
-			"ticks_remaining": ticks_remaining,
-		}
+		_kernel.set_rumor(stock_id, delta_per_tick, ticks_remaining)
 
 
 ## Consumes one tick of rumor pressure for the given stock.
@@ -879,14 +952,20 @@ func _consume_rumor_pressure(stock_id: String) -> float:
 	return delta
 
 
-## Push an event from the News/Events system.
+## Push an event from the News/Events system (ADR-027 Phase A: delegates to C++ kernel).
 func push_event(event: MarketEvent) -> void:
 	for stock_id: String in event.target_stock_ids:
 		if not _stock_states.has(stock_id):
 			continue
-		var state: Dictionary = _stock_states[stock_id]
-		var queue: Array = state["event_queue"]
-		queue.append(event)
+		_kernel.inject_event({
+			"stock_id":    stock_id,
+			"scope":       int(event.scope),
+			"base_impact": event.base_impact,
+			"direction":   int(event.direction),
+			"event_type":  int(event.event_type),
+			"decay_ticks": event.decay_ticks,
+			"decay_curve": int(event.decay_curve),
+		})
 
 
 ## Inject an ETF price directly into the price cache (sector-etf.md §3-2, ADR-021).
@@ -914,6 +993,13 @@ func inject_price(etf_id: String, price: float) -> void:
 			"event_queue":       [],
 			"is_etf":            true,
 		}
+		# Register ETF with kernel so it appears in process_all_ticks() prices dict.
+		_kernel.init_stock(etf_id, {
+			"base_price":    clamped,
+			"current_price": clamped,
+			"prev_day_close": clamped,
+			"is_etf":        true,
+		})
 	var state: Dictionary = _stock_states[etf_id]
 	state["current_price"] = clamped
 	(state["tick_prices"] as Array[int]).append(clamped)
@@ -941,6 +1027,7 @@ func init_first_season() -> void:
 	_reseed_session()  # ADR-018: new game = new session → fresh intraday RNG
 	_stock_states.clear()
 	_transition_matrices.clear()
+	_kernel.reset()
 
 	for stock_id: String in StockDatabase.get_all_stock_ids():
 		var stock: StockData = StockDatabase.get_stock(stock_id)
@@ -974,6 +1061,7 @@ func init_first_season() -> void:
 		)
 
 	_vi_states.clear()
+	_vi_halt_remaining.clear()
 	for stock_id: String in _stock_states:
 		_vi_states[stock_id] = {"halt_remaining": 0, "count_today": 0, "cooldown": 0}
 
@@ -983,6 +1071,28 @@ func init_first_season() -> void:
 	_current_index = INDEX_BASE
 	_prev_day_index = INDEX_BASE
 	_index_history.clear()
+
+	# ADR-027 Phase A: register all stocks with C++ kernel, then arm for day 1.
+	for stock_id: String in _stock_states:
+		var s: Dictionary = _stock_states[stock_id]
+		var stock: StockData = StockDatabase.get_stock(stock_id)
+		if stock == null:
+			continue
+		_kernel.init_stock(stock_id, {
+			"base_price":          s["base_price"],
+			"current_price":       s["current_price"],
+			"prev_day_close":      s["prev_day_close"],
+			"vol_profile":         s["volatility_profile"],
+			"sector":              stock.sector,
+			"archetype":           stock.archetype,
+			"macro_sensitivity":   s["macro_sensitivity"],
+			"sector_sensitivity":  s["sector_sensitivity"],
+			"is_etf":              false,
+			"macro_state":         int(s.get("macro_state", MacroState.FLAT)),
+		})
+	_kernel.start_season(1, {})
+	_kernel.start_day(0)
+
 	_engine_state = EngineState.READY
 
 
@@ -1055,9 +1165,13 @@ func _reset_season_mechanics() -> void:
 
 	for stock_id: String in _vi_states:
 		_vi_states[stock_id] = {"halt_remaining": 0, "count_today": 0, "cooldown": 0}
+	_vi_halt_remaining.clear()
 	_cb_stage = 0
 	_cb_halt_remaining = 0
 	_player_pressure.clear()
+
+	# ADR-027 Phase A: notify kernel of season boundary.
+	_kernel.start_season(_season_count, {})
 
 	# Recompute index baseline from current (carried-forward) prices so each season
 	# starts fresh at INDEX_BASE regardless of prior season's price level.
@@ -1088,33 +1202,42 @@ func process_tick(tick_number: int, _day: int, _week: int) -> void:
 	for stock_id: String in _stock_states:
 		_old_prices[stock_id] = _stock_states[stock_id].get("current_price", 0)
 
-	for stock_id: String in _stock_states:
-		# ETF entries: prices are managed by EtfManager.process_tick() which runs
-		# immediately after. No Markov/drift processing — skip the Markov loop entirely.
-		# inject_price() appends to tick_prices each tick, so buffers stay aligned.
-		if _stock_states[stock_id].get("is_etf", false):
-			continue
+	# ADR-027 Phase A: decrement GDScript VI countdown BEFORE kernel (so release aligns
+	# with the last halted tick, matching the original GDScript behaviour).
+	var _vi_released: Array[String] = []
+	for stock_id: String in _vi_halt_remaining:
+		_vi_halt_remaining[stock_id] -= 1
+		if _vi_halt_remaining[stock_id] <= 0:
+			_vi_released.append(stock_id)
+	for stock_id: String in _vi_released:
+		_vi_halt_remaining.erase(stock_id)
+		on_vi_released.emit(stock_id)
 
-		# VI halt check (GDD Rule 2-4)
-		var vi: Dictionary = _vi_states.get(stock_id, {})
-		if vi.get("halt_remaining", 0) > 0:
-			vi["halt_remaining"] -= 1
-			if vi["halt_remaining"] == 0:
-				vi["cooldown"] = _minutes_to_ticks(VI_COOLDOWN_MINUTES)
-				on_vi_released.emit(stock_id)
-			# Record frozen price/volume to keep buffers aligned
-			var s: Dictionary = _stock_states[stock_id]
-			s["tick_prices"].append(s["current_price"])
-			s["tick_volumes"].append(0.0)
+	# Delegate all per-stock tick logic to C++ PriceKernel (ADR-027 Phase A).
+	var _tick_result: Dictionary = _kernel.process_all_ticks(tick_number)
+	var _k_prices:  Dictionary = _tick_result["prices"]
+	var _k_volumes: Dictionary = _tick_result["volumes"]
+	var _k_vi_hits: Array     = _tick_result["vi_hits"]
+
+	# Apply kernel results to GDScript stock states.
+	for stock_id: String in _k_prices:
+		if not _stock_states.has(stock_id):
 			continue
-		# VI cooldown decrement
-		if vi.get("cooldown", 0) > 0:
-			vi["cooldown"] -= 1
-		_process_stock_tick(stock_id, tick_number)
-		# Skip VI check on tick 0: prev_day_close == base_price at season/day
-		# start, so the first random delta can falsely exceed VI_THRESHOLD.
-		if tick_number > 0:
-			_check_vi(stock_id)
+		var s: Dictionary = _stock_states[stock_id]
+		var new_price: int = int(_k_prices[stock_id])
+		s["current_price"] = new_price
+		# Append to tick buffers (ETFs are managed by inject_price — skip here).
+		if not s.get("is_etf", false):
+			(s["tick_prices"]  as Array[int]).append(new_price)
+			(s["tick_volumes"] as Array[float]).append(float(_k_volumes.get(stock_id, 0.0)))
+
+	# Emit VI trigger signals from kernel results.
+	var _halt_ticks: int = _minutes_to_ticks(VI_HALT_MINUTES)
+	for _hit: Dictionary in _k_vi_hits:
+		var _hit_id: String = _hit["stock_id"]
+		var _is_upper: bool = bool(_hit["is_upper"])
+		_vi_halt_remaining[_hit_id] = _halt_ticks
+		on_vi_triggered.emit(_hit_id, _is_upper, _halt_ticks)
 
 	# Update order books after all prices are confirmed (GDD order-book.md §3-2)
 	_update_order_books(_old_prices)
@@ -1435,8 +1558,7 @@ func _check_circuit_breaker() -> void:
 
 ## Returns whether a stock is currently halted by VI.
 func is_vi_halted(stock_id: String) -> bool:
-	var vi: Dictionary = _vi_states.get(stock_id, {})
-	return vi.get("halt_remaining", 0) > 0
+	return _vi_halt_remaining.has(stock_id)
 
 
 ## Returns current circuit breaker stage (0=none, 1=halt, 2=early close).
@@ -1449,9 +1571,11 @@ func get_cb_stage() -> int:
 func _end_trading_day() -> void:
 	_engine_state = EngineState.END_OF_DAY
 	_generate_daily_ohlcv()
-	_roll_macro_states()  # ADR-026: transition MacroState + rebuild biased matrices for next day
+	_roll_macro_states()  # ADR-026: GDScript-side macro roll for save/load state tracking
+	_kernel.start_day(0)  # ADR-027 Phase A: kernel macro roll + day reset (prev_day_close, VI)
 	_reset_order_books()
 	_reset_vi_and_circuit_breaker()
+	_vi_halt_remaining.clear()
 	_prev_day_index = _current_index
 	_rumor_pressure.clear()  # TD-DR-04: stale rumor pressure does not carry over to next day
 
@@ -1612,12 +1736,12 @@ func consume_order_book(
 		var vols: Array = s.get("tick_volumes", [])
 		if not vols.is_empty():
 			vols[vols.size() - 1] += float(filled_qty)
-		# Fix 2: price pressure — accumulate for next tick's total_delta (ADR-019)
+		# Fix 2: price pressure — pass to C++ kernel for next tick (ADR-019, ADR-027)
 		var daily_vol: float = float(DAILY_VOLUME_BY_PROFILE[s["volatility_profile"]])
 		var pressure: float = float(filled_qty) / daily_vol * PLAYER_PRESSURE_SCALE
 		if side == "sell":
 			pressure = -pressure
-		_player_pressure[stock_id] = _player_pressure.get(stock_id, 0.0) + pressure
+		_kernel.add_player_pressure(stock_id, pressure)
 	return {"filled_qty": filled_qty, "avg_price": avg_price, "remaining_qty": remaining}
 
 

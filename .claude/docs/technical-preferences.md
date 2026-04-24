@@ -83,6 +83,7 @@
 - [ADR-024](../../docs/architecture/024-price-engine-gdextension.md) — PriceEngine GDExtension 마이그레이션: M1-first 배치 생성(D1→M1 확장 폐기), 2-tier 캐시(M1 7800bars+D1 5200bars), C++ MarkovGenerator(Phase 3)
 - [ADR-025](../../docs/architecture/025-stock-archetype-markov-matrices.md) — 종목 아키타입 Markov 행렬: 6종 아키타입별 비대칭 전환 행렬 + seasonDrift, per-stock 행렬 선택(C++ archetype_key 파라미터)
 - [ADR-026](../../docs/architecture/026-macro-trend-layer.md) — 매크로 추세 레이어: 일봉 3-state Markov (driftScale + self-prob 0.96 + seasonBias→macro_tm 리다이렉트, CACHE_VERSION=6)
+- [ADR-027](../../docs/architecture/027-price-kernel-unification.md) — Price Kernel 통합: 4개 GDScript 가격 시스템 → 단일 C++ PriceKernel (MarkovEngine·EventEngine·EtfEngine·ReportEngine), 히스토리 동일 커널 시뮬
 
 ## Engine Specialists
 

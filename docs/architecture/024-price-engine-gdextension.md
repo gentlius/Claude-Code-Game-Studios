@@ -1,9 +1,13 @@
 # ADR-024: PriceEngine GDExtension 마이그레이션 — M1-first 배치 생성 + C++ 연산 핵심
 
-**Status**: Accepted  
+**Status**: Superseded by ADR-027 (2026-04-23)  
 **Date**: 2026-04-21  
 **Author**: technical-director + lead-programmer  
 **Supersedes**: 일부 ADR-023 (M1 생성 방식 변경)
+
+> **⚠️ Superseded**: ADR-027이 C++ 커널을 stateless MarkovGenerator에서 stateful PriceKernel로 확장한다.
+> MarkovGenerator 구현(markov_generator.cpp)은 PriceKernel Phase A의 MarkovEngine 기반으로 유지된다.
+> 신규 개발은 ADR-027을 따른다.
 
 ---
 

@@ -250,11 +250,12 @@ var _rumor_pressure_strength: float = 0.0005  ## per-tick fractional delta per i
 ## ADR-024 Phase 2: Markov constants loaded from JSON.
 ## generate_stock_m1_cache() reads these so C++ MarkovGenerator uses the same source.
 ## Keyed by MarkovState int (0=STRONG_UP … 6=BREAKOUT_DOWN). Populated by _load_config().
-var _cfg_state_params: Array = []       ## 7 entries: [bias, mag_min, mag_max, noise_std, min_dur_min]
-var _cfg_transition_matrix: Array = []  ## 7×7 float rows
-var _cfg_vol_pattern_scale: Array = []  ## 4 floats [LOW..EXTREME]
-var _cfg_base_volume_range: Array = []  ## 4 entries: [min_vol, max_vol]
-var _cfg_state_volume_mult: Array = []  ## 7 floats [STRONG_UP..BREAKOUT_DOWN]
+var _cfg_state_params: Array = []          ## 7 entries: [bias, mag_min, mag_max, noise_std, min_dur_min]
+var _cfg_transition_matrix: Array = []     ## 7×7 float rows
+var _cfg_vol_pattern_scale: Array = []     ## 4 floats [LOW..EXTREME]
+var _cfg_base_volume_range: Array = []     ## 4 entries: [min_vol, max_vol]
+var _cfg_state_volume_mult: Array = []     ## 7 floats [STRONG_UP..BREAKOUT_DOWN]
+var _cfg_archetype_matrices: Dictionary = {}  ## ADR-025: per-archetype 7×7 Markov matrices
 
 ## ADR-026: Macro trend layer config loaded from price_engine_config.json "macroTrend".
 ## Keys: transitionMatrix (3×3), biasFactor (float), volMultiplier (Array[3][2]),
@@ -349,6 +350,11 @@ func _load_config() -> void:
 	if macro_json is Dictionary:
 		_macro_cfg = macro_json as Dictionary
 
+	# ── Per-archetype Markov matrices (ADR-025) ──
+	var arch_json: Variant = parsed.get("archetypeMatrices", {})
+	if arch_json is Dictionary:
+		_cfg_archetype_matrices = arch_json as Dictionary
+
 	# ── Tick size table (ADR-002, DLC extensibility) ──
 	# Loaded from MarketProfile JSON rather than price_engine_config.json —
 	# tick rules are market-specific, not engine-specific.
@@ -406,6 +412,8 @@ func _build_markov_cfg() -> Dictionary:
 	                           else STATE_VOLUME_MULT.duplicate()
 	if not _macro_cfg.is_empty():
 		cfg["macroTrend"] = _macro_cfg
+	if not _cfg_archetype_matrices.is_empty():
+		cfg["archetypeMatrices"] = _cfg_archetype_matrices  # ADR-025: per-archetype 7×7 matrices
 	if not _tick_table.is_empty():
 		cfg["tickTable"] = _tick_table.duplicate(true)
 	return cfg
@@ -1114,6 +1122,32 @@ func sync_prices_from_prehistory() -> void:
 		state["prev_day_close"]    = last_close
 		state["season_open_price"] = last_close
 		state["base_price"]        = last_close
+
+	# ADR-027 Phase A: re-sync kernel with prehistory prices.
+	# init_first_season() initialised the kernel with stock.base_price and called
+	# start_day(0). The sync above changes GDScript prices to last_close, so the
+	# kernel is now out of sync. Re-calling init_stock() overwrites kernel state
+	# (current_price, prev_day_close, base_price) to match GDScript, preventing
+	# a price discontinuity on the first live tick.
+	for stock_id: String in _stock_states:
+		var state: Dictionary = _stock_states[stock_id]
+		if state.get("is_etf", false):
+			continue
+		var stock: StockData = StockDatabase.get_stock(stock_id)
+		if stock == null:
+			continue
+		_kernel.init_stock(stock_id, {
+			"base_price":         state["base_price"],
+			"current_price":      state["current_price"],
+			"prev_day_close":     state["prev_day_close"],
+			"vol_profile":        state["volatility_profile"],
+			"sector":             stock.sector,
+			"archetype":          stock.archetype,
+			"macro_sensitivity":  state["macro_sensitivity"],
+			"sector_sensitivity": state["sector_sensitivity"],
+			"is_etf":             false,
+			"macro_state":        int(state.get("macro_state", MacroState.FLAT)),
+		})
 
 
 ## Resets per-season mechanics (Markov state, season bias, tick/OHLCV history, VI, CB,

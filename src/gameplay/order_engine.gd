@@ -35,8 +35,7 @@ var _order_id_to_queue: Dictionary = {}  ## order_id (int) -> Array[Dictionary]
 # ── Lifecycle ──
 
 func _ready() -> void:
-	# on_tick is NOT connected here — GameClock calls _on_tick directly in
-	# _process_tick() to enforce the GDD-mandated News → Price → Order order.
+	GameClock.on_tick.connect(process_tick)
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
 	GameClock.on_season_start.connect(_on_season_start)
 

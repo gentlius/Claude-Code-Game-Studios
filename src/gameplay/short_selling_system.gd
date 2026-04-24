@@ -45,6 +45,7 @@ var _borrow_pool: Dictionary = {}
 
 func _ready() -> void:
 	_load_config()
+	GameClock.on_tick.connect(func(t: int, _d: int, _w: int) -> void: update_and_check_margin(t))
 	GameClock.on_season_start.connect(_init_pools)
 	GameClock.on_market_close.connect(_process_daily_borrow_fee)
 

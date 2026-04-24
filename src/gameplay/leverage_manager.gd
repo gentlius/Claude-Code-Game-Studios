@@ -42,6 +42,7 @@ var _positions: Array[Dictionary] = []
 
 func _ready() -> void:
 	_load_config()
+	GameClock.on_tick.connect(func(_t: int, _d: int, _w: int) -> void: check_margin_calls())
 	GameClock.on_market_close.connect(_on_market_close)
 
 

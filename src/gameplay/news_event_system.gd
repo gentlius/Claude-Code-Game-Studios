@@ -116,8 +116,7 @@ var _season_stats: Dictionary = {
 
 func _ready() -> void:
 	GameClock.on_season_start.connect(_on_season_start)
-	# on_tick is NOT connected here — GameClock calls _on_tick directly in
-	# _process_tick() to enforce the GDD-mandated News → Price → Order order.
+	GameClock.on_tick.connect(process_tick)
 	GameClock.on_market_open.connect(_on_market_open)
 	GameClock.on_market_close.connect(_on_market_close)
 	GameClock.on_day_transition.connect(_on_day_transition)

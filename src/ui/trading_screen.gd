@@ -39,6 +39,8 @@ const TAB_PORTFOLIO: int = 2
 const SKILL_TR1: String = "TR1"  ## 기본 거래 해금 스킬 ID
 
 var _active_tab: int = TAB_NEWS
+## H-10: stored callable for on_market_close lambda so it can be disconnected.
+var _on_market_close_cb: Callable
 var _news_unread: int = 0
 var _portfolio_unread: int = 0
 var _btn_tab_news: Button
@@ -91,6 +93,7 @@ func _connect_signals() -> void:
 		spending_screen_requested.emit(is_season_end)
 	)
 	_settlement_reporter.needs_level_up.connect(_on_settlement_needs_level_up)
+	_settlement_reporter.weekly_xp_reset_requested.connect(XpSystem.reset_weekly_xp)
 	_toast_manager.news_received.connect(_on_news_received)
 	_level_up_banner.skill_tree_requested.connect(func() -> void: growth_tab_requested.emit())
 	_level_up_banner.banner_closed.connect(func() -> void: GameClock.confirm_transition())
@@ -104,11 +107,28 @@ func _connect_signals() -> void:
 		_portfolio_panel.stock_clicked.connect(_select_stock)
 	# Game events
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
-	GameClock.on_market_close.connect(func() -> void: _stock_list.snapshot_prev_close())
+	_on_market_close_cb = func() -> void: _stock_list.snapshot_prev_close()
+	GameClock.on_market_close.connect(_on_market_close_cb)
 	OrderEngine.on_order_filled.connect(_on_order_filled)
 	NewsEventSystem.on_news_display.connect(_on_system_event_alert)
 	SkillTree.on_skill_unlocked.connect(_on_skill_unlocked)
 	PortfolioManager.holding_removed.connect(_on_holding_removed)
+
+
+func _exit_tree() -> void:
+	# H-10: disconnect all autoload signals connected in _connect_signals().
+	if GameClock.on_market_state_changed.is_connected(_on_market_state_changed):
+		GameClock.on_market_state_changed.disconnect(_on_market_state_changed)
+	if OrderEngine.on_order_filled.is_connected(_on_order_filled):
+		OrderEngine.on_order_filled.disconnect(_on_order_filled)
+	if NewsEventSystem.on_news_display.is_connected(_on_system_event_alert):
+		NewsEventSystem.on_news_display.disconnect(_on_system_event_alert)
+	if SkillTree.on_skill_unlocked.is_connected(_on_skill_unlocked):
+		SkillTree.on_skill_unlocked.disconnect(_on_skill_unlocked)
+	if PortfolioManager.holding_removed.is_connected(_on_holding_removed):
+		PortfolioManager.holding_removed.disconnect(_on_holding_removed)
+	if GameClock.on_market_close.is_connected(_on_market_close_cb):
+		GameClock.on_market_close.disconnect(_on_market_close_cb)
 
 
 func _sync_ui_state_from_clock() -> void:
@@ -230,8 +250,10 @@ func _on_market_state_changed(
 			pass  ## Stay in SETTLEMENT
 		GameClock.MarketState.WEEK_END:
 			_settlement_reporter.enqueue("weekly")
+			_set_ui_state(UIState.SETTLEMENT)
 		GameClock.MarketState.SEASON_END:
 			_settlement_reporter.enqueue("season")
+			_set_ui_state(UIState.SETTLEMENT)
 
 
 func _on_order_filled(_order: Dictionary) -> void:

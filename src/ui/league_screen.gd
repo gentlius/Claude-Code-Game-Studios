@@ -46,6 +46,9 @@ var _btn_tier_next: Button
 var _displayed_tier: int = 0
 ## 틱 스로틀 카운터 — 매 4틱에 1회만 리더보드 재구성 (노드 생성 비용 절감)
 var _tick_counter: int = 0
+## Cached row identity keys — "rank|is_player" per row, "SEP" for separators.
+## Diff against new keys to decide rebuild vs in-place update.
+var _lb_row_keys: Array[String] = []
 ## Stored Callable refs for lambda disconnect (lambdas are unique per-instance)
 var _on_season_started_cb: Callable
 var _on_season_ended_cb: Callable
@@ -167,10 +170,6 @@ func _estimate_tier_participants(tier: int) -> int:
 # ── Leaderboard ──
 
 func _update_leaderboard() -> void:
-	# 이전 행 전부 제거
-	for child in _leaderboard_container.get_children():
-		child.queue_free()
-
 	var my_tier: int = SeasonManager.get_current_tier()
 	var viewing_own_tier: bool = (_displayed_tier == my_tier)
 
@@ -183,18 +182,68 @@ func _update_leaderboard() -> void:
 
 	# AC-08: 1~10위 고정
 	var fixed: Array = SeasonManager.get_leaderboard(_displayed_tier, 1, LEADERBOARD_FIXED_ROWS)
-	for entry in fixed:
-		_add_row(entry)
 
 	# AC-09: 내 티어 볼 때만 컨텍스트 행 표시
+	var context: Array = []
+	var has_sep: bool = false
 	if viewing_own_tier:
 		var my_rank: int = SeasonManager.get_tier_rank()
 		if my_rank > MERGE_THRESHOLD:
-			_add_separator()
+			has_sep = true
 			var ctx_from: int = maxi(LEADERBOARD_FIXED_ROWS + 1, my_rank - LEADERBOARD_CONTEXT_RANGE)
 			var ctx_to:   int = my_rank + LEADERBOARD_CONTEXT_RANGE
-			var context: Array = SeasonManager.get_leaderboard(_displayed_tier, ctx_from, ctx_to)
-			for entry in context:
+			context = SeasonManager.get_leaderboard(_displayed_tier, ctx_from, ctx_to)
+
+	# Build key list for diff check
+	var new_keys: Array[String] = []
+	for entry: Dictionary in fixed:
+		new_keys.append(str(entry.get("rank", 0)) + "|" + str(entry.get("is_player", false)))
+	if has_sep:
+		new_keys.append("SEP")
+		for entry: Dictionary in context:
+			new_keys.append(str(entry.get("rank", 0)) + "|" + str(entry.get("is_player", false)))
+
+	var children: Array[Node] = _leaderboard_container.get_children()
+	if new_keys == _lb_row_keys and children.size() == new_keys.size():
+		# Same structure — update only return/prize labels in-place
+		var all_entries: Array = fixed.duplicate()
+		if has_sep:
+			all_entries.append({"__sep": true})
+			all_entries.append_array(context)
+		for i: int in children.size():
+			if new_keys[i] == "SEP":
+				continue
+			var entry: Dictionary = all_entries[i] as Dictionary
+			var row: Node = children[i]
+			if row.has_meta("lbl_ret"):
+				var ret_pct: float = entry.get("return_pct", 0.0)
+				var lbl_ret: Label = row.get_meta("lbl_ret") as Label
+				lbl_ret.text = FormatUtils.pct(ret_pct)
+				lbl_ret.add_theme_color_override("font_color",
+					COLOR_POSITIVE if ret_pct >= 0.0 else COLOR_NEGATIVE)
+			if row.has_meta("lbl_prize"):
+				var rank: int = entry.get("rank", 0)
+				var is_pl: bool = entry.get("is_player", false)
+				var prize_raw: Variant = entry.get("prize_preview", 0)
+				var lbl_prize: Label = row.get_meta("lbl_prize") as Label
+				if rank > LEADERBOARD_FIXED_ROWS:
+					lbl_prize.text = "—"
+				elif is_pl and not SeasonManager.is_season_trade_eligible():
+					lbl_prize.text = tr("체결 부족")
+					lbl_prize.add_theme_color_override("font_color", COLOR_NEGATIVE)
+				elif prize_raw is int and prize_raw > 0:
+					lbl_prize.text = FormatUtils.currency(prize_raw)
+				else:
+					lbl_prize.text = "—"
+	else:
+		_lb_row_keys = new_keys
+		for child: Node in _leaderboard_container.get_children():
+			child.queue_free()
+		for entry: Dictionary in fixed:
+			_add_row(entry)
+		if has_sep:
+			_add_separator()
+			for entry: Dictionary in context:
 				_add_row(entry)
 
 	# AC-12: 글로벌 순위 — 내 티어 위의 모든 참가자 수 + 내 티어 순위 (ADR-007)
@@ -232,8 +281,10 @@ func _add_row(entry: Dictionary) -> void:
 
 	_add_row_rank_label(hbox, rank, is_player)
 	_add_row_nick_label(hbox, nickname, is_player, is_gm_ai)
-	_add_row_return_label(hbox, return_pct)
-	_add_row_prize_label(hbox, rank, is_player, prize_raw)
+	var lbl_ret: Label = _add_row_return_label(hbox, return_pct)
+	var lbl_prize: Label = _add_row_prize_label(hbox, rank, is_player, prize_raw)
+	row.set_meta("lbl_ret", lbl_ret)
+	row.set_meta("lbl_prize", lbl_prize)
 
 
 ## Adds the rank column label to a leaderboard row hbox.
@@ -258,8 +309,8 @@ func _add_row_nick_label(hbox: HBoxContainer, nickname: String, is_player: bool,
 	hbox.add_child(lbl_nick)
 
 
-## Adds the return-pct column label to a leaderboard row hbox.
-func _add_row_return_label(hbox: HBoxContainer, return_pct: float) -> void:
+## Adds the return-pct column label to a leaderboard row hbox. Returns the label for ref caching.
+func _add_row_return_label(hbox: HBoxContainer, return_pct: float) -> Label:
 	var lbl_ret: Label = Label.new()
 	lbl_ret.text = FormatUtils.pct(return_pct)
 	lbl_ret.custom_minimum_size = Vector2(72, 0)
@@ -268,11 +319,12 @@ func _add_row_return_label(hbox: HBoxContainer, return_pct: float) -> void:
 	lbl_ret.add_theme_color_override("font_color",
 		COLOR_POSITIVE if return_pct >= 0.0 else COLOR_NEGATIVE)
 	hbox.add_child(lbl_ret)
+	return lbl_ret
 
 
-## Adds the prize-preview column label to a leaderboard row hbox.
+## Adds the prize-preview column label to a leaderboard row hbox. Returns label for ref caching.
 ## AC-11: is_rank_eligible == false → "체결 부족".
-func _add_row_prize_label(hbox: HBoxContainer, rank: int, is_player: bool, prize_raw: Variant) -> void:
+func _add_row_prize_label(hbox: HBoxContainer, rank: int, is_player: bool, prize_raw: Variant) -> Label:
 	var lbl_prize: Label = Label.new()
 	lbl_prize.custom_minimum_size = Vector2(72, 0)
 	lbl_prize.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -288,6 +340,7 @@ func _add_row_prize_label(hbox: HBoxContainer, rank: int, is_player: bool, prize
 	else:
 		lbl_prize.text = "—"
 	hbox.add_child(lbl_prize)
+	return lbl_prize
 
 
 func _add_separator() -> void:

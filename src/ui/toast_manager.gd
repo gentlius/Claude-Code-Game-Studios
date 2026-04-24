@@ -21,6 +21,11 @@ func _ready() -> void:
 	NewsEventSystem.on_news_display.connect(_on_news_display)
 
 
+func _exit_tree() -> void:
+	if NewsEventSystem.on_news_display.is_connected(_on_news_display):
+		NewsEventSystem.on_news_display.disconnect(_on_news_display)
+
+
 func _on_news_display(entry: Dictionary) -> void:
 	if entry.get("is_system_event", false):
 		return

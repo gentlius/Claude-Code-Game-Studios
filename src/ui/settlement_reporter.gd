@@ -11,6 +11,8 @@ signal settlement_confirmed
 signal needs_level_up(data: Dictionary)
 ## Emitted after a daily popup with XP is dismissed — caller should animate the XP bar.
 signal xp_animate_requested
+## Emitted when a weekly report is about to display — connect XpSystem.reset_weekly_xp().
+signal weekly_xp_reset_requested
 
 ## BBCode 색상 상수 — ThemeSetup Color의 to_html(false) 값과 동기화 유지.
 ## 단일 소유 원칙: 이 파일 내 모든 BBCode color= 태그는 이 상수를 참조한다.
@@ -38,6 +40,7 @@ func _ready() -> void:
 	_build_panel()
 	XpSystem.on_xp_gained.connect(_on_xp_gained)
 	XpSystem.on_level_up.connect(_on_level_up)
+	tree_exiting.connect(_disconnect_xp_signals)
 	_season_reveal_timer = Timer.new()
 	_season_reveal_timer.wait_time = 0.5
 	_season_reveal_timer.one_shot = true
@@ -236,7 +239,7 @@ func _show_weekly() -> void:
 	bbcode += _holdings_section(summary)
 	bbcode += _weekly_theme_hint()
 	bbcode += _weekly_xp_section()
-	XpSystem.reset_weekly_xp()
+	weekly_xp_reset_requested.emit()
 	_lbl_body.text = bbcode
 	_btn_confirm.text = "다음 →  Enter" if not _settlement_queue.is_empty() else "다음 주  Enter"
 
@@ -387,6 +390,13 @@ func _season_trades_section() -> String:
 		var c: String = "EB3833" if total_realized > 0 else "2E6BE6"
 		bbcode += "[b]실현 손익[/b]  [color=#%s]%+d[/color]\n" % [c, total_realized]
 	return bbcode
+
+
+func _disconnect_xp_signals() -> void:
+	if XpSystem.on_xp_gained.is_connected(_on_xp_gained):
+		XpSystem.on_xp_gained.disconnect(_on_xp_gained)
+	if XpSystem.on_level_up.is_connected(_on_level_up):
+		XpSystem.on_level_up.disconnect(_on_level_up)
 
 
 func _on_xp_gained(amount: int, _new_total: int, source: String) -> void:

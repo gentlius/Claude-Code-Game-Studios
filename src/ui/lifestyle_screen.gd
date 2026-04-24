@@ -81,11 +81,9 @@ const PROPERTY_ITEMS: Array = [
 	{"property_type": "building",  "name": "빌딩",          "cost": 5_000_000_000, "rental_rate": 0.040, "min_tier": 7},
 ]
 
-## Startup investment range (GDD §3-2).
+## Startup investment amount range (GDD §3-2). Seasons range is LifestyleManager.STARTUP_MIN/MAX_SEASONS.
 const STARTUP_MIN_AMOUNT: int = 50_000_000
 const STARTUP_MAX_AMOUNT: int = 500_000_000
-const STARTUP_MIN_SEASONS: int = 3
-const STARTUP_MAX_SEASONS: int = 6
 
 
 # ── Setup ──
@@ -296,13 +294,11 @@ func _play_moving_day_sequence() -> void:
 
 
 func _rebuild_residence_tab() -> void:
-	## Remove old tab and rebuild
 	var old: Node = _tab_bar.get_child(TAB_RESIDENCE)
 	if old:
+		_tab_bar.remove_child(old)  # immediate removal so move_child sees correct indices
 		old.queue_free()
-	## Re-insert at position 0 (Godot tab order is child order)
 	_build_residence_tab()
-	## Move to correct position if needed (Godot 4: add_child appends; use move_child)
 	var new_tab: Node = _tab_bar.get_child(_tab_bar.get_child_count() - 1)
 	_tab_bar.move_child(new_tab, TAB_RESIDENCE)
 
@@ -347,6 +343,7 @@ func _on_buy_luxury(data: Dictionary) -> void:
 func _rebuild_luxury_tab() -> void:
 	var old: Node = _tab_bar.get_child(TAB_LUXURY)
 	if old:
+		_tab_bar.remove_child(old)
 		old.queue_free()
 	_build_luxury_tab()
 	var new_tab: Node = _tab_bar.get_child(_tab_bar.get_child_count() - 1)
@@ -396,6 +393,7 @@ func _on_buy_network(data: Dictionary) -> void:
 func _rebuild_network_tab() -> void:
 	var old: Node = _tab_bar.get_child(TAB_NETWORK)
 	if old:
+		_tab_bar.remove_child(old)
 		old.queue_free()
 	_build_network_tab()
 	var new_tab: Node = _tab_bar.get_child(_tab_bar.get_child_count() - 1)
@@ -522,7 +520,7 @@ func _build_startup_card(player_tier: int) -> Control:
 	info.text = "스타트업 엔젤 투자 (₩%s ~ ₩%s, 만기 %d~%d시즌)" % [
 		_format_amount(STARTUP_MIN_AMOUNT),
 		_format_amount(STARTUP_MAX_AMOUNT),
-		STARTUP_MIN_SEASONS, STARTUP_MAX_SEASONS
+		LifestyleManager.STARTUP_MIN_SEASONS, LifestyleManager.STARTUP_MAX_SEASONS
 	]
 	vbox.add_child(info)
 
@@ -561,10 +559,7 @@ func _on_invest_startup(text: String) -> void:
 	var amount: int = int(text.strip_edges())
 	if amount < STARTUP_MIN_AMOUNT or amount > STARTUP_MAX_AMOUNT:
 		return
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-	var seasons_to_exit: int = rng.randi_range(STARTUP_MIN_SEASONS, STARTUP_MAX_SEASONS)
-	if not LifestyleManager.invest_startup(amount, seasons_to_exit, rng.seed):
+	if not LifestyleManager.invest_startup(amount):
 		return
 	if SaveSystem.get_active_slot_id() >= 0:
 		SaveSystem.save_slot(SaveSystem.get_active_slot_id())

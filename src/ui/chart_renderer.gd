@@ -104,6 +104,10 @@ var _ema_slow_state: float = 0.0
 var _sig_ema_state: float = 0.0
 var _indicator_seeded: bool = false  ## True once full seed calculation done
 
+## H-12: cached skill unlock states — updated in _ready() and on on_skill_unlocked signal.
+var _skill_a1_unlocked: bool = false
+var _skill_a2_unlocked: bool = false
+
 ## Debounce for load_stock — prevents full rebuild storms during rapid stock scrolling.
 var _pending_stock_id: String = ""
 var _load_debounce_timer: Timer
@@ -154,6 +158,10 @@ func _ready() -> void:
 	GameClock.on_market_state_changed.connect(_on_market_state_changed)
 	PriceEngine.on_price_updated.connect(_on_price_updated)
 	M1CacheManager.batch_complete.connect(_on_m1_batch_complete)
+	# H-12: cache skill states and update on unlock signal.
+	_skill_a1_unlocked = SkillTree.is_skill_unlocked("A1")
+	_skill_a2_unlocked = SkillTree.is_skill_unlocked("A2")
+	SkillTree.on_skill_unlocked.connect(_on_skill_unlocked_chart)
 	clip_contents = true
 	tree_exiting.connect(_disconnect_signals)
 	_load_debounce_timer = Timer.new()
@@ -388,6 +396,14 @@ func _on_market_state_changed(
 				_chart_state = ChartState.STATIC
 
 
+## H-12: update cached skill unlock state when any skill is unlocked.
+func _on_skill_unlocked_chart(skill_id: String) -> void:
+	if skill_id == "A1":
+		_skill_a1_unlocked = true
+	elif skill_id == "A2":
+		_skill_a2_unlocked = true
+
+
 func _disconnect_signals() -> void:
 	if GameClock.on_tick.is_connected(_on_tick):
 		GameClock.on_tick.disconnect(_on_tick)
@@ -397,6 +413,9 @@ func _disconnect_signals() -> void:
 		PriceEngine.on_price_updated.disconnect(_on_price_updated)
 	if M1CacheManager.batch_complete.is_connected(_on_m1_batch_complete):
 		M1CacheManager.batch_complete.disconnect(_on_m1_batch_complete)
+	# H-12: disconnect skill unlock cache updater.
+	if SkillTree.on_skill_unlocked.is_connected(_on_skill_unlocked_chart):
+		SkillTree.on_skill_unlocked.disconnect(_on_skill_unlocked_chart)
 	# TD-AUDIT-03: 씬 제거 시 타이머 dangling 방지 — timeout이 freed 객체에서 발화하는 오류 수정
 	if is_instance_valid(_load_debounce_timer):
 		_load_debounce_timer.stop()
@@ -821,9 +840,9 @@ func _draw() -> void:
 	_draw_background()
 	_draw_grid()
 	_draw_candles()
-	if SkillTree.is_skill_unlocked("A1"):
+	if _skill_a1_unlocked:
 		_draw_moving_averages()
-	if SkillTree.is_skill_unlocked("A2"):
+	if _skill_a2_unlocked:
 		_draw_rsi()
 		_draw_macd()
 	_draw_volume_bars()
@@ -865,7 +884,7 @@ func _compute_layout() -> void:
 	var left: float = 0.0
 	var width: float = size.x - 60.0  # Right margin for Y-axis labels
 
-	if SkillTree.is_skill_unlocked("A2"):
+	if _skill_a2_unlocked:
 		# 4-zone split: chart 55%, RSI 15%, MACD 15%, volume 15%
 		var chart_height: float = total_height * 0.55
 		var rsi_height: float = total_height * 0.15
@@ -948,7 +967,7 @@ func _volume_to_y(volume: float) -> float:
 
 func _draw_background() -> void:
 	draw_rect(_chart_rect, Color.WHITE, true)
-	if SkillTree.is_skill_unlocked("A2"):
+	if _skill_a2_unlocked:
 		draw_rect(_rsi_rect, Color(0.95, 0.97, 0.99), true)
 		draw_rect(_macd_rect, Color(0.95, 0.97, 0.99), true)
 	draw_rect(_volume_rect, Color(0.97, 0.97, 0.98), true)
@@ -1155,7 +1174,7 @@ func _draw_axes() -> void:
 		Vector2(_chart_rect.position.x + _chart_rect.size.x, _volume_rect.position.y),
 		axis_color
 	)
-	if SkillTree.is_skill_unlocked("A2"):
+	if _skill_a2_unlocked:
 		# Separator between chart and RSI
 		draw_line(
 			Vector2(_rsi_rect.position.x, _rsi_rect.position.y),

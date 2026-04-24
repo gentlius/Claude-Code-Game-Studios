@@ -41,8 +41,11 @@ var _lbl_ob_cur_change: Label
 ## 블록 5: 체결강도
 var _fill_strength_container: Control
 var _fill_strength_fill: Panel
+var _fill_strength_style: StyleBoxFlat = null
 var _lbl_fill_pct: Label
 var _lbl_fill_side: Label
+
+var _pending_order_ids: Array[int] = []
 ## 블록 6: 52주 최고/최저 행. GDD order-book.md §3-5 블록6.
 var _lbl_week52_high: Label
 var _lbl_week52_low: Label
@@ -317,9 +320,9 @@ func _build_ob_fill_strength_bar() -> void:
 	_fill_strength_fill.anchor_right = 0.5  # 100% = 50% bar width
 	_fill_strength_fill.offset_left = 0
 	_fill_strength_fill.offset_right = 0
-	var fs_fill_style: StyleBoxFlat = StyleBoxFlat.new()
-	fs_fill_style.bg_color = ThemeSetup.LOSS_BLUE.darkened(0.3)
-	_fill_strength_fill.add_theme_stylebox_override("panel", fs_fill_style)
+	_fill_strength_style = StyleBoxFlat.new()
+	_fill_strength_style.bg_color = ThemeSetup.LOSS_BLUE.darkened(0.3)
+	_fill_strength_fill.add_theme_stylebox_override("panel", _fill_strength_style)
 	_fill_strength_container.add_child(_fill_strength_fill)
 
 
@@ -573,6 +576,8 @@ func _refresh_a3_section() -> void:
 ## Called every tick via PriceEngine.on_price_updated.
 ## GDD order-book.md §3-5, §9 UI 갱신.
 func _on_tick(_tick: int) -> void:
+	if not is_visible_in_tree():
+		return
 	_update_order_panel_price()
 	_refresh_order_book()
 	_refresh_ohlcv()
@@ -722,19 +727,17 @@ func _refresh_fill_strength(ask_total: int, bid_total: int) -> void:
 	_fill_strength_fill.offset_left  = 0
 	_fill_strength_fill.offset_right = 0
 
-	var fs_style: StyleBoxFlat = _fill_strength_fill.get_theme_stylebox("panel") as StyleBoxFlat
 	if strength > 100.0:
 		_lbl_fill_side.text = tr("매수우위")
 		_lbl_fill_side.add_theme_color_override("font_color", ThemeSetup.LOSS_BLUE)
-		fs_style.bg_color = ThemeSetup.LOSS_BLUE.darkened(0.3)
+		_fill_strength_style.bg_color = ThemeSetup.LOSS_BLUE.darkened(0.3)
 	elif strength < 100.0:
 		_lbl_fill_side.text = tr("매도우위")
 		_lbl_fill_side.add_theme_color_override("font_color", ThemeSetup.PROFIT_RED)
-		fs_style.bg_color = ThemeSetup.PROFIT_RED.darkened(0.3)
+		_fill_strength_style.bg_color = ThemeSetup.PROFIT_RED.darkened(0.3)
 	else:
 		_lbl_fill_side.text = ""
-		fs_style.bg_color = Color(0.5, 0.5, 0.5, 0.5)
-	_fill_strength_fill.add_theme_stylebox_override("panel", fs_style)
+		_fill_strength_style.bg_color = Color(0.5, 0.5, 0.5, 0.5)
 
 
 func _build_side_tabs(vbox: VBoxContainer) -> void:
@@ -1182,9 +1185,25 @@ func _flash_order_panel(side: String) -> void:
 
 
 func _update_pending_orders() -> void:
+	var pending: Array[Dictionary] = OrderEngine.get_pending_orders()
+	var new_ids: Array[int] = []
+	for o: Dictionary in pending:
+		new_ids.append(o["order_id"] as int)
+
+	if new_ids == _pending_order_ids and pending.size() > 0:
+		# Same orders — update detail labels in-place (partial fill qty may change)
+		var children: Array[Node] = _pending_orders_container.get_children()
+		for i: int in range(mini(children.size(), pending.size())):
+			var row: Node = children[i]
+			if row.has_meta("detail_lbl"):
+				var o: Dictionary = pending[i]
+				var price_val: int = o.get("limit_price", PriceEngine.get_current_price(o["stock_id"]))
+				(row.get_meta("detail_lbl") as Label).text = "₩%s × %d주" % [FormatUtils.number(price_val), o["quantity"]]
+		return
+
+	_pending_order_ids = new_ids
 	for child: Node in _pending_orders_container.get_children():
 		child.queue_free()
-	var pending: Array[Dictionary] = OrderEngine.get_pending_orders()
 	if pending.size() == 0:
 		var lbl: Label = Label.new()
 		lbl.text = tr("미체결 주문 없음")
@@ -1236,6 +1255,7 @@ func _make_pending_row(order: Dictionary) -> Control:
 	detail_lbl.add_theme_font_size_override("font_size", 11)
 	ThemeSetup.style_label_secondary(detail_lbl)
 	outer.add_child(detail_lbl)
+	outer.set_meta("detail_lbl", detail_lbl)
 
 	return outer
 

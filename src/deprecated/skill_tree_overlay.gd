@@ -1,7 +1,6 @@
 ## Skill Tree Overlay — Fullscreen overlay for browsing and unlocking skills.
 ## Auto-pauses game when open, resumes on close.
 ## See: design/gdd/progression-ui.md (Rule 4)
-class_name SkillTreeOverlay
 extends Control
 
 # ── Signals ──

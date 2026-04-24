@@ -61,6 +61,7 @@ var _rollup_tween: Tween
 var _flash_tween: Tween
 var _shake_tween: Tween
 var _particle_timer: SceneTreeTimer
+var _particle_timer_gen: int = 0
 
 # ── Lifecycle ──
 
@@ -197,9 +198,14 @@ func _play_particles(grade: Grade, duration_mult: float) -> void:
 									  vp.get_visible_rect().size.y - 120)
 	_particles.restart()
 	_particles.emitting = true
-	# Auto-clear after lifetime
+	# Auto-clear after lifetime. Generation counter prevents a stale callback
+	# from stopping particles if a new celebration fires before this one ends.
+	_particle_timer_gen += 1
+	var gen: int = _particle_timer_gen
 	_particle_timer = get_tree().create_timer(duration * duration_mult + 0.2)
 	_particle_timer.timeout.connect(func() -> void:
+		if gen != _particle_timer_gen:
+			return
 		if is_instance_valid(_particles):
 			_particles.emitting = false
 	)

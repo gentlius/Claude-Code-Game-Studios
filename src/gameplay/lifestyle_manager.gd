@@ -349,17 +349,23 @@ func donate(amount: int) -> bool:
 	return true
 
 
+## GDD §3-2 투자 기간 범위 (시즌 수). UI tooltip에서도 참조.
+const STARTUP_MIN_SEASONS: int = 3
+const STARTUP_MAX_SEASONS: int = 6
+
 ## Record a startup angel investment (대안 투자 — 스타트업 엔젤).
 ## GDD §3-2: seasons_to_exit is 3~6 (random at investment time).
 ## grade: "B" (standard) or "C" (lower-quality, riskier). Defaults to "B".
 ## Returns false if insufficient cash_assets.
-func invest_startup(amount: int, seasons_to_exit: int, rng_seed: int, grade: String = "B") -> bool:
+func invest_startup(amount: int, grade: String = "B") -> bool:
 	if not CurrencySystem.cash_deduct(amount):
 		return false
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
 	var entry: Dictionary = {
 		"amount": amount,
-		"seasons_remaining": seasons_to_exit,
-		"rng_seed": rng_seed,
+		"seasons_remaining": rng.randi_range(STARTUP_MIN_SEASONS, STARTUP_MAX_SEASONS),
+		"rng_seed": rng.seed,
 		"grade": grade,
 	}
 	_startups.append(entry)

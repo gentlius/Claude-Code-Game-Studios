@@ -19,6 +19,11 @@ var _sort_mode: SortMode = SortMode.SEASON
 ## Currently expanded sector (empty = no drilldown open).
 var _drilldown_sector: String = ""
 
+## Sorted ETF IDs from previous _refresh() — used to detect row reorder.
+var _sorted_etf_ids: Array[String] = []
+## Per-row label/bar refs: {lbl_rank, lbl_today, lbl_season, lbl_etf, bar_container}.
+var _row_label_refs: Array[Dictionary] = []
+
 # ── UI nodes ──
 
 var _locked_label: Label
@@ -218,7 +223,34 @@ func _refresh() -> void:
 		return str(a["sector"]) < str(b["sector"])
 	)
 
-	# Rebuild row widgets
+	# Build sorted ID list for diff check
+	var current_ids: Array[String] = []
+	for row_data: Dictionary in rows:
+		current_ids.append(str(row_data["etf_id"]))
+
+	if current_ids == _sorted_etf_ids and _row_label_refs.size() == rows.size():
+		# Same sectors in same order — update values in-place, no node allocation
+		for i: int in rows.size():
+			var refs: Dictionary = _row_label_refs[i]
+			var data: Dictionary = rows[i]
+			(refs["lbl_rank"] as Label).text = str(i + 1)
+			var today_lbl: Label = refs["lbl_today"] as Label
+			today_lbl.text = _format_pct(data["today_ret"])
+			_color_return_label(today_lbl, data["today_ret"])
+			var season_lbl: Label = refs["lbl_season"] as Label
+			season_lbl.text = _format_pct(data["season_ret"])
+			_color_return_label(season_lbl, data["season_ret"])
+			if data["p3_unlocked"]:
+				(refs["lbl_etf"] as Label).text = _format_price(data["etf_price"])
+			var bc: Control = refs["bar_container"] as Control
+			var bar_pct: float = clampf(data["season_ret"] / 0.20, -1.0, 1.0)
+			_set_mini_bar_fill(bc, bar_pct)
+		return
+
+	_sorted_etf_ids = current_ids
+	_row_label_refs.clear()
+
+	# Full rebuild — sort order changed or first draw
 	for child: Node in _rows_container.get_children():
 		child.queue_free()
 
@@ -270,7 +302,7 @@ func _add_sector_row(parent: VBoxContainer, rank: int, data: Dictionary) -> void
 
 	# Mini bar — tuning knob MAX_BAR_PCT ±20% (GDD §7)
 	var bar_pct: float = clampf(season_ret / 0.20, -1.0, 1.0)
-	_add_mini_bar(name_vbox, bar_pct)
+	var bar_container: Control = _add_mini_bar(name_vbox, bar_pct)
 
 	# Today return
 	var lbl_today: Label = Label.new()
@@ -306,6 +338,13 @@ func _add_sector_row(parent: VBoxContainer, rank: int, data: Dictionary) -> void
 		ThemeSetup.style_label_dim(lbl_etf)
 	row.add_child(lbl_etf)
 
+	# Store refs for in-place tick updates
+	_row_label_refs.append({
+		"lbl_rank": lbl_rank, "lbl_today": lbl_today,
+		"lbl_season": lbl_season, "lbl_etf": lbl_etf,
+		"bar_container": bar_container,
+	})
+
 	# Click → drilldown
 	row.gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventMouseButton:
@@ -315,16 +354,23 @@ func _add_sector_row(parent: VBoxContainer, rank: int, data: Dictionary) -> void
 	)
 
 
-func _add_mini_bar(parent: VBoxContainer, pct: float) -> void:
+## Creates bar_container in parent, fills it, and returns the container for ref caching.
+func _add_mini_bar(parent: VBoxContainer, pct: float) -> Control:
 	## pct ∈ [-1, 1] — positive=blue fill right, negative=red fill left
 	var bar_container: Control = Control.new()
 	bar_container.custom_minimum_size = Vector2(0, 4)
 	bar_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(bar_container)
+	_set_mini_bar_fill(bar_container, pct)
+	return bar_container
 
+
+## Updates (or clears) the fill Panel inside an existing bar_container.
+func _set_mini_bar_fill(bar_container: Control, pct: float) -> void:
+	for child: Node in bar_container.get_children():
+		child.queue_free()
 	if absf(pct) < 0.001:
 		return
-
 	var fill: Panel = Panel.new()
 	var style: StyleBoxFlat = StyleBoxFlat.new()
 	style.set_corner_radius_all(2)
@@ -370,10 +416,11 @@ func _open_drilldown(sector: String) -> void:
 		if stock == null:
 			continue
 		var cur_price: int  = PriceEngine.get_current_price(stock_id)
-		var base_price: int = stock.base_price
+		var limits: Dictionary = PriceEngine.get_daily_limits(stock_id)
+		var prev_close: int = limits.get("prev_close", 0)
 		var today_chg: float = 0.0
-		if base_price > 0:
-			today_chg = float(cur_price) / float(base_price) - 1.0
+		if prev_close > 0:
+			today_chg = float(cur_price) / float(prev_close) - 1.0
 		if today_chg > 0.0:
 			up_count += 1
 		elif today_chg < 0.0:

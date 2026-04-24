@@ -17,6 +17,11 @@ var _cache_loading: CanvasLayer = null
 ## Track whether the current MainScreen was created via new game (needs initial save).
 var _pending_initial_save: bool = false
 
+## Stored callable refs for ending lambdas — needed for explicit disconnect (H-09).
+var _on_hangang_cb: Callable
+var _on_master_cb: Callable
+var _on_loan_shark_cb: Callable
+
 
 func _ready() -> void:
 	ThemeSetup.apply_base_theme(get_tree())
@@ -164,14 +169,19 @@ func _show_cache_loading() -> void:
 	bar.custom_minimum_size.y = 12
 	vbox.add_child(bar)
 
-	# 진행률 업데이트
-	M1CacheManager.batch_progress.connect(
-		func(done: int, total: int) -> void:
-			if is_instance_valid(bar):
-				bar.value = float(done) / float(total) if total > 0 else 0.0
+	# 진행률 업데이트 — callable을 변수에 저장해 _on_cache_loading_done에서 disconnect 가능하게.
+	var _batch_progress_cb: Callable = func(done: int, total: int) -> void:
+		if is_instance_valid(bar):
+			bar.value = float(done) / float(total) if total > 0 else 0.0
+	M1CacheManager.batch_progress.connect(_batch_progress_cb)
+	# 완료 → 로딩 화면 제거 후 메인 화면 진입. ONE_SHOT이므로 progress는 직접 해제.
+	M1CacheManager.batch_complete.connect(
+		func() -> void:
+			if M1CacheManager.batch_progress.is_connected(_batch_progress_cb):
+				M1CacheManager.batch_progress.disconnect(_batch_progress_cb)
+			_on_cache_loading_done(),
+		CONNECT_ONE_SHOT
 	)
-	# 완료 → 로딩 화면 제거 후 메인 화면 진입
-	M1CacheManager.batch_complete.connect(_on_cache_loading_done, CONNECT_ONE_SHOT)
 
 
 func _on_cache_loading_done() -> void:
@@ -206,15 +216,12 @@ func _load_main_screen() -> void:
 	_ending_screen.new_game_requested.connect(_on_ending_new_game_requested)
 	_ending_screen.continue_requested.connect(_on_ending_continue_requested)
 
-	SeasonManager.on_hangang_ending_triggered.connect(
-		func() -> void: _show_ending("bankruptcy")
-	)
-	SeasonManager.on_master_ending_triggered.connect(
-		func() -> void: _show_ending("win")
-	)
-	LeverageManager.on_loan_shark_ending_triggered.connect(
-		func(_stock_id: String, _net: int) -> void: _show_ending("leverage_crash")
-	)
+	_on_hangang_cb = func() -> void: _show_ending("bankruptcy")
+	_on_master_cb = func() -> void: _show_ending("win")
+	_on_loan_shark_cb = func(_stock_id: String, _net: int) -> void: _show_ending("leverage_crash")
+	SeasonManager.on_hangang_ending_triggered.connect(_on_hangang_cb)
+	SeasonManager.on_master_ending_triggered.connect(_on_master_cb)
+	LeverageManager.on_loan_shark_ending_triggered.connect(_on_loan_shark_cb)
 
 	# 새 게임: MainScreen 준비 완료 후 초기 상태 1회 저장 (GDD §3-5 Step 6)
 	if _pending_initial_save and SaveSystem.get_active_slot_id() >= 0:
@@ -303,6 +310,16 @@ func _on_ending_continue_requested() -> void:
 		_main_screen = null
 
 	_show_start_screen()
+
+
+func _exit_tree() -> void:
+	# H-09: disconnect ending lambdas stored in named callables.
+	if SeasonManager.on_hangang_ending_triggered.is_connected(_on_hangang_cb):
+		SeasonManager.on_hangang_ending_triggered.disconnect(_on_hangang_cb)
+	if SeasonManager.on_master_ending_triggered.is_connected(_on_master_cb):
+		SeasonManager.on_master_ending_triggered.disconnect(_on_master_cb)
+	if LeverageManager.on_loan_shark_ending_triggered.is_connected(_on_loan_shark_cb):
+		LeverageManager.on_loan_shark_ending_triggered.disconnect(_on_loan_shark_cb)
 
 
 func _on_exit_to_start_requested() -> void:

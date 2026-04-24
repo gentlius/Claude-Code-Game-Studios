@@ -370,6 +370,8 @@ void PriceKernel::set_config(Dictionary cfg) {
     _loadi("viMaxPerDay",             _vi_max_per_day);
     _loadi("viCooldownTicks",         _vi_cooldown_ticks);
     _loadi("ticksPerDay",             _ticks_per_day);
+    _loadi("m1CacheBars",             _m1_cache_bars);
+    _loadi("d1CacheBars",             _d1_cache_bars);
 
     _cfg_loaded = true;
 
@@ -2065,6 +2067,308 @@ void PriceKernel::restore_report_state(Dictionary state) {
     _re_is_active = _re_is_report_season(_re_season);
 }
 
+// ── Phase E: historical simulation ────────────────────────────────────────────
+
+// One tick of historical simulation — mirrors process_all_ticks inner loop but
+// writes directly into SimBuffers instead of building Godot Dictionaries.
+void PriceKernel::_sim_tick(int tick_in_day, int ticks_per_day,
+                             std::unordered_map<std::string, SimBuffer> &bufs) {
+    // EventEngine: fire any scheduled slots (price effects applied via incoming_events)
+    Array dummy_ui;
+    _ee_check_slots(tick_in_day, dummy_ui);
+
+    for (auto &s : _stocks) {
+        if (s.is_etf) continue;  // ETFs skip normal tick in sim (no sector flow needed)
+
+        SimBuffer &b = bufs[s.stock_id];
+
+        // VI halt
+        if (s.vi_halt_remaining > 0) {
+            s.vi_halt_remaining -= 1;
+            // Still accumulate into M1/D1 with unchanged price
+            int price = s.current_price;
+            // M1 accumulation
+            if (b.m1_tick == 0) { b.m1_o = price; b.m1_h = price; b.m1_l = price; b.m1_v = 0.0f; }
+            else                { b.m1_h = std::max(b.m1_h, price); b.m1_l = std::min(b.m1_l, price); }
+            b.m1_tick++;
+            if (b.m1_tick == 4) {
+                int idx = b.m1_head * 4;
+                b.m1_ohlc[idx]   = b.m1_o; b.m1_ohlc[idx+1] = b.m1_h;
+                b.m1_ohlc[idx+2] = b.m1_l; b.m1_ohlc[idx+3] = price;
+                b.m1_vol[b.m1_head] = b.m1_v;
+                b.m1_head  = (b.m1_head + 1) % b.m1_cap;
+                b.m1_count = std::min(b.m1_count + 1, b.m1_cap);
+                b.m1_tick  = 0;
+            }
+            b.d1_h = std::max(b.d1_h, price); b.d1_l = std::min(b.d1_l, price);
+            continue;
+        }
+        if (s.vi_cooldown > 0) s.vi_cooldown -= 1;
+
+        // Price delta
+        int forced_breakout = -1;
+        float event_delta   = _consume_events(s, forced_breakout);
+        float pattern_delta = _pattern_delta(s);
+        double drift_delta  = _drift_delta(s);
+
+        float rumor_delta = 0.0f;
+        if (s.rumor_ticks_remaining > 0) {
+            rumor_delta = s.rumor_delta_per_tick;
+            s.rumor_ticks_remaining -= 1;
+        }
+        // player_pressure is always 0 in simulation (no player orders)
+
+        double total_delta = static_cast<double>(pattern_delta)
+                           + drift_delta
+                           + static_cast<double>(event_delta)
+                           + static_cast<double>(rumor_delta);
+
+        double raw_price = static_cast<double>(s.current_price) * (1.0 + total_delta);
+        double min_p     = std::max(static_cast<double>(s.base_price) * _hard_clamp_min,
+                                    _hard_clamp_abs_min);
+        double max_p     = static_cast<double>(s.base_price) * _hard_clamp_max;
+        double upper     = static_cast<double>(s.prev_day_close) * (1.0 + _daily_limit_pct);
+        double lower     = static_cast<double>(s.prev_day_close) * (1.0 - _daily_limit_pct);
+        double clamped   = std::clamp(std::clamp(raw_price, min_p, max_p), lower, upper);
+        int final_price  = _round_to_tick(clamped);
+        s.current_price  = final_price;
+
+        // Markov state transition
+        {
+            int state   = s.markov_state;
+            int min_dur = static_cast<int>(_sp[state][4] * 4.0);
+            if (s.state_duration >= min_dur) {
+                double roll = static_cast<double>(s.rng.randf());
+                double cum  = 0.0;
+                for (int j = 0; j < 7; ++j) {
+                    cum += s.day_matrix[state][j];
+                    if (roll <= cum) {
+                        if (j != state) { s.markov_state = j; s.state_duration = 0; }
+                        else            { s.state_duration += 1; }
+                        break;
+                    }
+                }
+            } else { s.state_duration += 1; }
+            if (forced_breakout >= 0) { s.markov_state = forced_breakout; s.state_duration = 0; }
+        }
+
+        // Volume
+        float base_vol   = s.rng.randf_range(static_cast<float>(_bvr_min[s.vol_profile]),
+                                              static_cast<float>(_bvr_max[s.vol_profile]));
+        float tick_energy = std::abs(pattern_delta) + std::abs(event_delta) + std::abs(rumor_delta);
+        float energy_mult = 1.0f + std::clamp(tick_energy / _energy_threshold, 0.0f, _energy_max_boost);
+        float state_mult  = static_cast<float>(_svm[s.markov_state]);
+        float prev_f      = static_cast<float>(s.prev_day_close);
+        float proximity   = (prev_f > 0.0f)
+            ? std::abs(static_cast<float>(final_price) - prev_f) / (prev_f * static_cast<float>(_daily_limit_pct))
+            : 0.0f;
+        float limit_dampen = 1.0f;
+        if (proximity >= _limit_dampen_start) {
+            float t = std::clamp((proximity - _limit_dampen_start) / (1.0f - _limit_dampen_start), 0.0f, 1.0f);
+            limit_dampen = _limit_dampen_min + (1.0f - t) * (1.0f - _limit_dampen_min);
+        }
+        float tod_mult  = (tick_in_day < _tod_window_ticks)               ? _tod_open_mult
+                        : (tick_in_day >= ticks_per_day - _tod_window_ticks) ? _tod_close_mult
+                        : 1.0f;
+        float volume = base_vol * state_mult * energy_mult * limit_dampen * tod_mult
+                     * static_cast<float>(s.macro_vol_mult);
+
+        // VI check (same conditions as process_all_ticks)
+        if (tick_in_day > 0 && s.vi_halt_remaining == 0
+                && s.vi_count_today < _vi_max_per_day && s.vi_cooldown == 0) {
+            float change_pct = (prev_f > 0.0f)
+                ? std::abs(static_cast<float>(final_price) - prev_f) / prev_f : 0.0f;
+            if (change_pct >= _vi_threshold) {
+                s.vi_halt_remaining = _vi_halt_ticks;
+                s.vi_cooldown       = _vi_cooldown_ticks;
+                s.vi_count_today   += 1;
+            }
+        }
+
+        // Accumulate M1 bar (every 4 ticks)
+        if (b.m1_tick == 0) { b.m1_o = final_price; b.m1_h = final_price; b.m1_l = final_price; b.m1_v = 0.0f; }
+        else                { b.m1_h = std::max(b.m1_h, final_price); b.m1_l = std::min(b.m1_l, final_price); }
+        b.m1_v += volume;
+        b.m1_tick++;
+        if (b.m1_tick == 4) {
+            int idx = b.m1_head * 4;
+            b.m1_ohlc[idx]   = b.m1_o; b.m1_ohlc[idx+1] = b.m1_h;
+            b.m1_ohlc[idx+2] = b.m1_l; b.m1_ohlc[idx+3] = final_price;
+            b.m1_vol[b.m1_head] = b.m1_v;
+            b.m1_head  = (b.m1_head + 1) % b.m1_cap;
+            b.m1_count = std::min(b.m1_count + 1, b.m1_cap);
+            b.m1_tick  = 0;
+        }
+
+        // Accumulate D1 high/low/vol (close finalized at end of day by outer loop)
+        b.d1_h  = std::max(b.d1_h, final_price);
+        b.d1_l  = std::min(b.d1_l, final_price);
+        b.d1_v += volume;
+    }
+
+    // ReportEngine intraday events (price effects applied via incoming_events queue)
+    if (_re_config_loaded && _re_is_active) {
+        Array dummy_re;
+        _re_process_tick(tick_in_day, dummy_re);
+    }
+}
+
+
+PackedInt32Array PriceKernel::_sim_ring_to_int32(const std::vector<int> &ring,
+                                                   int head, int count) {
+    PackedInt32Array out;
+    if (count == 0 || ring.empty()) return out;
+    int cap   = static_cast<int>(ring.size() / 4);
+    // oldest entry index: if buffer not full, start=0; if full, start=head (was just overwritten)
+    int start = (count < cap) ? 0 : head;
+    out.resize(count * 4);
+    for (int i = 0; i < count; ++i) {
+        int src = ((start + i) % cap) * 4;
+        int dst = i * 4;
+        out[dst]   = ring[src];
+        out[dst+1] = ring[src+1];
+        out[dst+2] = ring[src+2];
+        out[dst+3] = ring[src+3];
+    }
+    return out;
+}
+
+
+PackedFloat32Array PriceKernel::_sim_ring_to_float(const std::vector<float> &ring,
+                                                     int head, int count) {
+    PackedFloat32Array out;
+    if (count == 0 || ring.empty()) return out;
+    int cap   = static_cast<int>(ring.size());
+    int start = (count < cap) ? 0 : head;
+    out.resize(count);
+    for (int i = 0; i < count; ++i)
+        out[i] = ring[(start + i) % cap];
+    return out;
+}
+
+
+Dictionary PriceKernel::run_historical_simulation(int n_seasons, int days_per_season,
+                                                   int ticks_per_day, Array theme_sequence,
+                                                   int64_t seed) {
+    _sim_progress.store(0);
+
+    // Re-seed all stock RNGs with per-stock seeds derived from global seed
+    for (auto &s : _stocks) {
+        uint64_t h = std::hash<std::string>{}(s.stock_id);
+        uint64_t stock_seed = static_cast<uint64_t>(seed) ^ (h * 0x9e3779b97f4a7c15ULL);
+        s.rng.seed(stock_seed);
+        s.vi_halt_remaining = 0;
+        s.vi_cooldown       = 0;
+        s.vi_count_today    = 0;
+        s.player_pressure   = 0.0f;
+        s.rumor_delta_per_tick  = 0.0f;
+        s.rumor_ticks_remaining = 0;
+        s.incoming_events.clear();
+        s.gradual_events.clear();
+    }
+
+    // Allocate per-stock SimBuffers
+    std::unordered_map<std::string, SimBuffer> bufs;
+    bufs.reserve(_stocks.size());
+    for (const auto &s : _stocks) {
+        if (s.is_etf) continue;
+        SimBuffer b;
+        b.m1_cap = _m1_cache_bars;
+        b.m1_ohlc.assign(static_cast<size_t>(b.m1_cap) * 4, 0);
+        b.m1_vol.assign(static_cast<size_t>(b.m1_cap), 0.0f);
+        b.d1_cap = _d1_cache_bars;
+        b.d1_ohlc.assign(static_cast<size_t>(b.d1_cap) * 4, 0);
+        b.d1_vol.assign(static_cast<size_t>(b.d1_cap), 0.0f);
+        b.m1_o = b.m1_h = b.m1_l = s.current_price;
+        b.d1_o = b.d1_h = b.d1_l = s.current_price;
+        bufs[s.stock_id] = std::move(b);
+    }
+
+    int total = n_seasons;
+
+    for (int season = 0; season < total; ++season) {
+        // Retrieve season theme
+        Dictionary theme;
+        if (season < (int)theme_sequence.size())
+            theme = theme_sequence[season];
+        else if (theme_sequence.size() > 0)
+            theme = theme_sequence[theme_sequence.size() - 1];
+
+        start_season(season + 1, theme);
+
+        for (int day = 0; day < days_per_season; ++day) {
+            start_day(day + 1);
+
+            // D1 open = price at start of day (after start_day which updates prev_day_close)
+            for (auto &s : _stocks) {
+                if (s.is_etf) continue;
+                SimBuffer &b = bufs[s.stock_id];
+                b.d1_o = s.current_price;
+                b.d1_h = s.current_price;
+                b.d1_l = s.current_price;
+                b.d1_v = 0.0f;
+                b.m1_tick = 0;  // reset M1 partial bar at day start
+            }
+
+            // Flush pre-market report events (buffered by start_day -> _re_process_pre_market)
+            if (!_re_buffered_ui_events.is_empty()) {
+                _re_buffered_ui_events  = Array();
+                _re_buffered_a3_updates = Array();
+            }
+
+            for (int tick = 0; tick < ticks_per_day; ++tick)
+                _sim_tick(tick, ticks_per_day, bufs);
+
+            // Finalize D1 bar at end of day
+            for (auto &s : _stocks) {
+                if (s.is_etf) continue;
+                SimBuffer &b = bufs[s.stock_id];
+                int idx = b.d1_head * 4;
+                b.d1_ohlc[idx]   = b.d1_o;
+                b.d1_ohlc[idx+1] = b.d1_h;
+                b.d1_ohlc[idx+2] = b.d1_l;
+                b.d1_ohlc[idx+3] = s.current_price;
+                b.d1_vol[b.d1_head] = b.d1_v;
+                b.d1_head  = (b.d1_head + 1) % b.d1_cap;
+                b.d1_count = std::min(b.d1_count + 1, b.d1_cap);
+            }
+        }
+
+        _sim_progress.store((season + 1) * 1000 / total);
+    }
+
+    // Build result Dictionary
+    Dictionary result;
+    for (const auto &s : _stocks) {
+        if (s.is_etf) continue;
+        auto it = bufs.find(s.stock_id);
+        if (it == bufs.end()) continue;
+        const SimBuffer &b = it->second;
+
+        Dictionary sd;
+        sd["m1_ohlc"]  = _sim_ring_to_int32(b.m1_ohlc, b.m1_head, b.m1_count);
+        sd["m1_vol"]   = _sim_ring_to_float(b.m1_vol,  b.m1_head, b.m1_count);
+        sd["d1_ohlc"]  = _sim_ring_to_int32(b.d1_ohlc, b.d1_head, b.d1_count);
+        sd["d1_vol"]   = _sim_ring_to_float(b.d1_vol,  b.d1_head, b.d1_count);
+        sd["m1_count"] = b.m1_count;
+        sd["d1_count"] = b.d1_count;
+        sd["final_price"]        = s.current_price;
+        sd["final_roe"]          = s.roe;
+        sd["final_per"]          = s.per;
+        sd["final_pbr"]          = s.pbr;
+        sd["final_markov_state"] = s.markov_state;
+        sd["final_macro_state"]  = s.macro_state;
+        result[String(s.stock_id.c_str())] = sd;
+    }
+    return result;
+}
+
+
+int PriceKernel::get_simulation_progress() const {
+    return _sim_progress.load(std::memory_order_relaxed);
+}
+
+
 // ── GDExtension binding ───────────────────────────────────────────────────────
 
 void PriceKernel::_bind_methods() {
@@ -2092,6 +2396,12 @@ void PriceKernel::_bind_methods() {
                          &PriceKernel::get_report_state);
     ClassDB::bind_method(D_METHOD("restore_report_state", "state"),
                          &PriceKernel::restore_report_state);
+    ClassDB::bind_method(
+        D_METHOD("run_historical_simulation", "n_seasons", "days_per_season",
+                 "ticks_per_day", "theme_sequence", "seed"),
+        &PriceKernel::run_historical_simulation);
+    ClassDB::bind_method(D_METHOD("get_simulation_progress"),
+                         &PriceKernel::get_simulation_progress);
 }
 
 } // namespace godot

@@ -449,6 +449,8 @@ func _build_kernel_cfg() -> Dictionary:
 	cfg["viMaxPerDay"]            = VI_MAX_PER_DAY
 	cfg["viCooldownTicks"]        = _minutes_to_ticks(VI_COOLDOWN_MINUTES)
 	cfg["ticksPerDay"]            = GameClock.TICKS_PER_DAY
+	cfg["m1CacheBars"]            = M1CacheManager.M1_CACHE_BARS
+	cfg["d1CacheBars"]            = M1CacheManager.D1_CACHE_BARS
 
 	# Phase B: EventEngine — pass event_pool templates to C++ kernel.
 	# TODO(DLC): filter by active market_id when multi-market support lands (ADR-021).
@@ -735,6 +737,51 @@ func get_report_state() -> Dictionary:
 ## Called by FinancialReportSystem.load_save_data(). ADR-027 Phase D.
 func restore_report_state(state: Dictionary) -> void:
 	_kernel.restore_report_state(state)
+
+
+## Runs historical price simulation for all stocks (ADR-027 Phase E).
+## Uses a DEDICATED kernel instance — live _kernel is untouched.
+## theme_sequence: Array[Dictionary] (len = n_seasons); empty dicts use default weights.
+## Returns: {stock_id: {m1_ohlc, m1_vol, d1_ohlc, d1_vol, m1_count, d1_count,
+##                      final_price, final_roe, final_per, final_pbr,
+##                      final_markov_state, final_macro_state}}
+func run_historical_simulation(n_seasons: int, days_per_season: int,
+		ticks_per_day: int, theme_sequence: Array,
+		seed: int) -> Dictionary:
+	var hist_kernel: Object = ClassDB.instantiate("PriceKernel")
+	if hist_kernel == null:
+		push_error("PriceEngine: PriceKernel 인스턴스 생성 실패 (historical sim)")
+		return {}
+	hist_kernel.set_config(_build_kernel_cfg())
+	for stock_id: String in _stock_states:
+		var s: Dictionary = _stock_states[stock_id]
+		var stock: StockData = StockDatabase.get_stock(stock_id)
+		if stock == null:
+			continue
+		hist_kernel.init_stock(stock_id, {
+			"base_price":         s.get("base_price",         stock.base_price),
+			"current_price":      s.get("current_price",      stock.base_price),
+			"prev_day_close":     s.get("prev_day_close",     stock.base_price),
+			"vol_profile":        s.get("volatility_profile", stock.volatility_profile),
+			"sector":             stock.sector,
+			"archetype":          stock.archetype,
+			"macro_sensitivity":  s.get("macro_sensitivity",  1.0),
+			"sector_sensitivity": s.get("sector_sensitivity", 1.0),
+			"is_etf":             s.get("is_etf",             false),
+			"listed_shares":      stock.listed_shares,
+			"roe":                stock.roe,
+			"per":                stock.per,
+			"pbr":                stock.pbr,
+			"event_tags":         stock.event_tags,
+		})
+	return hist_kernel.run_historical_simulation(
+		n_seasons, days_per_season, ticks_per_day, theme_sequence, seed)
+
+
+## Returns historical simulation progress: 0 (not started) → 1000 (done).
+## Thread-safe; poll from a timer during background simulation.
+func get_simulation_progress() -> int:
+	return _kernel.get_simulation_progress()
 
 
 ## Resets all price engine state for unit tests. Call in before_each.

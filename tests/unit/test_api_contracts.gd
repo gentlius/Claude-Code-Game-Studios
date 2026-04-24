@@ -671,14 +671,17 @@ func test_price_kernel_instantiates():
 		return
 	var pk: Object = ClassDB.instantiate("PriceKernel")
 	assert_not_null(pk, "PriceKernel 인스턴스 생성 성공")
-	# 12-method API는 gdextension/src/price_kernel.cpp _bind_methods()가 보장:
+	# 14-method API는 gdextension/src/price_kernel.cpp _bind_methods()가 보장:
 	# set_config / init_stock / reset / start_season / start_day /
 	# process_all_ticks / get_macro_states / add_player_pressure / set_rumor / inject_event
 	# get_report_state / restore_report_state  ← Phase D
+	# run_historical_simulation / get_simulation_progress  ← Phase E
 
 func test_price_engine_kernel_wiring():
-	## ADR-027 Phase A: PriceEngine이 PriceKernel 초기화 헬퍼를 보유한다.
-	assert_true(PriceEngine.has_method("_init_kernel_ext"),        "_init_kernel_ext 존재")
-	assert_true(PriceEngine.has_method("_build_kernel_cfg"),       "_build_kernel_cfg 존재")
-	assert_true(PriceEngine.has_method("get_report_state"),        "get_report_state 존재")
-	assert_true(PriceEngine.has_method("restore_report_state"),    "restore_report_state 존재")
+	## ADR-027 Phase A–E: PriceEngine이 PriceKernel 초기화 헬퍼를 보유한다.
+	assert_true(PriceEngine.has_method("_init_kernel_ext"),           "_init_kernel_ext 존재")
+	assert_true(PriceEngine.has_method("_build_kernel_cfg"),          "_build_kernel_cfg 존재")
+	assert_true(PriceEngine.has_method("get_report_state"),           "get_report_state 존재")
+	assert_true(PriceEngine.has_method("restore_report_state"),       "restore_report_state 존재")
+	assert_true(PriceEngine.has_method("run_historical_simulation"),  "run_historical_simulation 존재")
+	assert_true(PriceEngine.has_method("get_simulation_progress"),    "get_simulation_progress 존재")

@@ -22,7 +22,7 @@ const MINUTES_PER_DAY: int = 390
 ## 1 시즌 거래일 수.
 const DAYS_PER_SEASON: int = 20
 ## 캐시 파일 버전 — 이 값이 변경되면 디스크 캐시 전체 무효화 후 재생성 (ADR-024).
-const CACHE_VERSION: int = 8  ## Bumped: round_to_tick() moved into C++ MarkovGenerator (4670b2d) — forces regen of v7 unrounded caches
+const CACHE_VERSION: int = 9  ## Bumped: Phase E PriceKernel full-kernel simulation replaces MarkovGenerator-only prehistory (ADR-027)
 ## 캐시 루트 디렉토리 (user:// 아래). 슬롯별 격리 → _cache_dir() 참조.
 const CACHE_ROOT: String = "user://m1_cache/"
 
@@ -52,6 +52,8 @@ var _d1_count: Dictionary = {}
 
 var _thread: Thread = null
 var _batch_done: bool = false
+## Phase E: simulation results from main-thread run, consumed by _batch_thread for disk I/O.
+var _pending_sim_results: Dictionary = {}
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
@@ -69,6 +71,30 @@ func generate_all(stocks: Array, history_seed: int) -> void:
 	_batch_done = false
 	_cancel_thread()
 	_ensure_cache_dir()
+	_pending_sim_results = {}
+
+	# Phase E: run full-kernel simulation on main thread for stocks with invalid cache.
+	# C++ is fast enough (100 seasons, 15 stocks ≈ 1-3 s); disk I/O runs in the thread.
+	var needs_regen := false
+	for stock in stocks:
+		if stock is StockData:
+			if not _disk_cache_valid(_stock_cache_path((stock as StockData).stock_id), history_seed):
+				needs_regen = true
+				break
+
+	if needs_regen:
+		var n_seasons := 1
+		for stock in stocks:
+			if stock is StockData:
+				n_seasons = maxi(n_seasons, (stock as StockData).history_seasons)
+		# Empty theme dicts → default sector weights (no seasonal bias in prehistory)
+		var theme_seq: Array = []
+		theme_seq.resize(n_seasons)
+		for i in range(n_seasons):
+			theme_seq[i] = {}
+		_pending_sim_results = PriceEngine.run_historical_simulation(
+			n_seasons, DAYS_PER_SEASON, GameClock.TICKS_PER_DAY, theme_seq, history_seed)
+
 	_thread = Thread.new()
 	_thread.start(_batch_thread.bind(stocks, history_seed))
 
@@ -316,7 +342,8 @@ func _save_d1_to_disk(path: String, stock_id: String) -> void:
 # ── Thread Work ────────────────────────────────────────────────────────────────
 
 ## 백그라운드 스레드 메인 루프.
-## 종목당: 디스크 캐시 유효 검사 → 디스크 로드 or PriceEngine 생성 → 디스크 저장.
+## Phase E: 캐시 히트 → 디스크 로드. 캐시 미스 → _pending_sim_results에서 읽어 디스크 저장.
+## _pending_sim_results은 generate_all()이 main thread에서 미리 채워둔다.
 ## 완료 후 call_deferred로 메모리 로드 + 시그널 emit.
 func _batch_thread(stocks: Array, history_seed: int) -> void:
 	var total: int = stocks.size()
@@ -333,11 +360,11 @@ func _batch_thread(stocks: Array, history_seed: int) -> void:
 
 		if _disk_cache_valid(cache_path, history_seed):
 			result = _load_from_disk(cache_path)
-		else:
-			result = PriceEngine.generate_stock_m1_cache(
-				stock, history_seed, M1_CACHE_BARS, D1_CACHE_BARS
-			)
+		elif _pending_sim_results.has(stock.stock_id):
+			# Phase E: use pre-computed simulation result, then persist to disk
+			result = _pending_sim_results[stock.stock_id]
 			_save_to_disk(cache_path, history_seed, result)
+		# else: simulation failed or stock wasn't registered — result stays empty
 
 		if not result.is_empty():
 			batch_results[stock.stock_id] = result

@@ -490,6 +490,10 @@ func _on_kernel_news(ui_events: Array) -> void:
 
 ## Resolve a kernel ui_event to a display news entry and push to the delay queue.
 func _queue_kernel_event(ui_event: Dictionary) -> void:
+	# Phase D: REPORT events dispatched directly to FinancialReportSystem (no template lookup).
+	if ui_event.get("type", "EVENT") == "REPORT":
+		FinancialReportSystem._on_kernel_report(ui_event)
+		return
 	# Phase C: ROTATION events have a separate display path (no template lookup).
 	if ui_event.get("type", "EVENT") == "ROTATION":
 		_queue_rotation_headline(ui_event)

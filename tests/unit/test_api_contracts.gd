@@ -458,23 +458,19 @@ func test_sector_comparison_view_api():
 	assert_true("_main_panel" in view,                   "_main_panel 속성 존재")
 
 
-# ── FinancialReportSystem (S10-05) ───────────────────────────────────
+# ── FinancialReportSystem (S10-05, ADR-027 Phase D) ─────────────────────────
+## Phase D: computation moved to C++ PriceKernel; GDScript is UI display layer.
 ## Implements: design/gdd/financial-report-system.md §8 AC-FR-01, AC-FR-02
 
 func test_financial_report_system_api():
-	assert_true(FinancialReportSystem.has_method("is_report_season"),           "is_report_season 존재")
-	assert_true(FinancialReportSystem.has_method("get_report_type"),            "get_report_type 존재")
-	assert_true(FinancialReportSystem.has_method("schedule_quarterly_events"),  "schedule_quarterly_events 존재")
-	assert_true(FinancialReportSystem.has_method("get_pending_events"),         "get_pending_events 존재")
-	assert_true(FinancialReportSystem.has_method("reset"),                      "reset 존재")
-	assert_true(FinancialReportSystem.has_method("get_save_data"),              "get_save_data 존재")
-	assert_true(FinancialReportSystem.has_method("load_save_data"),             "load_save_data 존재")
-	assert_true(FinancialReportSystem.has_method("_load_from_market_profile"),  "_load_from_market_profile 존재")
-	assert_true("_pending_events" in FinancialReportSystem,                  "_pending_events 속성 존재")
-	assert_true("_current_season" in FinancialReportSystem,                  "_current_season 속성 존재")
-	assert_true("REPORT_CYCLE_SEASONS" in FinancialReportSystem,             "REPORT_CYCLE_SEASONS 상수 존재")
-	assert_true("REPORT_TYPE_SEQUENCE" in FinancialReportSystem,             "REPORT_TYPE_SEQUENCE 상수 존재")
-	assert_true("PRELIMINARY_PROBABILITY" in FinancialReportSystem,          "PRELIMINARY_PROBABILITY 상수 존재")
+	assert_true(FinancialReportSystem.has_method("is_report_season"),          "is_report_season 존재")
+	assert_true(FinancialReportSystem.has_method("get_report_type"),           "get_report_type 존재")
+	assert_true(FinancialReportSystem.has_method("schedule_quarterly_events"), "schedule_quarterly_events 존재")
+	assert_true(FinancialReportSystem.has_method("reset"),                     "reset 존재")
+	assert_true(FinancialReportSystem.has_method("get_save_data"),             "get_save_data 존재")
+	assert_true(FinancialReportSystem.has_method("load_save_data"),            "load_save_data 존재")
+	assert_true(FinancialReportSystem.has_method("_on_kernel_report"),         "_on_kernel_report 존재")
+	assert_true(FinancialReportSystem.has_method("_apply_kernel_a3_updates"),  "_apply_kernel_a3_updates 존재")
 
 
 # ── NewsEventSystem.fire_stock_news (S10-05) ────────────────────────────────
@@ -675,11 +671,14 @@ func test_price_kernel_instantiates():
 		return
 	var pk: Object = ClassDB.instantiate("PriceKernel")
 	assert_not_null(pk, "PriceKernel 인스턴스 생성 성공")
-	# 10-method API는 gdextension/src/price_kernel.cpp _bind_methods()가 보장:
+	# 12-method API는 gdextension/src/price_kernel.cpp _bind_methods()가 보장:
 	# set_config / init_stock / reset / start_season / start_day /
 	# process_all_ticks / get_macro_states / add_player_pressure / set_rumor / inject_event
+	# get_report_state / restore_report_state  ← Phase D
 
 func test_price_engine_kernel_wiring():
 	## ADR-027 Phase A: PriceEngine이 PriceKernel 초기화 헬퍼를 보유한다.
-	assert_true(PriceEngine.has_method("_init_kernel_ext"),  "_init_kernel_ext 존재")
-	assert_true(PriceEngine.has_method("_build_kernel_cfg"), "_build_kernel_cfg 존재")
+	assert_true(PriceEngine.has_method("_init_kernel_ext"),        "_init_kernel_ext 존재")
+	assert_true(PriceEngine.has_method("_build_kernel_cfg"),       "_build_kernel_cfg 존재")
+	assert_true(PriceEngine.has_method("get_report_state"),        "get_report_state 존재")
+	assert_true(PriceEngine.has_method("restore_report_state"),    "restore_report_state 존재")

@@ -472,6 +472,24 @@ func _build_kernel_cfg() -> Dictionary:
 			cfg["etf_config"] = etf_json.data
 		etf_file.close()
 
+	# Phase D: ReportEngine — financial_report_config + MarketProfile calendar params (ADR-027).
+	var rpt_file := FileAccess.open("res://assets/data/financial_report_config.json", FileAccess.READ)
+	if rpt_file != null:
+		var rpt_json := JSON.new()
+		if rpt_json.parse(rpt_file.get_as_text()) == OK:
+			var rpt_cfg: Dictionary = rpt_json.data as Dictionary
+			var cycle: Variant = MarketProfile.get_calendar_param("report_cycle_seasons")
+			if cycle != null:
+				rpt_cfg["reportCycleSeasons"] = int(cycle)
+			var rpt_start: Variant = MarketProfile.get_calendar_param("fiscal_year_start_season")
+			if rpt_start != null:
+				rpt_cfg["fiscalYearStartSeason"] = int(rpt_start)
+			var pe: Variant = MarketProfile.get_calendar_param("preliminary_earnings")
+			if pe is Dictionary:
+				rpt_cfg["preliminaryEarnings"] = pe
+			cfg["report_config"] = rpt_cfg
+		rpt_file.close()
+
 	return cfg
 
 
@@ -655,6 +673,9 @@ func initialize_for_load(save_data: Dictionary) -> void:
 			"macro_state":         int(s.get("macro_state", MacroState.FLAT)),
 			"event_tags":          stock.event_tags,
 			"listed_shares":       stock.listed_shares,
+			"roe":                 stock.roe,
+			"per":                 stock.per,
+			"pbr":                 stock.pbr,
 		})
 	_kernel.start_season(int(save_data.get("season_count", 1)),
 		NewsEventSystem.get_season_theme())
@@ -701,6 +722,19 @@ func get_save_data() -> Dictionary:
 		"prev_day_index": _prev_day_index,
 		"season_count":   _season_count,  ## ADR-025: season drift counter
 	}
+
+
+## Returns C++ ReportEngine pending-event state for serialization.
+## Called by FinancialReportSystem.get_save_data(). ADR-027 Phase D.
+func get_report_state() -> Dictionary:
+	return _kernel.get_report_state()
+
+
+## Restores C++ ReportEngine state from save data.
+## Must be called AFTER initialize_for_load() (start_season() resets kernel state first).
+## Called by FinancialReportSystem.load_save_data(). ADR-027 Phase D.
+func restore_report_state(state: Dictionary) -> void:
+	_kernel.restore_report_state(state)
 
 
 ## Resets all price engine state for unit tests. Call in before_each.
@@ -1119,9 +1153,12 @@ func init_first_season() -> void:
 			"macro_state":         int(s.get("macro_state", MacroState.FLAT)),
 			"event_tags":          stock.event_tags,
 			"listed_shares":       stock.listed_shares,
+			"roe":                 stock.roe,
+			"per":                 stock.per,
+			"pbr":                 stock.pbr,
 		})
 	_kernel.start_season(1, NewsEventSystem.get_season_theme())
-	_kernel.start_day(0)
+	_kernel.start_day(1)  # Day 1 = first trading day; ReportEngine events start from ANALYST_DAY_MIN ≥ 3
 
 	_engine_state = EngineState.READY
 
@@ -1147,7 +1184,7 @@ func sync_prices_from_prehistory() -> void:
 
 	# ADR-027 Phase A: re-sync kernel with prehistory prices.
 	# init_first_season() initialised the kernel with stock.base_price and called
-	# start_day(0). The sync above changes GDScript prices to last_close, so the
+	# start_day(1). The sync above changes GDScript prices to last_close, so the
 	# kernel is now out of sync. Re-calling init_stock() overwrites kernel state
 	# (current_price, prev_day_close, base_price) to match GDScript, preventing
 	# a price discontinuity on the first live tick.
@@ -1171,6 +1208,9 @@ func sync_prices_from_prehistory() -> void:
 			"macro_state":        int(state.get("macro_state", MacroState.FLAT)),
 			"event_tags":         stock.event_tags,
 			"listed_shares":      stock.listed_shares,
+			"roe":                stock.roe,
+			"per":                stock.per,
+			"pbr":                stock.pbr,
 		})
 
 
@@ -1303,6 +1343,11 @@ func process_tick(tick_number: int, _day: int, _week: int) -> void:
 			_tick_result.get("sector_flows", {}),
 			_tick_result.get("rotation_cooldowns", {})
 		)
+
+	# Phase D: apply A3 (ROE/PER/PBR) updates from ReportEngine to StockData.
+	var _k_a3: Array = _tick_result.get("a3_updates", [])
+	if not _k_a3.is_empty():
+		FinancialReportSystem._apply_kernel_a3_updates(_k_a3)
 
 	# Emit VI trigger signals from kernel results.
 	var _halt_ticks: int = _minutes_to_ticks(VI_HALT_MINUTES)
@@ -1644,7 +1689,9 @@ func get_cb_stage() -> int:
 func _end_trading_day() -> void:
 	_engine_state = EngineState.END_OF_DAY
 	_generate_daily_ohlcv()
-	_kernel.start_day(0)  # ADR-027: kernel owns macro_state roll (prev_day_close, Markov, VI)
+	# ADR-027: kernel owns macro_state roll (prev_day_close, Markov, VI).
+	# Pass next day's number so ReportEngine _re_process_pre_market fires on the correct day.
+	_kernel.start_day(GameClock.get_current_day() + 1)
 	# Sync macro_state back to _stock_states so save_game_data() persists the correct value.
 	# Single ownership: C++ rolls, GDScript reads. (ADR-026 + ADR-027)
 	var _kernel_macros: Dictionary = _kernel.get_macro_states()

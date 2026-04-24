@@ -1,7 +1,6 @@
-// price_kernel.cpp — Stateful GDExtension live tick engine (ADR-027, Phase A).
-// Implements Markov + drift + VI + events + rumor + player_pressure per tick.
-// ETF prices (Phase C), EventEngine (Phase B), and A3 updates (Phase D) are stubs.
-// See: docs/architecture/027-price-kernel-gdextension.md
+// price_kernel.cpp — Stateful GDExtension live tick engine (ADR-027, Phase A–D).
+// Implements Markov + drift + VI + EventEngine (B) + ETF prices (C) + ReportEngine (D).
+// See: docs/architecture/027-price-kernel-unification.md
 
 #include "price_kernel.h"
 
@@ -527,6 +526,11 @@ void PriceKernel::set_config(Dictionary cfg) {
 
         _etf_config_loaded = true;
     }
+
+    // ── ReportEngine: report_config ──────────────────────────────────────────
+    if (cfg.has("report_config")) {
+        _re_init_from_config(static_cast<Dictionary>(cfg["report_config"]));
+    }
 }
 
 // ── init_stock ────────────────────────────────────────────────────────────────
@@ -562,6 +566,13 @@ void PriceKernel::init_stock(String stock_id, Dictionary stock_data) {
         s.is_etf = static_cast<bool>(stock_data["is_etf"]);
     if (stock_data.has("listed_shares"))
         s.listed_shares = static_cast<float>(stock_data["listed_shares"]);
+    // Fundamentals (Phase D — stored as fraction internally)
+    if (stock_data.has("roe"))
+        s.roe = static_cast<float>(stock_data["roe"]) / 100.0f;
+    if (stock_data.has("per"))
+        s.per = static_cast<float>(stock_data["per"]);
+    if (stock_data.has("pbr"))
+        s.pbr = static_cast<float>(stock_data["pbr"]);
     if (stock_data.has("macro_state"))
         s.macro_state = std::max(0, std::min(2, static_cast<int>(stock_data["macro_state"])));
     if (stock_data.has("event_tags")) {
@@ -667,6 +678,9 @@ void PriceKernel::start_season(int season_number, Dictionary season_theme) {
     for (auto &s : _stocks) {
         s.vi_count_today = 0;
     }
+
+    // ReportEngine: schedule events for new season (Phase D)
+    _re_start_season(season_number);
 }
 
 // ── start_day ─────────────────────────────────────────────────────────────────
@@ -726,6 +740,13 @@ void PriceKernel::start_day(int day_number) {
         for (auto &[sector, fs] : _sector_flow_states) {
             if (fs.cooldown > 0) --fs.cooldown;
         }
+    }
+
+    // ReportEngine: process pre_market events, buffer for process_all_ticks(tick=0). (Phase D)
+    _re_buffered_ui_events  = Array();
+    _re_buffered_a3_updates = Array();
+    if (_re_config_loaded && (!_re_pending.empty() || _re_is_active)) {
+        _re_process_pre_market(day_number, _re_buffered_ui_events, _re_buffered_a3_updates);
     }
 }
 
@@ -1070,7 +1091,18 @@ Dictionary PriceKernel::process_all_ticks(int tick_in_day) {
     Dictionary prices;
     Dictionary volumes;
     Array      vi_hits;
-    Array      ui_events;
+    Array      a3_updates;
+
+    // Phase D: flush pre_market buffer on first tick of day
+    Array ui_events;
+    if (tick_in_day == 0 && _re_buffered_ui_events.size() > 0) {
+        for (int i = 0; i < _re_buffered_ui_events.size(); ++i)
+            ui_events.push_back(_re_buffered_ui_events[i]);
+        for (int i = 0; i < _re_buffered_a3_updates.size(); ++i)
+            a3_updates.push_back(_re_buffered_a3_updates[i]);
+        _re_buffered_ui_events  = Array();
+        _re_buffered_a3_updates = Array();
+    }
 
     // EventEngine: fire any scheduled slots for this tick (Phase B)
     _ee_check_slots(tick_in_day, ui_events);
@@ -1243,20 +1275,25 @@ Dictionary PriceKernel::process_all_ticks(int tick_in_day) {
             prices[String(etf.etf_id.c_str())] = static_cast<int>(etf.current_price);
         }
         for (const auto &[sector, fs] : _sector_flow_states) {
-            sector_flows_out[String(sector.c_str())]          = fs.flow;
-            rotation_cooldowns_out[String(sector.c_str())]   = fs.cooldown;
+            sector_flows_out[String(sector.c_str())]        = fs.flow;
+            rotation_cooldowns_out[String(sector.c_str())] = fs.cooldown;
         }
     }
 
+    // ReportEngine: fire intraday rumors (Phase D)
+    if (_re_config_loaded && _re_is_active) {
+        _re_process_tick(tick_in_day, ui_events);
+    }
+
     Dictionary result;
-    result["prices"]              = prices;
-    result["volumes"]             = volumes;
-    result["vi_hits"]             = vi_hits;
-    result["ui_events"]           = ui_events;
-    result["a3_updates"]          = Array();        // Phase D
-    result["etf_prices"]          = etf_prices_out;
-    result["sector_flows"]        = sector_flows_out;
-    result["rotation_cooldowns"]  = rotation_cooldowns_out;
+    result["prices"]             = prices;
+    result["volumes"]            = volumes;
+    result["vi_hits"]            = vi_hits;
+    result["ui_events"]          = ui_events;
+    result["a3_updates"]         = a3_updates;
+    result["etf_prices"]         = etf_prices_out;
+    result["sector_flows"]       = sector_flows_out;
+    result["rotation_cooldowns"] = rotation_cooldowns_out;
     return result;
 }
 
@@ -1582,6 +1619,452 @@ void PriceKernel::_ee_register_mutex(const std::string &mx_group,
     _ee_mutex[key] = "1";
 }
 
+// ── ReportEngine ──────────────────────────────────────────────────────────────
+
+void PriceKernel::_re_init_from_config(const Dictionary &cfg) {
+    auto _lf = [&](const char *k, float &d) { if (cfg.has(k)) d = static_cast<float>(cfg[k]); };
+    auto _li = [&](const char *k, int &d)   { if (cfg.has(k)) d = static_cast<int>(cfg[k]);   };
+    auto _lb = [&](const char *k, bool &d)  { if (cfg.has(k)) d = static_cast<bool>(cfg[k]);  };
+
+    _li("newsStockMin",          _re_cfg.news_stock_min);
+    _li("newsStockMax",          _re_cfg.news_stock_max);
+    _li("reportDayMin",          _re_cfg.report_day_min);
+    _li("reportDayMax",          _re_cfg.report_day_max);
+    _li("analystDayMin",         _re_cfg.analyst_day_min);
+    _li("analystDayMax",         _re_cfg.analyst_day_max);
+    _li("rumorFireTickInDay",    _re_cfg.rumor_fire_tick);
+    _lf("rumorFakerate",         _re_cfg.rumor_fake_rate);
+    _lf("roeNewsThreshold",      _re_cfg.roe_news_threshold);
+    _lf("surpriseThreshold",     _re_cfg.surprise_threshold);
+    _lf("shockThreshold",        _re_cfg.shock_threshold);
+    _lf("consensusUncertaintyMax", _re_cfg.consensus_uncert_max);
+    _lf("uncertaintyDecay",      _re_cfg.uncertainty_decay);
+    _lf("sectorRippleRatio",     _re_cfg.sector_ripple_ratio);
+    _lf("sectorNoise",           _re_cfg.sector_noise);
+    _lf("stockNoise",            _re_cfg.stock_noise);
+    _lf("roeMin",                _re_cfg.roe_min);
+    _lf("roeMax",                _re_cfg.roe_max);
+    _lf("perNegativeSentinel",   _re_cfg.per_negative_sentinel);
+    _lf("roeDriftScale",         _re_cfg.roe_drift_scale);
+    _lf("sectorRippleImpact",    _re_cfg.sector_ripple_impact);
+    _li("sectorRippleDecayTicks",_re_cfg.sector_ripple_decay);
+
+    // Calendar params (GDScript merges MarketProfile values before passing)
+    _li("reportCycleSeasons",    _re_cfg.cycle_seasons);
+    _li("fiscalYearStartSeason", _re_cfg.fiscal_year_start);
+
+    // Preliminary earnings (merged from MarketProfile)
+    if (cfg.has("preliminaryEarnings")) {
+        Dictionary pe = cfg["preliminaryEarnings"];
+        _lb("enabled",    _re_cfg.preliminary_enabled);
+        if (pe.has("enabled"))    _re_cfg.preliminary_enabled = static_cast<bool>(pe["enabled"]);
+        if (pe.has("day_offset")) _re_cfg.preliminary_offset  = static_cast<int>(pe["day_offset"]);
+        if (pe.has("probability_by_profile")) {
+            Dictionary pp = pe["probability_by_profile"];
+            if (pp.has("LOW"))     _re_cfg.prelim_prob[0] = static_cast<float>(pp["LOW"]);
+            if (pp.has("MEDIUM"))  _re_cfg.prelim_prob[1] = static_cast<float>(pp["MEDIUM"]);
+            if (pp.has("HIGH"))    _re_cfg.prelim_prob[2] = static_cast<float>(pp["HIGH"]);
+            if (pp.has("EXTREME")) _re_cfg.prelim_prob[3] = static_cast<float>(pp["EXTREME"]);
+        }
+    }
+
+    _re_config_loaded = true;
+}
+
+bool PriceKernel::_re_is_report_season(int season) const noexcept {
+    if (season < _re_cfg.fiscal_year_start + _re_cfg.cycle_seasons) return false;
+    return (season - _re_cfg.fiscal_year_start) % _re_cfg.cycle_seasons == 0;
+}
+
+float PriceKernel::_re_get_theme_drift(const std::string &sector) const noexcept {
+    auto it = _ee_sector_bias.find(sector);
+    if (it == _ee_sector_bias.end()) return 0.0f;
+    return (it->second - 1.0f) * _re_cfg.roe_drift_scale;
+}
+
+float PriceKernel::_re_compute_new_roe(const std::string &stock_id) {
+    auto it = _stock_index.find(stock_id);
+    if (it == _stock_index.end()) return 0.0f;
+    const StockState &s = _stocks[it->second];
+    float prev_roe   = s.roe;
+    float theme_drift= _re_get_theme_drift(s.sector);
+    float sec_noise  = _re_rng.randf_range(-_re_cfg.sector_noise, _re_cfg.sector_noise);
+    float stk_noise  = _re_rng.randf_range(-_re_cfg.stock_noise,  _re_cfg.stock_noise);
+    return std::clamp(prev_roe + theme_drift + sec_noise + stk_noise,
+                      _re_cfg.roe_min, _re_cfg.roe_max);
+}
+
+float PriceKernel::_re_compute_consensus_roe(const std::string &stock_id, int day) {
+    auto it = _stock_index.find(stock_id);
+    if (it == _stock_index.end()) return 0.0f;
+    const StockState &s = _stocks[it->second];
+    float prev_roe    = s.roe;
+    float theme_drift = _re_get_theme_drift(s.sector);
+    float uncertainty = _re_cfg.consensus_uncert_max
+                      * std::exp(-static_cast<float>(day) / _re_cfg.uncertainty_decay);
+    float noise = _re_consensus_rng.randf_range(-uncertainty, uncertainty);
+    return std::clamp(prev_roe + theme_drift + noise, _re_cfg.roe_min, _re_cfg.roe_max);
+}
+
+std::string PriceKernel::_re_classify_event(float prev_roe, float new_roe,
+                                              float consensus_roe) const noexcept {
+    if (prev_roe <= 0.0f && new_roe > 0.0f)    return "TURNAROUND_PROFIT";
+    if (prev_roe >  0.0f && new_roe <= 0.0f)   return "TURNAROUND_LOSS";
+    if (new_roe - consensus_roe >= _re_cfg.surprise_threshold) return "EARNINGS_SURPRISE";
+    if (consensus_roe - new_roe >= _re_cfg.shock_threshold)    return "EARNINGS_SHOCK";
+    return "";
+}
+
+std::vector<std::string> PriceKernel::_re_select_newsworthy(int /*season*/) {
+    struct Candidate { std::string id; float priority; };
+    std::vector<Candidate> cands;
+
+    for (const auto &s : _stocks) {
+        if (s.is_etf) continue;
+        float theme_drift    = _re_get_theme_drift(s.sector);
+        float expected_delta = std::abs(theme_drift) + _re_cfg.sector_noise * 0.5f;
+        if (expected_delta >= _re_cfg.roe_news_threshold
+                || (s.roe <= 0.0f && theme_drift > 0.0f)) {
+            cands.push_back({s.stock_id, expected_delta});
+        }
+    }
+
+    // Sort descending by priority
+    std::sort(cands.begin(), cands.end(),
+              [](const Candidate &a, const Candidate &b) { return a.priority > b.priority; });
+
+    int count = static_cast<int>(cands.size());
+    count = std::clamp(count, _re_cfg.news_stock_min,
+                       std::min(_re_cfg.news_stock_max, count));
+
+    // Fill remainder if below minimum
+    if (static_cast<int>(cands.size()) < _re_cfg.news_stock_min) {
+        for (const auto &s : _stocks) {
+            if (s.is_etf) continue;
+            bool already = false;
+            for (const auto &c : cands)
+                if (c.id == s.stock_id) { already = true; break; }
+            if (!already)
+                cands.push_back({s.stock_id, 0.0f});
+        }
+        // Shuffle extras (simple Fisher-Yates on the tail)
+        int tail_start = static_cast<int>(cands.size()) - (static_cast<int>(cands.size()) - count);
+        for (int i = static_cast<int>(cands.size()) - 1; i > count; --i) {
+            uint32_t j = _re_rng.next() % static_cast<uint32_t>(i + 1 - count) + count;
+            std::swap(cands[i], cands[j]);
+        }
+        count = std::min(_re_cfg.news_stock_min, static_cast<int>(cands.size()));
+    }
+
+    std::vector<std::string> result;
+    for (int i = 0; i < count && i < static_cast<int>(cands.size()); ++i)
+        result.push_back(cands[i].id);
+    return result;
+}
+
+PriceKernel::ReportEntry PriceKernel::_re_build_entry(const std::string &stock_id,
+                                                        int season) {
+    ReportEntry ev;
+    ev.stock_id      = stock_id;
+    ev.season        = season;
+    ev.reporting_day = _re_cfg.report_day_min
+        + static_cast<int>(_re_rng.randf()
+            * static_cast<float>(_re_cfg.report_day_max - _re_cfg.report_day_min));
+    ev.preliminary_day = ev.reporting_day - _re_cfg.preliminary_offset;
+    ev.rumor_day     = ev.reporting_day - 1;
+    int a_min = _re_cfg.analyst_day_min;
+    int a_max = std::min(_re_cfg.analyst_day_max,
+                         ev.reporting_day - _re_cfg.preliminary_offset - 1);
+    a_max = std::max(a_min, a_max);
+    ev.analyst_day   = a_min + static_cast<int>(_re_rng.randf()
+                           * static_cast<float>(a_max - a_min));
+
+    // preliminary roll
+    ev.has_preliminary = false;
+    if (_re_cfg.preliminary_enabled) {
+        auto sit = _stock_index.find(stock_id);
+        if (sit != _stock_index.end()) {
+            int vp = _stocks[sit->second].vol_profile;
+            float prob = (vp >= 0 && vp < 4) ? _re_cfg.prelim_prob[vp] : 0.0f;
+            ev.has_preliminary = (_re_rng.randf() < prob);
+        }
+    }
+    ev.is_fake_rumor = (_re_rng.randf() < _re_cfg.rumor_fake_rate);
+
+    // event_sign from theme_drift
+    auto sit = _stock_index.find(stock_id);
+    if (sit != _stock_index.end()) {
+        float drift = _re_get_theme_drift(_stocks[sit->second].sector);
+        ev.event_sign = (drift >= 0.0f) ? 1 : -1;
+    }
+
+    ev.consensus_roe = _re_compute_consensus_roe(stock_id, ev.reporting_day);
+    return ev;
+}
+
+void PriceKernel::_re_start_season(int season) {
+    _re_season    = season;
+    _re_pending.clear();
+    _re_buffered_ui_events  = Array();
+    _re_buffered_a3_updates = Array();
+
+    if (!_re_is_report_season(season)) {
+        _re_is_active = false;
+        // Queue quiet updates — will fire at pre_market(day=1)
+        for (const auto &s : _stocks) {
+            if (s.is_etf) continue;
+            ReportEntry ev;
+            ev.stock_id   = s.stock_id;
+            ev.quiet      = true;
+            ev.report_done= false;
+            _re_pending[s.stock_id] = ev;
+        }
+        return;
+    }
+
+    _re_is_active = true;
+    // Seed RNGs deterministically per season (ADR-018)
+    uint64_t season_key = static_cast<uint64_t>(season);
+    _re_rng.seed(season_key * 0xA24BAED4963ECA9DULL ^ 0xFEED2026ULL);
+    _re_consensus_rng.seed(season_key * 0xC6A4A7935BD1E995ULL ^ 0xC0DE2026ULL);
+
+    auto newsworthy = _re_select_newsworthy(season);
+    for (const auto &id : newsworthy)
+        _re_pending[id] = _re_build_entry(id, season);
+
+    // Remaining: quiet
+    for (const auto &s : _stocks) {
+        if (s.is_etf) continue;
+        if (_re_pending.find(s.stock_id) == _re_pending.end()) {
+            ReportEntry ev;
+            ev.stock_id    = s.stock_id;
+            ev.quiet       = true;
+            ev.report_done = false;
+            _re_pending[s.stock_id] = ev;
+        }
+    }
+}
+
+Dictionary PriceKernel::_re_build_ui_event(const std::string &subtype,
+                                            const std::string &stock_id,
+                                            int direction,
+                                            const std::string &impact_tier,
+                                            int tick) const {
+    Dictionary ev;
+    ev["type"]        = String("REPORT");
+    ev["subtype"]     = String(subtype.c_str());
+    ev["stock_id"]    = String(stock_id.c_str());
+    ev["direction"]   = direction;
+    ev["impact_tier"] = String(impact_tier.c_str());
+    ev["tick"]        = tick;
+    return ev;
+}
+
+void PriceKernel::_re_fire_analyst(const ReportEntry &ev, Array &out_ui) {
+    out_ui.push_back(_re_build_ui_event(
+        ev.event_sign > 0 ? "ANALYST_UP" : "ANALYST_DOWN",
+        ev.stock_id, ev.event_sign, "SMALL", 0));
+}
+
+void PriceKernel::_re_fire_preliminary(const ReportEntry &ev, Array &out_ui) {
+    out_ui.push_back(_re_build_ui_event(
+        ev.event_sign > 0 ? "PRELIM_POS" : "PRELIM_NEG",
+        ev.stock_id, ev.event_sign, "MEDIUM", 0));
+}
+
+void PriceKernel::_re_fire_rumor(const ReportEntry &ev, Array &out_ui) {
+    int rumor_dir = ev.event_sign * (ev.is_fake_rumor ? -1 : 1);
+
+    out_ui.push_back(_re_build_ui_event(
+        rumor_dir > 0 ? "RUMOR_POS" : "RUMOR_NEG",
+        ev.stock_id, rumor_dir, "SMALL", _re_cfg.rumor_fire_tick));
+
+    // Price pressure: small gradual shift to sector stocks (mirrors GDScript inject_event)
+    auto sit = _stock_index.find(ev.stock_id);
+    if (sit == _stock_index.end()) return;
+    const std::string &sector = _stocks[sit->second].sector;
+
+    IncomingEvent ie;
+    ie.scope       = 1;     // SECTOR
+    ie.base_impact = 0.02f;
+    ie.direction   = rumor_dir;
+    ie.event_type  = 1;     // GRADUAL_SHIFT
+    ie.decay_ticks = 8;
+    ie.decay_curve = 0;     // LINEAR
+    for (auto &s : _stocks) {
+        if (!s.is_etf && s.sector == sector)
+            s.incoming_events.push_back(ie);
+    }
+}
+
+void PriceKernel::_re_do_quiet_update(const std::string &stock_id, Array &out_a3) {
+    auto it = _stock_index.find(stock_id);
+    if (it == _stock_index.end()) return;
+    // Quiet update: compute new ROE but no news card
+    float new_roe = _re_compute_new_roe(stock_id);
+    _re_apply_a3_update(_stocks[it->second], new_roe, out_a3);
+}
+
+void PriceKernel::_re_apply_a3_update(StockState &s, float new_roe, Array &out_a3) {
+    s.roe = new_roe;
+    if (new_roe > 0.0f) {
+        // PER = 1 / ROE (game approximation — EPS = price × ROE, PER = price / EPS)
+        s.per = 1.0f / new_roe;
+    } else {
+        s.per = _re_cfg.per_negative_sentinel;
+    }
+    // PBR unchanged (BVPS doesn't change with earnings alone in this model)
+
+    Dictionary upd;
+    upd["stock_id"] = String(s.stock_id.c_str());
+    upd["new_roe"]  = new_roe * 100.0f;  // GDScript expects percentage
+    upd["new_per"]  = s.per;
+    upd["new_pbr"]  = s.pbr;
+    out_a3.push_back(upd);
+}
+
+void PriceKernel::_re_fire_sector_ripple(const std::string &sector,
+                                          float shock_mag, int direction) {
+    float ripple = shock_mag * _re_cfg.sector_ripple_ratio + _re_cfg.sector_ripple_impact;
+    ripple = std::clamp(ripple, 0.01f, 0.20f);
+
+    IncomingEvent ie;
+    ie.scope       = 1;     // SECTOR
+    ie.base_impact = ripple;
+    ie.direction   = direction;
+    ie.event_type  = 1;     // GRADUAL_SHIFT
+    ie.decay_ticks = _re_cfg.sector_ripple_decay;
+    ie.decay_curve = 0;     // LINEAR
+    for (auto &s : _stocks) {
+        if (!s.is_etf && s.sector == sector)
+            s.incoming_events.push_back(ie);
+    }
+}
+
+void PriceKernel::_re_fire_official(ReportEntry &ev, Array &out_ui, Array &out_a3) {
+    auto sit = _stock_index.find(ev.stock_id);
+    if (sit == _stock_index.end()) return;
+    StockState &s = _stocks[sit->second];
+
+    float prev_roe     = s.roe;
+    float new_roe      = _re_compute_new_roe(ev.stock_id);
+    float consensus    = ev.consensus_roe;
+
+    // Update A3 data atomically (before news card)
+    _re_apply_a3_update(s, new_roe, out_a3);
+
+    std::string event_type = _re_classify_event(prev_roe, new_roe, consensus);
+    if (event_type.empty()) return;
+
+    int direction = 1;
+    if (event_type == "TURNAROUND_LOSS" || event_type == "EARNINGS_SHOCK") direction = -1;
+
+    const char *tier = (event_type == "TURNAROUND_PROFIT" || event_type == "TURNAROUND_LOSS")
+                       ? "LARGE" : "MEDIUM";
+    out_ui.push_back(_re_build_ui_event(event_type, ev.stock_id, direction, tier, 0));
+
+    // E-09: LOW vol SHOCK / TURNAROUND_LOSS → sector ripple (GDD §5, AC-FR-21~23)
+    if (s.vol_profile == 0
+            && (event_type == "EARNINGS_SHOCK" || event_type == "TURNAROUND_LOSS")) {
+        float shock_mag = std::abs(new_roe - consensus);
+        _re_fire_sector_ripple(s.sector, shock_mag, direction);
+    }
+}
+
+void PriceKernel::_re_process_pre_market(int day, Array &out_ui, Array &out_a3) {
+    for (auto &[id, ev] : _re_pending) {
+        if (ev.quiet && !ev.report_done) {
+            if (day == 1) {
+                _re_do_quiet_update(id, out_a3);
+                ev.report_done = true;
+            }
+            continue;
+        }
+        if (ev.report_done) continue;
+
+        // Catch-up: process any stages whose day has passed
+        if (!ev.analyst_done && day >= ev.analyst_day) {
+            _re_fire_analyst(ev, out_ui);
+            ev.analyst_done = true;
+        }
+        if (_re_cfg.preliminary_enabled && ev.has_preliminary
+                && !ev.preliminary_done && day >= ev.preliminary_day) {
+            _re_fire_preliminary(ev, out_ui);
+            ev.preliminary_done = true;
+        }
+        if (day >= ev.reporting_day) {
+            _re_fire_official(ev, out_ui, out_a3);
+            ev.report_done = true;
+        }
+    }
+}
+
+void PriceKernel::_re_process_tick(int tick_in_day, Array &out_ui) {
+    if (tick_in_day != _re_cfg.rumor_fire_tick) return;
+    int day = _ee_day;  // current day number (shared with EventEngine)
+    for (auto &[id, ev] : _re_pending) {
+        if (ev.quiet || ev.rumor_done || ev.report_done) continue;
+        if (ev.rumor_day == day) {
+            _re_fire_rumor(ev, out_ui);
+            ev.rumor_done = true;
+        }
+    }
+}
+
+// ── ReportEngine: save/load serialization ────────────────────────────────────
+
+Dictionary PriceKernel::get_report_state() const {
+    Dictionary out;
+    for (const auto &[id, ev] : _re_pending) {
+        Dictionary entry;
+        entry["stock_id"]        = String(ev.stock_id.c_str());
+        entry["season"]          = ev.season;
+        entry["reporting_day"]   = ev.reporting_day;
+        entry["preliminary_day"] = ev.preliminary_day;
+        entry["rumor_day"]       = ev.rumor_day;
+        entry["analyst_day"]     = ev.analyst_day;
+        entry["has_preliminary"] = ev.has_preliminary;
+        entry["is_fake_rumor"]   = ev.is_fake_rumor;
+        entry["event_sign"]      = ev.event_sign;
+        entry["consensus_roe"]   = ev.consensus_roe;
+        entry["analyst_done"]    = ev.analyst_done;
+        entry["preliminary_done"]= ev.preliminary_done;
+        entry["rumor_done"]      = ev.rumor_done;
+        entry["report_done"]     = ev.report_done;
+        entry["quiet"]           = ev.quiet;
+        out[String(id.c_str())] = entry;
+    }
+    return out;
+}
+
+void PriceKernel::restore_report_state(Dictionary state) {
+    _re_pending.clear();
+    Array keys = state.keys();
+    for (int i = 0; i < keys.size(); ++i) {
+        String    key = keys[i];
+        Dictionary e  = state[key];
+        ReportEntry ev;
+        ev.stock_id        = static_cast<String>(e.get("stock_id",       key)).utf8().get_data();
+        ev.season          = static_cast<int>(e.get("season",            0));
+        ev.reporting_day   = static_cast<int>(e.get("reporting_day",     0));
+        ev.preliminary_day = static_cast<int>(e.get("preliminary_day",   0));
+        ev.rumor_day       = static_cast<int>(e.get("rumor_day",         0));
+        ev.analyst_day     = static_cast<int>(e.get("analyst_day",       0));
+        ev.has_preliminary = static_cast<bool>(e.get("has_preliminary",  false));
+        ev.is_fake_rumor   = static_cast<bool>(e.get("is_fake_rumor",    false));
+        ev.event_sign      = static_cast<int>(e.get("event_sign",        1));
+        ev.consensus_roe   = static_cast<float>(e.get("consensus_roe",   0.0f));
+        ev.analyst_done    = static_cast<bool>(e.get("analyst_done",     false));
+        ev.preliminary_done= static_cast<bool>(e.get("preliminary_done", false));
+        ev.rumor_done      = static_cast<bool>(e.get("rumor_done",       false));
+        ev.report_done     = static_cast<bool>(e.get("report_done",      false));
+        ev.quiet           = static_cast<bool>(e.get("quiet",            false));
+        _re_pending[ev.stock_id] = ev;
+    }
+    // Determine _re_is_active from restored season
+    _re_is_active = _re_is_report_season(_re_season);
+}
+
 // ── GDExtension binding ───────────────────────────────────────────────────────
 
 void PriceKernel::_bind_methods() {
@@ -1605,6 +2088,10 @@ void PriceKernel::_bind_methods() {
                          &PriceKernel::set_rumor);
     ClassDB::bind_method(D_METHOD("inject_event", "event_entry"),
                          &PriceKernel::inject_event);
+    ClassDB::bind_method(D_METHOD("get_report_state"),
+                         &PriceKernel::get_report_state);
+    ClassDB::bind_method(D_METHOD("restore_report_state", "state"),
+                         &PriceKernel::restore_report_state);
 }
 
 } // namespace godot

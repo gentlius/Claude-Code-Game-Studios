@@ -1,8 +1,7 @@
 // price_kernel.h — Stateful GDExtension class for live per-tick price computation.
-// Replaces GDScript's per-stock tick loop (ADR-027, Phase A).
-// Phase A covers: Markov + drift + VI + events + rumor + player_pressure.
-// ETF management, EventEngine, and A3 updates are Phase B/C/D.
-// See: docs/architecture/027-price-kernel-gdextension.md (to be written)
+// ADR-027 Phase A–D: Markov + EventEngine + EtfEngine + ReportEngine in C++.
+// Phase E (run_historical_simulation) is next.
+// See: docs/architecture/027-price-kernel-unification.md
 #pragma once
 
 #include <godot_cpp/classes/ref_counted.hpp>
@@ -351,6 +350,97 @@ class PriceKernel : public RefCounted {
     std::unordered_map<std::string, size_t>            _etf_index;   // etf_id → _etfs idx
     std::unordered_map<std::string, SectorFlowState>   _sector_flow_states;  // sector → flow
 
+    // ── ReportEngine: structs ────────────────────────────────────────────────
+
+    struct ReportConfig {
+        int   cycle_seasons        = 3;
+        int   fiscal_year_start    = 1;
+        int   news_stock_min       = 8;
+        int   news_stock_max       = 12;
+        int   report_day_min       = 5;
+        int   report_day_max       = 18;
+        int   analyst_day_min      = 3;
+        int   analyst_day_max      = 10;
+        int   rumor_fire_tick      = 40;
+        float rumor_fake_rate      = 0.30f;
+        float roe_news_threshold   = 0.03f;
+        float surprise_threshold   = 0.05f;
+        float shock_threshold      = 0.05f;
+        float consensus_uncert_max = 0.08f;
+        float uncertainty_decay    = 8.0f;
+        float sector_ripple_ratio  = 0.30f;
+        float sector_noise         = 0.03f;
+        float stock_noise          = 0.02f;
+        float roe_min              = -0.30f;
+        float roe_max              = 0.50f;
+        float per_negative_sentinel= -1.0f;
+        float roe_drift_scale      = 0.04f;
+        float sector_ripple_impact = 0.06f;
+        int   sector_ripple_decay  = 4;
+        int   preliminary_offset   = 3;
+        bool  preliminary_enabled  = true;
+        float prelim_prob[4]       = {0.90f, 0.70f, 0.30f, 0.00f}; // LOW…EXTREME
+    };
+
+    struct ReportEntry {
+        std::string stock_id;
+        int   season           = 0;
+        int   reporting_day    = 0;
+        int   preliminary_day  = 0;
+        int   rumor_day        = 0;
+        int   analyst_day      = 0;
+        bool  has_preliminary  = false;
+        bool  is_fake_rumor    = false;
+        int   event_sign       = 1;   // +1 or -1
+        float consensus_roe    = 0.0f;
+        bool  analyst_done     = false;
+        bool  preliminary_done = false;
+        bool  rumor_done       = false;
+        bool  report_done      = false;
+        bool  quiet            = false;
+    };
+
+    // ── ReportEngine: config & runtime state ─────────────────────────────────
+
+    ReportConfig                                  _re_cfg;
+    bool                                          _re_config_loaded = false;
+    std::unordered_map<std::string, ReportEntry>  _re_pending;
+    bool                                          _re_is_active = false;
+    int                                           _re_season    = 0;
+    Pcg32                                         _re_rng;
+    Pcg32                                         _re_consensus_rng;
+    // Pre-market event buffer: populated by _re_process_pre_market() in start_day(),
+    // flushed into process_all_ticks(tick=0) results to preserve timing.
+    Array                                         _re_buffered_ui_events;
+    Array                                         _re_buffered_a3_updates;
+
+    // ── ReportEngine: methods ────────────────────────────────────────────────
+
+    void        _re_init_from_config(const Dictionary &cfg);
+    void        _re_start_season(int season);
+    bool        _re_is_report_season(int season) const noexcept;
+    std::vector<std::string> _re_select_newsworthy(int season);
+    ReportEntry _re_build_entry(const std::string &stock_id, int season);
+    float       _re_compute_new_roe(const std::string &stock_id);
+    float       _re_compute_consensus_roe(const std::string &stock_id, int day);
+    float       _re_get_theme_drift(const std::string &sector) const noexcept;
+    std::string _re_classify_event(float prev_roe, float new_roe,
+                                   float consensus_roe) const noexcept;
+    void        _re_process_pre_market(int day, Array &out_ui, Array &out_a3);
+    void        _re_process_tick(int tick_in_day, Array &out_ui);
+    void        _re_fire_analyst(const ReportEntry &ev, Array &out_ui);
+    void        _re_fire_preliminary(const ReportEntry &ev, Array &out_ui);
+    void        _re_fire_official(ReportEntry &ev, Array &out_ui, Array &out_a3);
+    void        _re_fire_rumor(const ReportEntry &ev, Array &out_ui);
+    void        _re_do_quiet_update(const std::string &stock_id, Array &out_a3);
+    void        _re_apply_a3_update(StockState &s, float new_roe, Array &out_a3);
+    void        _re_fire_sector_ripple(const std::string &sector,
+                                       float shock_mag, int direction);
+    Dictionary  _re_build_ui_event(const std::string &subtype,
+                                   const std::string &stock_id,
+                                   int direction, const std::string &impact_tier,
+                                   int tick) const;
+
     // ── EtfEngine: methods ───────────────────────────────────────────────────
 
     void        _etf_process_tick(int tick_in_day, Array &out_ui_events);
@@ -396,6 +486,10 @@ class PriceKernel : public RefCounted {
         int    vi_halt_remaining = 0;
         int    vi_cooldown       = 0;
         int    vi_count_today    = 0;
+        // Fundamentals — ReportEngine 소유 (ADR-027 Phase D)
+        float  roe = 0.08f;   // fraction (0.08 = 8%)
+        float  per = 12.0f;
+        float  pbr = 1.0f;
         // per-stock RNG
         Pcg32  rng;
     };
@@ -435,6 +529,10 @@ public:
     void       add_player_pressure(String stock_id, float delta);
     void       set_rumor(String stock_id, float delta_per_tick, int ticks_remaining);
     void       inject_event(Dictionary event_entry);
+
+    // Phase D: ReportEngine save/load state serialization
+    Dictionary get_report_state() const;
+    void       restore_report_state(Dictionary state);
 };
 
 } // namespace godot

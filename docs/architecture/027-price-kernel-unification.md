@@ -493,7 +493,7 @@ PriceKernel.set_config(unified)
 | 히스토리 VI 빈도 | 역사 시뮬 중 VI가 자주 발동하면 D1 품질 하락 | VI는 라이브와 동일 조건(±10% 이내봉). 과도하면 아키타입 행렬 조정으로 해결 — 커널 예외 추가 안 함. |
 | 세이브/로드 RNG 비연속 | 로드 후 RNG 재시드 → 가격 경로 비결정론적 | 의도된 동작 (ADR-018). 가격 연속성은 current_price 복원으로 보장. |
 | 세이브 중 gradual_events | 진행 중인 이벤트 직렬화 필요 | `get_all_stock_states()`가 gradual_events queue 포함. |
-| CACHE_VERSION 범프 | Phase E 완료 시 기존 캐시 전부 무효 | CACHE_VERSION 6→7. 인트로에서 자동 재생성. 기존 세이브 파일은 영향 없음 (캐시는 별도). |
+| CACHE_VERSION 범프 | Phase E 완료 시 기존 캐시 전부 무효 | CACHE_VERSION 8→9. 인트로에서 자동 재생성. 기존 세이브 파일은 영향 없음 (캐시는 별도). |
 | 헤드라인 lookup | C++가 template_id만 반환 → GDScript lookup | event_pool.json GDScript 사본 유지. O(1) Dictionary lookup. |
 | theme_sequence 길이 불일치 | GDScript 생성 배열 길이 ≠ n_seasons | C++가 범위 초과 시 마지막 테마 반복 사용 + 경고. GDScript에서 assert로 사전 검증. |
 | Phase 간 중간 상태 | Phase A 완료 후 B 전: 이벤트 GDScript, 가격 C++ | Phase마다 통합 테스트. 중간 상태도 정상 동작 설계. |
@@ -506,10 +506,11 @@ PriceKernel.set_config(unified)
 - [ ] Phase B: 뉴스카드 발화 빈도 · 내용 기존 대비 동등
 - [ ] Phase C: ETF 가격 추적 오차 없음
 - [ ] Phase D: 실적 발표 뉴스 시즌 게이팅 정상
-- [ ] Phase E: 프리히스토리-라이브 경계 육안 차이 없음 (VI 발동 포함)
-- [ ] Phase E: CACHE_VERSION = 7 확인, 구버전 캐시 자동 무효화 동작
-- [ ] Phase E: 히스토리 시뮬 완료 시간 인트로 허용 범위 이내 (실측)
-- [ ] Phase E: get_simulation_progress() 0→1000 단조 증가 확인
+- [x] Phase E: run_historical_simulation() C++ 구현 (bc7b742)
+- [ ] Phase E: 프리히스토리-라이브 경계 육안 차이 없음 (VI 발동 포함) — 플레이테스트 필요
+- [x] Phase E: CACHE_VERSION = 9, 구버전 캐시 자동 무효화
+- [ ] Phase E: 히스토리 시뮬 완료 시간 인트로 허용 범위 이내 (실측 필요)
+- [x] Phase E: get_simulation_progress() 0→1000 구현 완료 (실측은 플레이테스트)
 - [ ] 전 Phase: 기존 GUT 테스트 전부 통과
 - [ ] 세이브 → get_all_stock_states() → restore_stock_state() 후 가격 연속성 유지
 - [ ] 로드 후 RNG 재시드 — price scout 재현 불가 (ADR-018 유지 확인)

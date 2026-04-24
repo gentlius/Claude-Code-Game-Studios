@@ -196,13 +196,21 @@ func set_volume(volume: float) -> void:
 
 
 ## Set BGM bus volume independently [0.0, 1.0]. Does not persist — call alongside save if needed.
+## Clamps to 0.0001 minimum to prevent linear_to_db(0.0) = -inf AudioServer errors.
 func set_bgm_volume(linear: float) -> void:
-	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("BGM"), linear_to_db(linear))
+	AudioServer.set_bus_volume_db(
+		AudioServer.get_bus_index("BGM"),
+		linear_to_db(clampf(linear, 0.0001, 1.0))
+	)
 
 
 ## Set SFX bus volume independently [0.0, 1.0]. Does not persist — call alongside save if needed.
+## Clamps to 0.0001 minimum to prevent linear_to_db(0.0) = -inf AudioServer errors.
 func set_sfx_volume(linear: float) -> void:
-	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("SFX"), linear_to_db(linear))
+	AudioServer.set_bus_volume_db(
+		AudioServer.get_bus_index("SFX"),
+		linear_to_db(clampf(linear, 0.0001, 1.0))
+	)
 
 
 ## Toggle or set mute and persist.

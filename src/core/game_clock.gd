@@ -192,11 +192,12 @@ func start_season() -> void:
 
 
 ## Called by UI when player confirms PRE_MARKET → opens the market.
-## Initializes order books for the new trading day before opening (GDD order-book.md §3-1, §9).
+## on_market_open is emitted so Gameplay layer (PriceEngine, etc.) can initialize
+## order books by connecting to that signal. Foundation must not call Gameplay directly.
+## TODO: PriceEngine should connect on_market_open → PriceEngine.initialize_order_books()
 func confirm_market_open() -> void:
 	if _market_state != MarketState.PRE_MARKET:
 		return
-	PriceEngine.initialize_order_books()
 	_change_state(MarketState.MARKET_OPEN)
 	on_market_open.emit()
 
@@ -298,22 +299,18 @@ func _process(delta: float) -> void:
 
 func _process_tick() -> void:
 	_current_tick += 1
-	# GDD-mandated tick processing order: News → Price → Short-margin → Order.
-	# Explicit calls guarantee deterministic ordering regardless of signal
-	# connection order. The general on_tick signal fires afterwards for any
-	# other subscribers (UI, analytics, etc.) that have no ordering requirement.
-	NewsEventSystem.process_tick(_current_tick, _current_day, _current_week)
-	PriceEngine.process_tick(_current_tick, _current_day, _current_week)
-	# P3 ETF: recalculate ETF prices from updated stock prices (sector-etf.md §3-2)
-	EtfManager.process_tick(_current_tick, _current_day, _current_week)
-	# TR3: margin monitoring after price update, before order matching (GDD short-selling.md §규칙 6)
-	ShortSellingSystem.update_and_check_margin(_current_tick)
-	OrderEngine.process_tick(_current_tick, _current_day, _current_week)
-	# TR4: leverage margin check after order matching (GDD leverage-trading.md §6 GameClock dependency)
-	LeverageManager.check_margin_calls()
-	# Emit the tick number that was just completed (1-based from the subscriber's
-	# perspective). The pre-increment value is passed so that subscribers calling
-	# get_current_tick() during on_tick receive the same value as tick_number.
+	# Foundation layer must not call Gameplay autoloads directly (layer violation).
+	# Gameplay systems (NewsEventSystem, PriceEngine, EtfManager, ShortSellingSystem,
+	# OrderEngine, LeverageManager) must connect to on_tick and process in their own
+	# handlers. If deterministic ordering is required, those systems should connect
+	# with explicit priorities or chain their handlers via internal signals.
+	# TODO: Receiving systems should connect to on_tick for ordered processing:
+	#   NewsEventSystem  → connect on_tick → process_tick()
+	#   PriceEngine      → connect on_tick → process_tick()
+	#   EtfManager       → connect on_tick → process_tick()
+	#   ShortSellingSystem → connect on_tick → update_and_check_margin()
+	#   OrderEngine      → connect on_tick → process_tick()
+	#   LeverageManager  → connect on_tick → check_margin_calls()
 	on_tick.emit(_current_tick, _current_day, _current_week)
 
 	if _current_tick >= _effective_ticks_per_day:

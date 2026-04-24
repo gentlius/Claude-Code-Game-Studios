@@ -99,10 +99,11 @@ func get_all_sectors() -> Array[Dictionary]:
 
 
 ## Returns all stocks in a given sector. O(1) via precomputed index.
+## Returns a shallow duplicate so callers cannot mutate the internal index array.
 func get_stocks_by_sector(sector: String) -> Array[StockData]:
 	if not _sector_index.has(sector):
 		return []
-	return _sector_index[sector]
+	return (_sector_index[sector] as Array[StockData]).duplicate()
 
 
 ## Returns stock IDs in a given sector. O(k) where k = sector size.

@@ -247,19 +247,10 @@ func delete_slot(id: int) -> void:
 	if da and FileAccess.file_exists(path):
 		da.remove("save_slot_%d.json" % id)
 
-	# M1 캐시 디렉토리 삭제 (ADR-023: 슬롯별 격리).
-	var m1_dir: String = "user://m1_cache/slot_%d/" % id
-	if DirAccess.dir_exists_absolute(m1_dir):
-		var cache_da := DirAccess.open(m1_dir)
-		if cache_da:
-			cache_da.list_dir_begin()
-			var fname: String = cache_da.get_next()
-			while fname != "":
-				if not cache_da.current_is_dir():
-					cache_da.remove(fname)
-				fname = cache_da.get_next()
-			cache_da.list_dir_end()
-		DirAccess.open("user://m1_cache/").remove("slot_%d" % id)
+	# M1 캐시 디렉토리 재귀 삭제 (ADR-023: 슬롯별 격리).
+	var m1_slot_dir: String = "user://m1_cache/slot_%d" % id
+	if DirAccess.dir_exists_absolute(m1_slot_dir):
+		_remove_dir_recursive(m1_slot_dir)
 
 	var index: Dictionary = _read_index()
 	var slots: Array = index.get("slots", [])
@@ -303,6 +294,32 @@ func is_slot_valid(id: int) -> bool:
 
 
 # ── Internal ──
+
+## Recursively deletes all files and subdirectories inside [param dir_path],
+## then removes [param dir_path] itself. No-op if the path does not exist.
+func _remove_dir_recursive(dir_path: String) -> void:
+	var da := DirAccess.open(dir_path)
+	if da == null:
+		return
+	da.list_dir_begin()
+	var entry: String = da.get_next()
+	while entry != "":
+		if entry == "." or entry == "..":
+			entry = da.get_next()
+			continue
+		var full_path: String = dir_path.path_join(entry)
+		if da.current_is_dir():
+			_remove_dir_recursive(full_path)
+		else:
+			da.remove(entry)
+		entry = da.get_next()
+	da.list_dir_end()
+	# Remove now-empty directory from its parent.
+	var parent: String = dir_path.get_base_dir()
+	var parent_da := DirAccess.open(parent)
+	if parent_da:
+		parent_da.remove(dir_path.get_file())
+
 
 func _on_auto_save_trigger() -> void:
 	if _active_slot_id >= 0:
@@ -400,6 +417,7 @@ func _migrate_v1_save() -> void:
 
 	var index: Dictionary = {
 		"index_version": INDEX_VERSION,
+		"next_id": 1,  # slot 0 consumed by migration; next new slot gets ID 1 (ADR-009)
 		"slots": [{
 			"id": 0,
 			"name": tr("슬롯 1"),

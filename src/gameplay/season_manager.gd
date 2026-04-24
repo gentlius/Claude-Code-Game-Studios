@@ -327,9 +327,7 @@ func is_season_active() -> bool:
 ## day is 1-based within the month (trading day 0 = 1일, day 19 = 20일).
 ## Used by news headlines so they never show a hardcoded real-world month.
 func get_fiction_date() -> Dictionary:
-	var quarter_idx: int = (_seasons_played - 1) % SEASON_MONTH_STARTS.size()
-	if quarter_idx < 0:
-		quarter_idx = 0
+	var quarter_idx: int = maxi(0, _seasons_played - 1) % SEASON_MONTH_STARTS.size()
 	var month: int = SEASON_MONTH_STARTS[quarter_idx]
 	var day: int = GameClock.get_current_day() + 1  ## 0-based → 1-based
 	return {"month": month, "day": day}

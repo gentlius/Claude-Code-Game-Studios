@@ -81,6 +81,7 @@ var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 var _state: SystemState = SystemState.UNINITIALIZED
 var _event_pool: Array[Dictionary] = []       ## Loaded event templates
+var _template_index: Dictionary = {}          ## L-03: template_id → dict (O(1) lookup)
 var _season_theme: Dictionary = {}            ## Active season theme
 var _all_themes: Array[Dictionary] = []       ## All available themes
 
@@ -444,6 +445,9 @@ func _load_event_pool() -> void:
 		func(t: Dictionary) -> bool:
 			return t.get("market_id", "KR").to_upper() == _active_market_id
 	)
+	_template_index.clear()
+	for t: Dictionary in _event_pool:
+		_template_index[t.get("template_id", "")] = t
 
 
 func _load_themes() -> void:
@@ -507,14 +511,10 @@ func _queue_kernel_event(ui_event: Dictionary) -> void:
 
 	var scope_str: String = _SCOPE_NAMES[scope_idx]
 	var tier_str:  String = _TIER_NAMES[tier_idx]
-	var tick_in_day: int  = abs_tick % GameClock.TICKS_PER_DAY
+	var tick_in_day: int  = abs_tick % GameClock.get_effective_ticks_per_day()
 
-	# Look up template for text resolution
-	var template: Dictionary = {}
-	for t: Dictionary in _event_pool:
-		if t.get("template_id", "") == template_id:
-			template = t
-			break
+	# Look up template for text resolution (O(1) via _template_index built in _load_event_pool)
+	var template: Dictionary = _template_index.get(template_id, {})
 	if template.is_empty():
 		return  # Unknown template — skip display
 

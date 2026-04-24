@@ -202,7 +202,11 @@ func _settle_partial_close(
 			CurrencySystem.sim_add(net)
 		else:
 			var loss: int = -net
-			CurrencySystem.sim_deduct(mini(loss, CurrencySystem.get_sim_cash()))
+			var available: int = CurrencySystem.get_sim_cash()
+			CurrencySystem.sim_deduct(mini(loss, available))
+			if loss > available:
+				on_loan_shark_ending_triggered.emit(pos["stock_id"], net)
+				return 0
 
 		total_net += net
 		pos["borrowed"] -= partial_borrowed

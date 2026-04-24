@@ -366,14 +366,27 @@ func _add_mini_bar(parent: VBoxContainer, pct: float) -> Control:
 
 
 ## Updates (or clears) the fill Panel inside an existing bar_container.
+## Creates Panel+StyleBoxFlat once; subsequent calls update anchors/color in-place
+## via node metadata to avoid per-tick allocation (17,160 calls/day at 11 sectors).
 func _set_mini_bar_fill(bar_container: Control, pct: float) -> void:
-	for child: Node in bar_container.get_children():
-		child.queue_free()
-	if absf(pct) < 0.001:
-		return
-	var fill: Panel = Panel.new()
-	var style: StyleBoxFlat = StyleBoxFlat.new()
-	style.set_corner_radius_all(2)
+	var fill: Panel
+	var style: StyleBoxFlat
+	if bar_container.get_child_count() == 0:
+		if absf(pct) < 0.001:
+			return
+		fill = Panel.new()
+		style = StyleBoxFlat.new()
+		style.set_corner_radius_all(2)
+		fill.add_theme_stylebox_override("panel", style)
+		bar_container.add_child(fill)
+		bar_container.set_meta("_fill_style", style)
+	else:
+		fill = bar_container.get_child(0) as Panel
+		style = bar_container.get_meta("_fill_style") as StyleBoxFlat
+		if absf(pct) < 0.001:
+			fill.visible = false
+			return
+		fill.visible = true
 	if pct > 0.0:
 		style.bg_color = ThemeSetup.PRICE_UP
 		fill.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT)
@@ -384,8 +397,6 @@ func _set_mini_bar_fill(bar_container: Control, pct: float) -> void:
 		fill.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
 		fill.anchor_left   = 1.0 + pct  # pct is negative
 		fill.anchor_bottom = 1.0
-	fill.add_theme_stylebox_override("panel", style)
-	bar_container.add_child(fill)
 
 
 # ── Drilldown ──

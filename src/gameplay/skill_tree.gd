@@ -14,15 +14,15 @@ signal on_skill_unlocked(skill_id: String)
 ##   name: String, description: String,
 ##   prerequisites: Array[String]  (skill IDs)
 
-# ── Config (Tuning Knobs) ──
-# M-14: @export has no effect on Autoload singletons — removed to avoid confusion.
-# TODO: move these values to assets/data/skill_tree_config.json for designer tunability.
+# ── Config (Tuning Knobs — loaded from skill_tree_config.json) ──
+
+const SKILL_TREE_CONFIG_PATH: String = "res://assets/data/skill_tree_config.json"
 
 var SKILL_COST: int = 1
-var NEWS_DELAY_T0_MIN: int = 5   ## 5 game-minutes delay (no skill) — reduced from 10 per UX audit (40틱→20틱)
-var NEWS_DELAY_T1_MIN: int = 2   ## 2 game-minutes delay (S1 unlocked) — reduced from 5 to preserve S1 upgrade value
+var NEWS_DELAY_T0_MIN: int = 5   ## 5 game-minutes delay (no skill)
+var NEWS_DELAY_T1_MIN: int = 2   ## 2 game-minutes delay (S1 unlocked)
 var RUMOR_BASE_ACCURACY: float = 0.7
-var RUMOR_LEAD_MINUTES: int = 15  ## 15 game-minutes rumor lead time
+var RUMOR_LEAD_MINUTES: int = 15
 var LEVERAGE_RATIO: float = 2.0
 var MAX_HOLDINGS_T0: int = 3
 var MAX_HOLDINGS_T1: int = 5
@@ -38,7 +38,30 @@ var _unlocked_skills: Dictionary = {}    ## skill_id -> true (only unlocked ones
 const SKILL_DATA_PATH: String = "res://assets/data/skill_tree.json"
 
 func _ready() -> void:
+	_load_config()
 	_load_skills_from_json()
+
+
+func _load_config() -> void:
+	var f := FileAccess.open(SKILL_TREE_CONFIG_PATH, FileAccess.READ)
+	if f == null:
+		push_warning("SkillTree: config not found at %s — using defaults" % SKILL_TREE_CONFIG_PATH)
+		return
+	var result: Variant = JSON.parse_string(f.get_as_text())
+	f.close()
+	if not result is Dictionary:
+		push_warning("SkillTree: JSON parse failed for %s — using defaults" % SKILL_TREE_CONFIG_PATH)
+		return
+	var cfg: Dictionary = result as Dictionary
+	if cfg.has("skillCost"):           SKILL_COST           = int(cfg["skillCost"])
+	if cfg.has("newsDelayT0Min"):      NEWS_DELAY_T0_MIN    = int(cfg["newsDelayT0Min"])
+	if cfg.has("newsDelayT1Min"):      NEWS_DELAY_T1_MIN    = int(cfg["newsDelayT1Min"])
+	if cfg.has("rumorBaseAccuracy"):   RUMOR_BASE_ACCURACY  = float(cfg["rumorBaseAccuracy"])
+	if cfg.has("rumorLeadMinutes"):    RUMOR_LEAD_MINUTES   = int(cfg["rumorLeadMinutes"])
+	if cfg.has("leverageRatio"):       LEVERAGE_RATIO       = float(cfg["leverageRatio"])
+	if cfg.has("maxHoldingsT0"):       MAX_HOLDINGS_T0      = int(cfg["maxHoldingsT0"])
+	if cfg.has("maxHoldingsT1"):       MAX_HOLDINGS_T1      = int(cfg["maxHoldingsT1"])
+	if cfg.has("maxHoldingsT2"):       MAX_HOLDINGS_T2      = int(cfg["maxHoldingsT2"])
 
 
 # ── Public API: Queries ──

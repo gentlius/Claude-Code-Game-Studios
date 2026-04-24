@@ -33,6 +33,9 @@ var _leverage_rows_container: VBoxContainer
 ## 구조 변경(포지션 추가/제거) 시에만 재빌드. 매 틱 값 갱신은 레이블 text만 변경.
 var _leverage_row_refs: Dictionary = {}
 var _leverage_position_ids: Array[String] = []  ## 구조 변경 감지용 이전 ID 목록
+## M-08: diff-guard — skip full Label rebuild when transaction list hasn't changed.
+var _last_tx_count: int = -1
+var _last_tx_tick: int  = -1
 
 # ── Lifecycle ──
 
@@ -351,7 +354,7 @@ func _update_holding_values(holdings: Array[Dictionary]) -> void:
 			continue
 		var refs: Dictionary = _holding_rows[sid]
 		refs["lbl_qty"].text = tr("%d주") % h["quantity"]
-		var current_price: int = h.get("current_value", 0) / maxi(h.get("quantity", 1), 1)
+		var current_price: int = PriceEngine.get_current_price(sid)
 		refs["lbl_price"].text = FormatUtils.currency(current_price)
 		var pnl_pct: float = h.get("unrealized_pnl_pct", 0.0)
 		refs["lbl_rate"].text = "%+.1f%%" % pnl_pct
@@ -467,10 +470,14 @@ func _update_leverage_values(positions: Array[Dictionary]) -> void:
 
 
 func _refresh_transactions() -> void:
+	var tx_list: Array[Dictionary] = PortfolioManager.get_transaction_history(5)
+	var cur_tick: int = tx_list.back().get("tick", -1) if not tx_list.is_empty() else -1
+	if tx_list.size() == _last_tx_count and cur_tick == _last_tx_tick:
+		return
+	_last_tx_count = tx_list.size()
+	_last_tx_tick = cur_tick
 	for child: Node in _tx_container.get_children():
 		child.queue_free()
-
-	var tx_list: Array[Dictionary] = PortfolioManager.get_transaction_history(5)
 
 	if tx_list.size() == 0:
 		var empty: Label = Label.new()

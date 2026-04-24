@@ -457,16 +457,16 @@ func _build_kernel_cfg() -> Dictionary:
 	cfg["d1CacheBars"]            = M1CacheManager.D1_CACHE_BARS
 
 	# Phase B: EventEngine — pass event_pool templates to C++ kernel.
-	# TODO(DLC): filter by active market_id when multi-market support lands (ADR-021).
 	var ep_file := FileAccess.open("res://assets/data/event_pool.json", FileAccess.READ)
 	if ep_file != null:
 		var ep_json := JSON.new()
 		if ep_json.parse(ep_file.get_as_text()) == OK:
 			var ep_data: Dictionary = ep_json.data
+			var active_market: String = MarketConfig.get_active_market().to_upper()
 			var all_tpl: Array = ep_data.get("templates", [])
 			cfg["event_pool"] = all_tpl.filter(
 				func(t: Dictionary) -> bool:
-					return t.get("market_id", "KR").to_upper() == "KR"
+					return t.get("market_id", active_market).to_upper() == active_market
 			)
 		ep_file.close()
 

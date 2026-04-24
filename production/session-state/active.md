@@ -1,33 +1,32 @@
-## TASK: ADR-027 Phase B — EventEngine C++ 구현 + macro_state 소유권 수정
-## STATUS: IN PROGRESS
+## TASK: 전체 코드 리뷰 (src/ + gdextension/src/)
+## STATUS: DONE
 ## COMPLETED:
-- ✅ Phase B EventEngine: price_kernel.cpp (set_config, start_season, start_day, _ee_* 메서드, process_all_ticks)
-- ✅ Phase B: price_engine.gd (on_kernel_news 시그널, event_pool cfg 로드, event_tags, season theme, ui_events emit)
-- ✅ Phase B: news_event_system.gd 클린업
-  - _on_kernel_news() + _queue_kernel_event() 핸들러 추가
-  - 인트라데이 스케줄링 제거 (_generate_daily_schedule, _check_scheduled_slots, _fire_event_from_slot 등 C++로 이전)
-  - _is_mutex_blocked_for_stock() + _register_mutex() 고아 메서드 제거
-  - stale doc comment 3건 수정
-- ✅ macro_state 이중 소유권 수정 (state ownership 규칙 준수)
-  - C++ get_macro_states() 추가 (price_kernel.h + price_kernel.cpp + _bind_methods)
-  - _roll_macro_states() GDScript 롤 제거 — C++ 커널이 단독 소유
-  - _end_trading_day(): kernel.start_day() 후 get_macro_states()로 GDScript 동기화
-- ✅ 테스트 수정: _compute_volume() 호출 인자 4→5개 (rumor_delta 0.0 추가)
-- ✅ API contracts 업데이트: get_macro_states() 추가
-- ✅ DLL 컴파일 성공 (Phase B + get_macro_states stock_id 오타 수정 확인)
-  - 단, DLL 재링크는 Godot가 DLL을 잠금 중이므로 대기
-
-## REMAINING:
-- [ ] Godot 종료 후 DLL 재빌드 (get_macro_states 포함) — 최우선
-- [ ] Phase B + macro_state fix 커밋
-- [ ] Phase C: EtfEngine C++ 구현 (process_all_ticks ETF 경로)
-- [ ] Phase D: ReportEngine C++ 구현
-- [ ] Phase E: run_historical_simulation() C++ 구현 + CACHE_VERSION 6→7
-
-## NEXT: Godot 종료 → cmd /c build.bat → git commit → Phase C
-
-<!-- STATUS -->
-Epic: ADR-027 Price Kernel
-Feature: Phase B EventEngine
-Task: DLL rebuild pending (Godot lock)
-<!-- /STATUS -->
+- ✅ 파일 목록 파악 (GDScript 49개 + C++ 7개)
+- ✅ core/ 파일 읽기 (8개) — 이슈 없음
+- ✅ gameplay/ 파일 읽기 (16개) — H:3, M:5, L:5 이슈 발견
+- ✅ ui/ 파일 읽기 (25개) — 추가 이슈 포함
+- ✅ gdextension/src/ 읽기 — C++ 이슈 포함
+- ✅ 코드 리뷰 보고서 작성 (production/session-state/code-review-2026-04-24.md)
+- ✅ H-01: price_engine.gd — hardcoded "KR" → MarketConfig.get_active_market()
+- ✅ H-02: ai_competitor.gd — assert(TOTAL_PARTICIPANTS == ...) 제거
+- ✅ H-03: news_event_system.gd — TICKS_PER_DAY → get_effective_ticks_per_day()
+- ✅ H-04: lifestyle_screen.gd — const Array 5개 → lifestyle_items.json 분리
+- ✅ M-01: m1_cache_manager.gd — slot_id < 0 가드 추가
+- ✅ M-02: short_selling_system.gd — 미지급 borrow fee → margin_deposited 차감
+- ✅ M-03: leverage_manager.gd — manual close 초과 손실 → on_loan_shark_ending_triggered
+- ✅ M-04: m1_cache_manager.gd — 리터럴 4 → GameClock.TICKS_PER_MINUTE
+- ✅ M-05: etf_manager.gd — false positive (시그널 순서 이미 올바름)
+- ✅ M-06: settlement_reporter.gd — const BBCode 컬러 → var, _ready()에서 초기화
+- ✅ M-07: sector_comparison_view.gd — _set_mini_bar_fill 노드 캐시 (per-tick 할당 제거)
+- ✅ M-08: portfolio_view.gd — _refresh_transactions diff-guard 추가
+- ✅ M-09: chart_renderer.gd — tf / 4 → tf / GameClock.TICKS_PER_MINUTE
+- ✅ L-01: xp_system.gd — _cumulative_xp_table PrepackedInt64Array 사전 계산
+- ✅ L-02: ai_competitor.gd — RandomNumberGenerator 클래스 멤버로 이동
+- ✅ L-03: news_event_system.gd — _template_index 역인덱스 추가
+- ✅ L-04: season_manager.gd — 음수 modulo 방어 (maxi(0, _seasons_played-1))
+- ✅ L-05: skill_tree.gd — 튜닝 상수 → skill_tree_config.json 분리
+- ✅ L-06: order_panel.gd — 하드코딩 문자열 → tr() 래핑
+- ✅ L-07: portfolio_view.gd — 현재가 직접 조회 → PriceEngine.get_current_price()
+- ✅ L-08: price_kernel.h — TICKS_PER_MINUTE = 4 상수 추가, cpp 3곳 교체
+- ✅ DLL 재빌드 (SCons — 성공)
+## NEXT: 커밋

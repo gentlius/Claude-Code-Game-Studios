@@ -41,6 +41,9 @@ class PriceKernel : public RefCounted {
     // DEFAULT_VPS, DEFAULT_BVR_MIN, DEFAULT_BVR_MAX, DEFAULT_SVM) are defined in
     // markov_defaults.h at namespace godot scope — no class-level redefinition.
 
+    // Canonical tick-to-minute conversion (matches GameClock.TICKS_PER_MINUTE GDScript const).
+    static constexpr int    TICKS_PER_MINUTE          = 4;
+
     // PriceKernel-specific defaults
     static constexpr float  DEFAULT_VOL_AMPLIFIER[4] = { 0.60f, 1.00f, 1.40f, 2.00f };
     static constexpr float  DEFAULT_ENERGY_THRESHOLD  = 0.01f;

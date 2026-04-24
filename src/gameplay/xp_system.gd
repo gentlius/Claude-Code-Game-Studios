@@ -10,6 +10,8 @@ signal on_xp_gained(amount: int, new_total: int, source: String)
 
 ## Path to the external config file (assets/data/xp_config.json).
 const CONFIG_PATH: String = "res://assets/data/xp_config.json"
+## Precomputed table covers levels 0..XP_TABLE_MAX_LEVEL+1 (O(1) lookup).
+const XP_TABLE_MAX_LEVEL: int = 100
 
 # ── Config (Tuning Knobs — see GDD Tuning Knobs section) ──
 ## All values loaded from xp_config.json in _ready(). Hardcoded values are fallback defaults.
@@ -58,11 +60,14 @@ var _last_daily_return_pct: float = 0.0  ## Player daily return % (before alpha 
 var _last_market_return_pct: float = 0.0 ## Market avg return % on last settlement day
 var _last_alpha_pct: float = 0.0         ## Alpha = player_return − market_return
 var _last_season_breakdown: Dictionary = {}  ## Breakdown from last grant_season_bonus()
+## L-01: precomputed table of cumulative XP thresholds; built after _load_config().
+var _cumulative_xp_table: PackedInt64Array = []
 
 # ── Lifecycle ──
 
 func _ready() -> void:
 	_load_config()
+	_build_xp_table()
 	GameClock.on_market_close.connect(_on_market_close)
 	GameClock.on_season_start.connect(_on_season_start)
 	GameClock.on_market_open.connect(_on_market_open)
@@ -210,11 +215,24 @@ func _check_level_ups() -> int:
 
 # ── Formulas (GDD F1-F4) ──
 
+## Precomputes cumulative XP thresholds for levels 0..XP_TABLE_MAX_LEVEL+1.
+## Must be called after _load_config() since it uses BASE_LEVEL_XP and LEVEL_EXPONENT.
+func _build_xp_table() -> void:
+	_cumulative_xp_table.resize(XP_TABLE_MAX_LEVEL + 2)
+	_cumulative_xp_table[0] = 0
+	_cumulative_xp_table[1] = 0
+	for lv: int in range(2, XP_TABLE_MAX_LEVEL + 2):
+		_cumulative_xp_table[lv] = (_cumulative_xp_table[lv - 1]
+			+ int(floor(BASE_LEVEL_XP * pow(float(lv - 1), LEVEL_EXPONENT))))
+
+
 ## Required XP to reach a given level (cumulative from level 1)
 ## GDD F3: required_xp(level) = floor(BASE_LEVEL_XP × (level ^ LEVEL_EXPONENT))
 func _cumulative_xp_for_level(level: int) -> int:
 	if level <= 1:
 		return 0
+	if level < _cumulative_xp_table.size():
+		return int(_cumulative_xp_table[level])
 	var total: int = 0
 	for lv: int in range(2, level + 1):
 		total += int(floor(BASE_LEVEL_XP * pow(float(lv - 1), LEVEL_EXPONENT)))

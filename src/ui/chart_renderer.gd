@@ -550,8 +550,8 @@ func _aggregate_candles() -> void:
 
 	# For intra-day timeframes (M1/M5/M15): combine M1 pre-history + current season ticks.
 	var tf: int = int(_timeframe)
-	# M1 cache stores 1 candle per minute; tf ticks / 4 ticks-per-minute = minutes per candle.
-	var m1_per_chart: int = tf / 4  # M1→1, M5→5, M15→15
+	# M1 cache stores 1 candle per minute; tf ticks / TICKS_PER_MINUTE = minutes per candle.
+	var m1_per_chart: int = tf / GameClock.TICKS_PER_MINUTE  # M1→1, M5→5, M15→15
 
 	# Pre-history portion from M1CacheManager (ADR-024: M1-first batch generation).
 	# get_aggregated_m1() works directly on PackedArrays — only allocates output-count Dicts.

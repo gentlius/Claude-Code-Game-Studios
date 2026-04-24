@@ -263,12 +263,20 @@ func liquidate_all_for_season_end() -> void:
 
 ## Deducts daily borrow fee from sim_cash for all open short positions.
 ## Called on every market close. GDD §F7: daily_fee = open_price × quantity × BORROW_FEE_RATE_DAILY.
-## If sim_cash is insufficient the fee is skipped (position remains open — margin check will fire).
+## Unpaid fee is deducted from margin_deposited so margin_ratio reflects the shortfall.
 func _process_daily_borrow_fee() -> void:
 	for pos: Dictionary in _positions.values():
 		var daily_fee: int = int(float(pos["open_price"]) * float(pos["quantity"]) * BORROW_FEE_RATE_DAILY)
-		if daily_fee > 0:
+		if daily_fee <= 0:
+			continue
+		var available: int = CurrencySystem.get_sim_cash()
+		if available >= daily_fee:
 			CurrencySystem.sim_deduct(daily_fee)
+		else:
+			if available > 0:
+				CurrencySystem.sim_deduct(available)
+			# Unpaid portion reduces margin_deposited so margin_ratio drops correctly
+			pos["margin_deposited"] = maxi(0, pos["margin_deposited"] - (daily_fee - available))
 
 
 ## Resets all state. Called by GameMain (new game) and tests (before_each).

@@ -117,17 +117,17 @@ var _actual_total: int = 0
 ## Call configure_market_distribution() before init_season().
 var _mu_multiplier: float = 1.0
 var _sigma_multiplier: float = 1.0
+## L-02: class-level RNG — avoids 20,280 RandomNumberGenerator.new() allocations/day.
+## Seeded per-participant inside _compute_eod_for() before each use.
+var _compute_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 # ── Lifecycle ──
 
 func _ready() -> void:
 	GameClock.on_tick.connect(_on_tick)
 	GameClock.on_market_close.connect(_on_market_close)
-	## TOTAL_PARTICIPANTS는 SeasonManager.TOTAL_PARTICIPANTS(@export var) - 1 과 일치해야 함.
-	## @export var이므로 const 파생 불가 — 런타임 단언으로 동기화 검증.
-	assert(TOTAL_PARTICIPANTS == SeasonManager.TOTAL_PARTICIPANTS - 1,
-		"AiCompetitor.TOTAL_PARTICIPANTS(%d) != SeasonManager.TOTAL_PARTICIPANTS-1(%d). Sync required!" \
-		% [TOTAL_PARTICIPANTS, SeasonManager.TOTAL_PARTICIPANTS - 1])
+	## PARTICIPANTS_PER_TICK 검증만 유지 — TOTAL_PARTICIPANTS assert는 JSON config 변경 시 크래시 유발.
+
 	assert(PARTICIPANTS_PER_TICK * GameClock.TICKS_PER_DAY >= TOTAL_PARTICIPANTS,
 		"PARTICIPANTS_PER_TICK(%d) × TICKS_PER_DAY(%d) = %d < TOTAL_PARTICIPANTS(%d) — 하루 안에 전원 처리 불가!" \
 		% [PARTICIPANTS_PER_TICK, GameClock.TICKS_PER_DAY,
@@ -500,7 +500,7 @@ func _compute_eod_for(tier: int, local_id: int, day: int) -> float:
 	var p_seed: int = (_season_seed * 1000003) ^ (local_id * 998244353)
 	p_seed = p_seed ^ (tier * 7919)
 	p_seed = p_seed ^ 0xDEAD_BEEF
-	var rng := RandomNumberGenerator.new()
+	var rng: RandomNumberGenerator = _compute_rng
 
 	# 일간 가격제한: PriceEngine.DAILY_LIMIT_PCT = 0.30 → 30%/일
 	var daily_limit_pct: float = PriceEngine.DAILY_LIMIT_PCT * 100.0

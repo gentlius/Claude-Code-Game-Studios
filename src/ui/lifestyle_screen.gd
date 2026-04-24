@@ -36,54 +36,23 @@ var _start_next_season_btn: Button = null
 var _warning_label: Label = null           ## 프리마켓 진입 경고
 
 # ── Lifestyle item data (GDD §3-2) ──
+# Loaded from assets/data/lifestyle_items.json. Hardcoded arrays are defaults only.
 
-## Residence items: {tier, name, cost, art_file}
-const RESIDENCE_ITEMS: Array = [
-	## Tier 0 — bronze default, no purchase needed
-	{"tier": 0, "name": "쪽방/고시원",         "cost": 0,              "art": "bronze_jjokbang.png"},
-	{"tier": 1, "name": "변두리 원룸",          "cost": 500_000,        "art": "silver_oneroom.png"},
-	{"tier": 2, "name": "도심 오피스텔",        "cost": 2_000_000,      "art": "gold_officetel.png"},
-	{"tier": 3, "name": "강남 아파트 (중형)",   "cost": 10_000_000,     "art": "platinum_apartment.png"},
-	{"tier": 4, "name": "도심 대형 아파트",     "cost": 30_000_000,     "art": "emerald_large_apartment.png"},
-	{"tier": 5, "name": "초고층 펜트하우스",    "cost": 100_000_000,    "art": "diamond_penthouse.png"},
-	{"tier": 6, "name": "교외 대저택",          "cost": 300_000_000,    "art": "master_mansion.png"},
-	{"tier": 7, "name": "개인 섬/별장",         "cost": 1_000_000_000,  "art": "grandmaster_island_villa.png"},
-	{"tier": 8, "name": "스카이 레지던스",      "cost": 3_000_000_000,  "art": "challenger_sky_residence.png"},
-	{"tier": 9, "name": "영빈관급 저택",        "cost": 10_000_000_000, "art": "legend_official_residence.png"},
-	{"tier": 10, "name": "(엔딩)",              "cost": 0,              "art": "grandmaster_ending.png"},
-]
+const LIFESTYLE_ITEMS_CONFIG_PATH: String = "res://assets/data/lifestyle_items.json"
 
+## Residence items: {tier, name, cost, art}
+var RESIDENCE_ITEMS: Array = []
 ## Luxury items: {item_id, name, cost, min_tier, title_id, recurring, recurring_cost}
-const LUXURY_ITEMS: Array = [
-	{"item_id": "luxury_car",   "name": "수입차 (포르쉐 카이엔급)",     "cost": 200_000_000, "min_tier": 4, "title_id": "수입차 애호가", "recurring": false, "recurring_cost": 0},
-	{"item_id": "luxury_watch", "name": "명품 시계 (파텍 필립급)",      "cost": 100_000_000, "min_tier": 5, "title_id": "컬렉터",       "recurring": false, "recurring_cost": 0},
-	{"item_id": "golf_club",    "name": "프라이빗 골프 클럽 멤버십",    "cost": 50_000_000,  "min_tier": 3, "title_id": "멤버스 온리",  "recurring": true,  "recurring_cost": 10_000_000},
-	{"item_id": "yacht_berth",  "name": "요트 계류권",                  "cost": 500_000_000, "min_tier": 6, "title_id": "요트클럽",     "recurring": false, "recurring_cost": 0},
-]
-
-## Network items: {item_id, name, cost, min_tier, recurring, recurring_cost, xp_bonus}
-const NETWORK_ITEMS: Array = [
-	{"item_id": "invest_club",  "name": "프라이빗 투자 클럽 연회비", "cost": 20_000_000, "min_tier": 4, "recurring": true,  "xp_bonus": 0},
-	{"item_id": "forum_vip",    "name": "경제 포럼 VIP석",           "cost": 30_000_000, "min_tier": 5, "recurring": false, "xp_bonus": 10},
-]
-
-## Social contribution items: {item_id, name, min_tier, xp_bonus, is_variable_cost}
-const SOCIAL_ITEMS: Array = [
-	{"item_id": "scholarship",  "name": "장학재단 설립",     "cost": 500_000_000, "min_tier": 6, "recurring": false, "xp_bonus": 0,  "is_variable_cost": false},  ## GDD: 다음 시즌 첫 거래일 뉴스 딜레이 −5틱 (XP 아님)
-	{"item_id": "social_biz",   "name": "사회적 기업 후원",  "cost": 10_000_000,  "min_tier": 4, "recurring": true,  "xp_bonus": 5,  "is_variable_cost": false},
-	{"item_id": "donation",     "name": "공익 캠페인 기부",  "cost": 0,           "min_tier": 2, "recurring": false, "xp_bonus": 0,  "is_variable_cost": true},
-]
-
+var LUXURY_ITEMS: Array = []
+## Network items: {item_id, name, cost, min_tier, recurring, xp_bonus}
+var NETWORK_ITEMS: Array = []
+## Social contribution items: {item_id, name, cost, min_tier, recurring, xp_bonus, is_variable_cost}
+var SOCIAL_ITEMS: Array = []
 ## Alternative investment — property: {property_type, name, cost, rental_rate, min_tier}
-const PROPERTY_ITEMS: Array = [
-	{"property_type": "officetel", "name": "소형 오피스텔", "cost": 200_000_000,   "rental_rate": 0.025, "min_tier": 4},
-	{"property_type": "sangga",    "name": "강남 상가",     "cost": 1_000_000_000, "rental_rate": 0.030, "min_tier": 6},
-	{"property_type": "building",  "name": "빌딩",          "cost": 5_000_000_000, "rental_rate": 0.040, "min_tier": 7},
-]
+var PROPERTY_ITEMS: Array = []
 
-## Startup investment amount range (GDD §3-2). Seasons range is LifestyleManager.STARTUP_MIN/MAX_SEASONS.
-const STARTUP_MIN_AMOUNT: int = 50_000_000
-const STARTUP_MAX_AMOUNT: int = 500_000_000
+var STARTUP_MIN_AMOUNT: int = 50_000_000
+var STARTUP_MAX_AMOUNT: int = 500_000_000
 
 
 # ── Setup ──
@@ -97,9 +66,30 @@ func set_season_end_context(is_season_end: bool) -> void:
 # ── Lifecycle ──
 
 func _ready() -> void:
+	_load_items_config()
 	_build_ui()
 	_refresh_residual()
 	CurrencySystem.cash_assets_changed.connect(_on_cash_changed)
+
+
+func _load_items_config() -> void:
+	var f := FileAccess.open(LIFESTYLE_ITEMS_CONFIG_PATH, FileAccess.READ)
+	if f == null:
+		push_warning("LifestyleScreen: config not found at %s — using empty item lists" % LIFESTYLE_ITEMS_CONFIG_PATH)
+		return
+	var result: Variant = JSON.parse_string(f.get_as_text())
+	f.close()
+	if not result is Dictionary:
+		push_warning("LifestyleScreen: JSON parse failed for %s" % LIFESTYLE_ITEMS_CONFIG_PATH)
+		return
+	var cfg: Dictionary = result as Dictionary
+	if cfg.has("residence"):       RESIDENCE_ITEMS    = cfg["residence"]
+	if cfg.has("luxury"):          LUXURY_ITEMS       = cfg["luxury"]
+	if cfg.has("network"):         NETWORK_ITEMS      = cfg["network"]
+	if cfg.has("social"):          SOCIAL_ITEMS       = cfg["social"]
+	if cfg.has("property"):        PROPERTY_ITEMS     = cfg["property"]
+	if cfg.has("startupMinAmount"): STARTUP_MIN_AMOUNT = int(cfg["startupMinAmount"])
+	if cfg.has("startupMaxAmount"): STARTUP_MAX_AMOUNT = int(cfg["startupMaxAmount"])
 
 
 func _exit_tree() -> void:

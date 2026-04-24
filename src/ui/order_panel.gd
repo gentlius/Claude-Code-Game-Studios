@@ -1272,7 +1272,7 @@ func _on_order_filled(order: Dictionary) -> void:
 
 
 func _on_order_rejected(order: Dictionary) -> void:
-	_show_order_error(order.get("reject_reason", "주문 거부됨"))
+	_show_order_error(order.get("reject_reason", tr("주문 거부됨")))
 
 
 ## TR1 해금 상태에 따라 지정가 버튼 활성/비활성 + 툴팁 갱신.

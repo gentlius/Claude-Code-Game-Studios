@@ -14,12 +14,11 @@ signal xp_animate_requested
 ## Emitted when a weekly report is about to display — connect XpSystem.reset_weekly_xp().
 signal weekly_xp_reset_requested
 
-## BBCode 색상 상수 — ThemeSetup Color의 to_html(false) 값과 동기화 유지.
-## 단일 소유 원칙: 이 파일 내 모든 BBCode color= 태그는 이 상수를 참조한다.
-const _C_PROFIT: String  = "EB3833"  ## ThemeSetup.PROFIT_RED.to_html(false)
-const _C_LOSS: String    = "2E6BE6"  ## ThemeSetup.LOSS_BLUE.to_html(false)
-const _C_GOLD: String    = "D9B320"  ## Award / XP color
-const _C_DIM: String     = "5A5A66"  ## ThemeSetup.TEXT_SECONDARY.to_html(false)
+## BBCode 색상 — ThemeSetup에서 런타임 파생. 상수 직접 복사 금지 (발산 방지).
+var _C_PROFIT: String  = "EB3833"
+var _C_LOSS: String    = "2E6BE6"
+var _C_GOLD: String    = "D9B320"
+var _C_DIM: String     = "5A5A66"
 
 var _settlement_queue: Array[String] = []
 var _last_xp_gained: int = 0
@@ -35,6 +34,9 @@ var _btn_confirm: Button
 
 
 func _ready() -> void:
+	_C_PROFIT = ThemeSetup.PROFIT_RED.to_html(false)
+	_C_LOSS   = ThemeSetup.LOSS_BLUE.to_html(false)
+	_C_DIM    = ThemeSetup.TEXT_SECONDARY.to_html(false)
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build_panel()

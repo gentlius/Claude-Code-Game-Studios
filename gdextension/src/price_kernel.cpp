@@ -1425,7 +1425,7 @@ bool PriceKernel::_ee_fire_event(int scope, int impact_tier, int abs_tick,
 
     // Compute magnitude and decay
     float base_impact = _event_rng.randf_range(final_tmpl->impact_min, final_tmpl->impact_max);
-    int   decay_ticks = final_tmpl->decay_minutes * 4; // TICKS_PER_MINUTE = 4
+    int   decay_ticks = final_tmpl->decay_minutes * TICKS_PER_MINUTE;
 
     // Inject price events into all target stocks
     // IncomingEvent scope: 0=MACRO, 1=SECTOR, 2=INDIVIDUAL → inverse of EventTemplate scope
@@ -1542,7 +1542,7 @@ std::string PriceKernel::_ee_select_individual_stock(
         const EventTemplate &tmpl, int abs_tick) {
     std::vector<const StockState*> cands;
     std::vector<float>             weights;
-    int cd_ticks = EE_INDIVIDUAL_COOLDOWN_MIN * 4; // TICKS_PER_MINUTE = 4
+    int cd_ticks = EE_INDIVIDUAL_COOLDOWN_MIN * TICKS_PER_MINUTE;
 
     for (const auto &s : _stocks) {
         if (s.is_etf) continue;
@@ -1599,7 +1599,7 @@ bool PriceKernel::_ee_season_tag_ok(const EventTemplate &tmpl) const noexcept {
 
 bool PriceKernel::_ee_cooldown_ok(const EventTemplate &tmpl, int abs_tick) const {
     if (tmpl.cooldown_minutes <= 0) return true;
-    int cd_ticks = tmpl.cooldown_minutes * 4;
+    int cd_ticks = tmpl.cooldown_minutes * TICKS_PER_MINUTE;
     auto it = _ee_cooldown.find(tmpl.template_id);
     return it == _ee_cooldown.end() || abs_tick - it->second >= cd_ticks;
 }

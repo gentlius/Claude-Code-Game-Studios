@@ -186,7 +186,7 @@ func get_last_prehistory_close(stock_id: String) -> int:
 ## [param tick_prices]: PriceEngine._stock_states[stock_id]["tick_prices"] — 이번 시즌 틱 가격.
 ## [param tick_volumes]: PriceEngine._stock_states[stock_id]["tick_volumes"] — 이번 시즌 틱 거래량.
 func append_season_m1(stock_id: String, tick_prices: Array, tick_volumes: Array) -> void:
-	const TICKS_PER_M1: int = 4  # GameClock.TICKS_PER_MINUTE — 4 ticks per M1 bar
+	const TICKS_PER_M1: int = GameClock.TICKS_PER_MINUTE
 	if tick_prices.size() < TICKS_PER_M1 or not _m1_ohlc.has(stock_id):
 		return
 
@@ -488,17 +488,24 @@ func _aggregate_packed(
 # ── Utils ──────────────────────────────────────────────────────────────────────
 
 func _cache_dir() -> String:
-	return CACHE_ROOT + "slot_%d/" % SaveSystem.get_active_slot_id()
+	var slot_id: int = SaveSystem.get_active_slot_id()
+	if slot_id < 0:
+		return ""
+	return CACHE_ROOT + "slot_%d/" % slot_id
 
 
 func _stock_cache_path(stock_id: String) -> String:
-	return _cache_dir() + "%s.bin" % stock_id
+	var d: String = _cache_dir()
+	if d.is_empty():
+		return ""
+	return d + "%s.bin" % stock_id
 
 
 func _ensure_cache_dir() -> void:
 	var dir: String = _cache_dir()
-	if not DirAccess.dir_exists_absolute(dir):
-		DirAccess.make_dir_recursive_absolute(dir)
+	if dir.is_empty() or DirAccess.dir_exists_absolute(dir):
+		return
+	DirAccess.make_dir_recursive_absolute(dir)
 
 
 func _cancel_thread() -> void:

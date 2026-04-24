@@ -23,6 +23,10 @@ signal on_vi_released(stock_id: String)
 ## Emitted when circuit breaker activates (GDD Rule 2-5).
 signal on_circuit_breaker(stage: int, halt_ticks: int)
 
+## Emitted after process_all_ticks() when the C++ EventEngine fires intraday events.
+## NewsEventSystem connects to this to resolve headlines and apply news delay (Phase B).
+signal on_kernel_news(ui_events: Array)
+
 # ── Enums ──
 
 enum MarkovState {
@@ -445,6 +449,21 @@ func _build_kernel_cfg() -> Dictionary:
 	cfg["viMaxPerDay"]            = VI_MAX_PER_DAY
 	cfg["viCooldownTicks"]        = _minutes_to_ticks(VI_COOLDOWN_MINUTES)
 	cfg["ticksPerDay"]            = GameClock.TICKS_PER_DAY
+
+	# Phase B: EventEngine — pass event_pool templates to C++ kernel.
+	# TODO(DLC): filter by active market_id when multi-market support lands (ADR-021).
+	var ep_file := FileAccess.open("res://assets/data/event_pool.json", FileAccess.READ)
+	if ep_file != null:
+		var ep_json := JSON.new()
+		if ep_json.parse(ep_file.get_as_text()) == OK:
+			var ep_data: Dictionary = ep_json.data
+			var all_tpl: Array = ep_data.get("templates", [])
+			cfg["event_pool"] = all_tpl.filter(
+				func(t: Dictionary) -> bool:
+					return t.get("market_id", "KR").to_upper() == "KR"
+			)
+		ep_file.close()
+
 	return cfg
 
 
@@ -626,8 +645,10 @@ func initialize_for_load(save_data: Dictionary) -> void:
 			"sector_sensitivity":  s["sector_sensitivity"],
 			"is_etf":              false,
 			"macro_state":         int(s.get("macro_state", MacroState.FLAT)),
+			"event_tags":          stock.event_tags,
 		})
-	_kernel.start_season(int(save_data.get("season_count", 1)), {})
+	_kernel.start_season(int(save_data.get("season_count", 1)),
+		NewsEventSystem.get_season_theme())
 
 	# 저장된 시장지수 복원. 없으면 INDEX_BASE(1000) 유지.
 	var saved_index: float = save_data.get("market_index", 0.0)
@@ -1097,8 +1118,9 @@ func init_first_season() -> void:
 			"sector_sensitivity":  s["sector_sensitivity"],
 			"is_etf":              false,
 			"macro_state":         int(s.get("macro_state", MacroState.FLAT)),
+			"event_tags":          stock.event_tags,
 		})
-	_kernel.start_season(1, {})
+	_kernel.start_season(1, NewsEventSystem.get_season_theme())
 	_kernel.start_day(0)
 
 	_engine_state = EngineState.READY
@@ -1147,6 +1169,7 @@ func sync_prices_from_prehistory() -> void:
 			"sector_sensitivity": state["sector_sensitivity"],
 			"is_etf":             false,
 			"macro_state":        int(state.get("macro_state", MacroState.FLAT)),
+			"event_tags":         stock.event_tags,
 		})
 
 
@@ -1204,8 +1227,8 @@ func _reset_season_mechanics() -> void:
 	_cb_halt_remaining = 0
 	_player_pressure.clear()
 
-	# ADR-027 Phase A: notify kernel of season boundary.
-	_kernel.start_season(_season_count, {})
+	# ADR-027 Phase B: notify kernel of season boundary with active season theme.
+	_kernel.start_season(_season_count, NewsEventSystem.get_season_theme())
 
 	# Recompute index baseline from current (carried-forward) prices so each season
 	# starts fresh at INDEX_BASE regardless of prior season's price level.
@@ -1247,11 +1270,16 @@ func process_tick(tick_number: int, _day: int, _week: int) -> void:
 		_vi_halt_remaining.erase(stock_id)
 		on_vi_released.emit(stock_id)
 
-	# Delegate all per-stock tick logic to C++ PriceKernel (ADR-027 Phase A).
+	# Delegate all per-stock tick logic to C++ PriceKernel (ADR-027 Phase A/B).
 	var _tick_result: Dictionary = _kernel.process_all_ticks(tick_number)
 	var _k_prices:  Dictionary = _tick_result["prices"]
 	var _k_volumes: Dictionary = _tick_result["volumes"]
 	var _k_vi_hits: Array     = _tick_result["vi_hits"]
+
+	# Phase B: forward kernel-generated news events to NewsEventSystem for display.
+	var _k_ui_events: Array = _tick_result["ui_events"]
+	if not _k_ui_events.is_empty():
+		on_kernel_news.emit(_k_ui_events)
 
 	# Apply kernel results to GDScript stock states.
 	for stock_id: String in _k_prices:
@@ -1605,8 +1633,13 @@ func get_cb_stage() -> int:
 func _end_trading_day() -> void:
 	_engine_state = EngineState.END_OF_DAY
 	_generate_daily_ohlcv()
-	_roll_macro_states()  # ADR-026: GDScript-side macro roll for save/load state tracking
-	_kernel.start_day(0)  # ADR-027 Phase A: kernel macro roll + day reset (prev_day_close, VI)
+	_kernel.start_day(0)  # ADR-027: kernel owns macro_state roll (prev_day_close, Markov, VI)
+	# Sync macro_state back to _stock_states so save_game_data() persists the correct value.
+	# Single ownership: C++ rolls, GDScript reads. (ADR-026 + ADR-027)
+	var _kernel_macros: Dictionary = _kernel.get_macro_states()
+	for _sid: String in _kernel_macros:
+		if _stock_states.has(_sid):
+			_stock_states[_sid]["macro_state"] = int(_kernel_macros[_sid])
 	_reset_order_books()
 	_reset_vi_and_circuit_breaker()
 	_vi_halt_remaining.clear()
@@ -2094,88 +2127,6 @@ func _apply_macro_bias_to_matrix(matrix: Array, macro_state: int) -> Array:
 		_renormalize_row(row)
 		result.append(row)
 	return result
-
-
-## Roll MacroState transitions for all stocks at end of each trading day (ADR-026).
-## Rebuilds _transition_matrices with biased matrix for next day's M1 simulation.
-## MacroState is intentionally NOT reset in _reset_season_mechanics() — season continuity.
-## ADR-026 seasonBias: BULL/BEAR nudges the FLAT row of macro_tm so trending months occur
-## more/less often — clean separation of "when trends happen" vs "how strong they are".
-func _roll_macro_states() -> void:
-	# Select macro transition matrix: per-archetype override or default
-	var arch_macros: Dictionary = {}
-	var arch_macro_dict: Variant = _macro_cfg.get("archetypeMacroMatrices", {})
-	if arch_macro_dict is Dictionary:
-		arch_macros = arch_macro_dict as Dictionary
-
-	var default_macro_tm: Array = _macro_cfg.get("transitionMatrix", MACRO_TM_DEFAULT) as Array
-	if default_macro_tm.is_empty():
-		default_macro_tm = MACRO_TM_DEFAULT
-
-	var vol_mults: Array = _macro_cfg.get("volMultiplier",
-		[[1.15, 1.45], [0.75, 1.05], [1.05, 1.35]]) as Array
-
-	# Load seasonBias macro nudge params from config
-	var sbmn: Variant = _macro_cfg.get("seasonBiasMacroNudge", {})
-	var season_bias_nudge: Dictionary = sbmn as Dictionary if sbmn is Dictionary else {}
-
-	for stock_id: String in _stock_states:
-		var s: Dictionary = _stock_states[stock_id]
-		if s.get("is_etf", false):
-			continue
-		var archetype: String = StockDatabase.get_stock(stock_id).archetype \
-			if StockDatabase.get_stock(stock_id) != null else ""
-		var macro_tm: Array = arch_macros.get(archetype, default_macro_tm) as Array
-		if macro_tm.is_empty():
-			macro_tm = default_macro_tm
-
-		# Apply seasonBias nudge to the FLAT row (index 1) of macro_tm.
-		# BULL → more TREND_UP; BEAR → more TREND_DOWN. No-op for NEUTRAL.
-		var bias: SeasonBias = s.get("season_bias", SeasonBias.NEUTRAL) as SeasonBias
-		var effective_macro_tm: Array = macro_tm  # reference; deep-copy only if nudge needed
-		if bias != SeasonBias.NEUTRAL and not season_bias_nudge.is_empty():
-			var nudge_key: String = "BULL" if bias == SeasonBias.BULL else "BEAR"
-			var nudge: Variant = season_bias_nudge.get(nudge_key, {})
-			if nudge is Dictionary and not (nudge as Dictionary).is_empty():
-				var nd: Dictionary = nudge as Dictionary
-				var flat_to_up: float   = float(nd.get("flatToUp",   0.0))
-				var flat_to_down: float = float(nd.get("flatToDown", 0.0))
-				# Deep copy macro_tm so we don't mutate the shared config array
-				effective_macro_tm = []
-				for row_src: Variant in macro_tm:
-					effective_macro_tm.append((row_src as Array).duplicate())
-				# Nudge FLAT row (index 1): [FLAT→UP, FLAT→FLAT, FLAT→DOWN]
-				var flat_row: Array = effective_macro_tm[MacroState.FLAT] as Array
-				flat_row[MacroState.TREND_UP]   = maxf(0.0, float(flat_row[MacroState.TREND_UP])   + flat_to_up)
-				flat_row[MacroState.TREND_DOWN] = maxf(0.0, float(flat_row[MacroState.TREND_DOWN]) + flat_to_down)
-				# Renormalize FLAT row
-				var flat_sum: float = 0.0
-				for v: Variant in flat_row:
-					flat_sum += maxf(0.0, float(v))
-				if flat_sum > 0.0:
-					for fi: int in range(3):
-						flat_row[fi] = maxf(0.0, float(flat_row[fi])) / flat_sum
-
-		var macro: int = s.get("macro_state", MacroState.FLAT)
-		var row: Array = effective_macro_tm[macro] as Array
-		var roll: float = _rng.randf()
-		var cumulative: float = 0.0
-		for j: int in range(3):
-			cumulative += float(row[j])
-			if roll <= cumulative:
-				macro = j
-				break
-		s["macro_state"] = macro
-
-		# Draw daily volume multiplier for next day (stored per-stock for _compute_volume)
-		var vm_range: Array = vol_mults[macro] as Array if macro < vol_mults.size() else [1.0, 1.0]
-		s["macro_vol_mult"] = _rng.randf_range(float(vm_range[0]), float(vm_range[1]))
-
-		# Rebuild transition matrix with season bias + macro bias
-		var base_mat: Array = _build_transition_matrix(
-			s["volatility_profile"], s.get("season_bias", SeasonBias.NEUTRAL)
-		)
-		_transition_matrices[stock_id] = _apply_macro_bias_to_matrix(base_mat, macro)
 
 
 ## Clamp negatives and renormalize a probability row to sum to 1.

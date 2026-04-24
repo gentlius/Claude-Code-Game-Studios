@@ -167,9 +167,9 @@ func test_volume_time_of_day_multiplier() -> void:
 	var n: int = 500
 
 	for _i: int in range(n):
-		opening_sum += PriceEngine._compute_volume(s, 0.0, 0.0, 5)     # opening tick (< 40)
-		closing_sum += PriceEngine._compute_volume(s, 0.0, 0.0, 1525)  # closing tick (>= 1520)
-		normal_sum += PriceEngine._compute_volume(s, 0.0, 0.0, 200)    # normal tick (40-1519)
+		opening_sum += PriceEngine._compute_volume(s, 0.0, 0.0, 0.0, 5)     # opening tick (< 40)
+		closing_sum += PriceEngine._compute_volume(s, 0.0, 0.0, 0.0, 1525)  # closing tick (>= 1520)
+		normal_sum += PriceEngine._compute_volume(s, 0.0, 0.0, 0.0, 200)    # normal tick (40-1519)
 
 	var opening_ratio: float = opening_sum / normal_sum
 	var closing_ratio: float = closing_sum / normal_sum
@@ -194,8 +194,8 @@ func test_volume_energy_correlation() -> void:
 	var n: int = 500
 
 	for _i: int in range(n):
-		low_energy_sum += PriceEngine._compute_volume(s, 0.001, 0.0, 200)
-		high_energy_sum += PriceEngine._compute_volume(s, 0.03, 0.02, 200)
+		low_energy_sum += PriceEngine._compute_volume(s, 0.001, 0.0, 0.0, 200)
+		high_energy_sum += PriceEngine._compute_volume(s, 0.03, 0.02, 0.0, 200)
 
 	assert_true(high_energy_sum > low_energy_sum * 2.0,
 		"High energy volume should be >2x low energy (got %.2fx)" % [high_energy_sum / low_energy_sum])
@@ -224,8 +224,8 @@ func test_volume_limit_proximity_dampening() -> void:
 	var n: int = 500
 
 	for _i: int in range(n):
-		normal_sum += PriceEngine._compute_volume(s_normal, 0.005, 0.0, 200)
-		limit_sum += PriceEngine._compute_volume(s_near_limit, 0.005, 0.0, 200)
+		normal_sum += PriceEngine._compute_volume(s_normal, 0.005, 0.0, 0.0, 200)
+		limit_sum += PriceEngine._compute_volume(s_near_limit, 0.005, 0.0, 0.0, 200)
 
 	var dampen_ratio: float = limit_sum / normal_sum
 	assert_true(dampen_ratio < 0.3,

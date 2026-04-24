@@ -674,9 +674,9 @@ func test_price_kernel_instantiates():
 		return
 	var pk: Object = ClassDB.instantiate("PriceKernel")
 	assert_not_null(pk, "PriceKernel 인스턴스 생성 성공")
-	# 9-method API는 gdextension/src/price_kernel.cpp _bind_methods()가 보장:
+	# 10-method API는 gdextension/src/price_kernel.cpp _bind_methods()가 보장:
 	# set_config / init_stock / reset / start_season / start_day /
-	# process_all_ticks / add_player_pressure / set_rumor / inject_event
+	# process_all_ticks / get_macro_states / add_player_pressure / set_rumor / inject_event
 
 func test_price_engine_kernel_wiring():
 	## ADR-027 Phase A: PriceEngine이 PriceKernel 초기화 헬퍼를 보유한다.

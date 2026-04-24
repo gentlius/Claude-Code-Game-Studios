@@ -373,6 +373,82 @@ void PriceKernel::set_config(Dictionary cfg) {
     _loadi("ticksPerDay",             _ticks_per_day);
 
     _cfg_loaded = true;
+
+    // ── EventEngine: event_pool ──────────────────────────────────────────────
+    _event_pool.clear();
+    if (cfg.has("event_pool")) {
+        Array pool = cfg["event_pool"];
+        for (int i = 0; i < pool.size(); ++i) {
+            Variant v = pool[i];
+            if (v.get_type() != Variant::DICTIONARY) continue;
+            Dictionary t = v;
+
+            EventTemplate et;
+            if (t.has("template_id"))
+                et.template_id = static_cast<String>(t["template_id"]).utf8().get_data();
+
+            if (t.has("scope")) {
+                String sc = t["scope"];
+                if (sc == "INDIVIDUAL")   et.scope = 0;
+                else if (sc == "SECTOR")  et.scope = 1;
+                else                      et.scope = 2; // MACRO
+            }
+            if (t.has("impact_tier")) {
+                String imp = t["impact_tier"];
+                if (imp == "SMALL")        et.impact_tier = 0;
+                else if (imp == "MEDIUM")  et.impact_tier = 1;
+                else if (imp == "LARGE")   et.impact_tier = 2;
+                else                       et.impact_tier = 3; // MEGA
+            }
+            if (t.has("event_type")) {
+                String et_str = t["event_type"];
+                et.event_type = (et_str == "GRADUAL_SHIFT") ? 1 : 0;
+            }
+            if (t.has("direction")) {
+                Variant dir_v = t["direction"];
+                if (dir_v.get_type() == Variant::INT)
+                    et.direction = static_cast<int>(dir_v);
+                else if (dir_v.get_type() == Variant::FLOAT)
+                    et.direction = static_cast<int>(static_cast<float>(dir_v));
+                else
+                    et.direction = 0; // VARIABLE
+            }
+            if (t.has("impact_min"))      et.impact_min      = static_cast<float>(t["impact_min"]);
+            if (t.has("impact_max"))      et.impact_max      = static_cast<float>(t["impact_max"]);
+            if (t.has("decay_minutes"))   et.decay_minutes   = static_cast<int>(t["decay_minutes"]);
+            if (t.has("decay_curve")) {
+                String dc = t["decay_curve"];
+                et.decay_curve = (dc == "EXPONENTIAL") ? 1 : 0;
+            }
+            if (t.has("weight_base"))      et.weight_base      = static_cast<float>(t["weight_base"]);
+            if (t.has("cooldown_minutes")) et.cooldown_minutes = static_cast<int>(t["cooldown_minutes"]);
+            if (t.has("target_sector")) {
+                Variant tsv = t["target_sector"];
+                if (tsv.get_type() == Variant::STRING) {
+                    std::string ts = static_cast<String>(tsv).utf8().get_data();
+                    if (ts != "null") et.target_sector = ts;
+                }
+            }
+            if (t.has("mutex_group")) {
+                Variant mgv = t["mutex_group"];
+                if (mgv.get_type() == Variant::STRING)
+                    et.mutex_group = static_cast<String>(mgv).utf8().get_data();
+            }
+            if (t.has("exclude_same_scope"))
+                et.exclude_same_scope = static_cast<bool>(t["exclude_same_scope"]);
+            if (t.has("season_tags")) {
+                Array stags = t["season_tags"];
+                for (int j = 0; j < stags.size(); ++j)
+                    et.season_tags.push_back(static_cast<String>(stags[j]).utf8().get_data());
+            }
+            if (t.has("event_tags")) {
+                Array etags = t["event_tags"];
+                for (int j = 0; j < etags.size(); ++j)
+                    et.event_tags.push_back(static_cast<String>(etags[j]).utf8().get_data());
+            }
+            _event_pool.push_back(std::move(et));
+        }
+    }
 }
 
 // ── init_stock ────────────────────────────────────────────────────────────────
@@ -408,6 +484,12 @@ void PriceKernel::init_stock(String stock_id, Dictionary stock_data) {
         s.is_etf = static_cast<bool>(stock_data["is_etf"]);
     if (stock_data.has("macro_state"))
         s.macro_state = std::max(0, std::min(2, static_cast<int>(stock_data["macro_state"])));
+    if (stock_data.has("event_tags")) {
+        s.event_tags.clear();
+        Array etags = stock_data["event_tags"];
+        for (int i = 0; i < etags.size(); ++i)
+            s.event_tags.push_back(static_cast<String>(etags[i]).utf8().get_data());
+    }
 
     // Seed per-stock RNG from stock_id hash
     uint64_t seed_val = 0;
@@ -444,10 +526,51 @@ void PriceKernel::reset() {
 
 // ── start_season ──────────────────────────────────────────────────────────────
 
-void PriceKernel::start_season(int season_number, Dictionary /*season_theme*/) {
-    // Phase A: store season, reset per-stock VI counters.
-    // season_theme fields (sector_bias, active_season_tags, weight scales) are Phase B.
+void PriceKernel::start_season(int season_number, Dictionary season_theme) {
     _season_number = season_number;
+
+    // EventEngine: parse season_theme
+    _ee_season_tags.clear();
+    _ee_sector_bias.clear();
+    _ee_macro_weight_scale      = 1.0f;
+    _ee_sector_weight_scale     = 1.0f;
+    _ee_individual_weight_scale = 1.0f;
+
+    if (season_theme.has("active_season_tags")) {
+        Array tags = season_theme["active_season_tags"];
+        for (int i = 0; i < tags.size(); ++i)
+            _ee_season_tags.push_back(static_cast<String>(tags[i]).utf8().get_data());
+    }
+    if (season_theme.has("sector_bias")) {
+        Dictionary sb = season_theme["sector_bias"];
+        Array keys = sb.keys();
+        for (int i = 0; i < keys.size(); ++i) {
+            std::string k = static_cast<String>(keys[i]).utf8().get_data();
+            _ee_sector_bias[k] = static_cast<float>(sb[keys[i]]);
+        }
+    }
+    if (season_theme.has("macro_weight_scale"))
+        _ee_macro_weight_scale = static_cast<float>(season_theme["macro_weight_scale"]);
+    if (season_theme.has("sector_weight_scale"))
+        _ee_sector_weight_scale = static_cast<float>(season_theme["sector_weight_scale"]);
+    if (season_theme.has("individual_weight_scale"))
+        _ee_individual_weight_scale = static_cast<float>(season_theme["individual_weight_scale"]);
+
+    // Seed event RNG per season for variety
+    _event_rng.seed(static_cast<uint64_t>(season_number) * 6364136223846793005ULL
+                    ^ 0xEE2026DEADC0DEULL);
+
+    // Reset per-season EE tracking
+    _ee_cooldown.clear();
+    _ee_individual_cd.clear();
+    _ee_mutex.clear();
+    _daily_slot_count  = 0;
+    _daily_event_count = 0;
+    _daily_mega_fired  = false;
+    _last_slot_scope   = -1;
+    _ee_day            = 0;
+
+    // Reset per-stock VI counters
     for (auto &s : _stocks) {
         s.vi_count_today = 0;
     }
@@ -455,7 +578,16 @@ void PriceKernel::start_season(int season_number, Dictionary /*season_theme*/) {
 
 // ── start_day ─────────────────────────────────────────────────────────────────
 
-void PriceKernel::start_day(int /*day_number*/) {
+void PriceKernel::start_day(int day_number) {
+    // EventEngine: reset daily state, generate today's slot schedule
+    _ee_day            = day_number;
+    _daily_slot_count  = 0;
+    _daily_event_count = 0;
+    _daily_mega_fired  = false;
+    _last_slot_scope   = -1;
+    _ee_mutex.clear();
+    _ee_generate_daily_schedule();
+
     for (auto &s : _stocks) {
         s.prev_day_close = s.current_price;
 
@@ -491,6 +623,18 @@ void PriceKernel::start_day(int /*day_number*/) {
         s.vi_cooldown        = 0;
         s.vi_count_today     = 0;
     }
+}
+
+// ── get_macro_states ──────────────────────────────────────────────────────────
+// Returns {stock_id → macro_state int} for all stocks so GDScript can sync
+// _stock_states for save/load without maintaining a parallel Markov roll.
+
+Dictionary PriceKernel::get_macro_states() const {
+    Dictionary out;
+    for (const auto &s : _stocks) {
+        out[String(s.stock_id.c_str())] = s.macro_state;
+    }
+    return out;
 }
 
 // ── inject_event ──────────────────────────────────────────────────────────────
@@ -665,6 +809,10 @@ Dictionary PriceKernel::process_all_ticks(int tick_in_day) {
     Dictionary prices;
     Dictionary volumes;
     Array      vi_hits;
+    Array      ui_events;
+
+    // EventEngine: fire any scheduled slots for this tick (Phase B)
+    _ee_check_slots(tick_in_day, ui_events);
 
     for (auto &s : _stocks) {
         String sid(s.stock_id.c_str());
@@ -826,10 +974,332 @@ Dictionary PriceKernel::process_all_ticks(int tick_in_day) {
     result["prices"]     = prices;
     result["volumes"]    = volumes;
     result["vi_hits"]    = vi_hits;
-    result["ui_events"]  = Array();  // Phase B
-    result["a3_updates"] = Array();  // Phase D
+    result["ui_events"]  = ui_events;
+    result["a3_updates"] = Array();       // Phase D
     result["etf_prices"] = Dictionary();  // Phase C
     return result;
+}
+
+// ── EventEngine: _ee_generate_daily_schedule ─────────────────────────────────
+// Rolls each of the 4 intraday slots; fires per slot probability.
+// At most EE_DAILY_HARD_CAP+1 entries in _daily_slots[].
+
+void PriceKernel::_ee_generate_daily_schedule() {
+    _daily_slot_count = 0;
+    for (int i = 0; i < 4; ++i) {
+        const SlotCfg &sc = EE_SLOTS[i];
+        if (_event_rng.randf() > sc.probability) continue;
+        int range = sc.tick_max - sc.tick_min;
+        int tick  = sc.tick_min + (range > 0
+            ? static_cast<int>(_event_rng.randf() * static_cast<float>(range))
+            : 0);
+        tick = std::clamp(tick, sc.tick_min, sc.tick_max);
+        if (_daily_slot_count < EE_DAILY_HARD_CAP + 1) {
+            _daily_slots[_daily_slot_count++] = { tick, _ee_pick_scope(), _ee_pick_impact(), false };
+        }
+    }
+    // Insertion-sort by tick (at most 4 elements — negligible)
+    for (int i = 1; i < _daily_slot_count; ++i) {
+        DailySlot key = _daily_slots[i];
+        int j = i - 1;
+        while (j >= 0 && _daily_slots[j].tick > key.tick) {
+            _daily_slots[j + 1] = _daily_slots[j];
+            --j;
+        }
+        _daily_slots[j + 1] = key;
+    }
+}
+
+// ── EventEngine: _ee_check_slots ─────────────────────────────────────────────
+// Called once per tick from process_all_ticks. Fires any slots whose tick ≤ now.
+
+void PriceKernel::_ee_check_slots(int tick_in_day, Array &out_ui_events) {
+    if (_daily_event_count >= EE_DAILY_HARD_CAP) return;
+
+    int abs_tick = _ee_day * _ticks_per_day + tick_in_day;
+
+    for (int i = 0; i < _daily_slot_count; ++i) {
+        DailySlot &slot = _daily_slots[i];
+        if (slot.fired) continue;
+        if (tick_in_day >= slot.tick) {
+            slot.fired = true;
+            if (_ee_fire_event(slot.scope, slot.impact, abs_tick, out_ui_events))
+                ++_daily_event_count;
+            if (_daily_event_count >= EE_DAILY_HARD_CAP) break;
+        }
+    }
+
+    // Minimum guarantee: if mid-day passed with 0 events, force MACRO SMALL
+    if (tick_in_day == _ticks_per_day / 2 && _daily_event_count == 0) {
+        _ee_fire_event(2, 0, abs_tick, out_ui_events); // MACRO=2, SMALL=0
+        ++_daily_event_count;
+    }
+}
+
+// ── EventEngine: _ee_fire_event ──────────────────────────────────────────────
+// Selects template, resolves targets, injects price event, appends ui_event.
+
+bool PriceKernel::_ee_fire_event(int scope, int impact_tier, int abs_tick,
+                                  Array &out_ui_events) {
+    // MEGA cap: only one MEGA per day
+    if (impact_tier == 3 && _daily_mega_fired) impact_tier = 2;
+    if (impact_tier == 3) _daily_mega_fired = true;
+
+    // Cluster prevention: 50% chance to re-pick scope if same as last slot
+    if (scope == _last_slot_scope && _event_rng.randf() < EE_CLUSTER_PENALTY)
+        scope = _ee_pick_scope();
+
+    const EventTemplate *tmpl = _ee_pick_template(scope, impact_tier, abs_tick);
+    if (!tmpl) {
+        tmpl = _ee_pick_template(scope, 0, abs_tick); // fallback SMALL
+        if (!tmpl) return false;
+        impact_tier = 0;
+    }
+    _last_slot_scope = scope;
+
+    // Resolve direction (0 = VARIABLE)
+    int direction = (tmpl->direction == 0)
+        ? ((_event_rng.randf() < 0.5f) ? 1 : -1)
+        : tmpl->direction;
+
+    // Resolve target stocks
+    std::vector<std::string> target_ids;
+    std::string selected_stock_id;
+    int         final_scope = scope;
+    const EventTemplate *final_tmpl = tmpl;
+
+    if (scope == 2) { // MACRO: all non-ETF stocks
+        for (const auto &s : _stocks) {
+            if (!s.is_etf) target_ids.push_back(s.stock_id);
+        }
+    } else if (scope == 1) { // SECTOR
+        if (!tmpl->target_sector.empty()) {
+            for (const auto &s : _stocks) {
+                if (!s.is_etf && s.sector == tmpl->target_sector)
+                    target_ids.push_back(s.stock_id);
+            }
+        }
+    } else { // INDIVIDUAL
+        selected_stock_id = _ee_select_individual_stock(*tmpl, abs_tick);
+        if (!selected_stock_id.empty()) {
+            target_ids.push_back(selected_stock_id);
+            _ee_individual_cd[selected_stock_id] = abs_tick;
+        } else {
+            // Escalate INDIVIDUAL → SECTOR
+            final_scope = 1;
+            final_tmpl  = _ee_pick_template(1, impact_tier, abs_tick);
+            if (!final_tmpl) return false;
+            if (!final_tmpl->target_sector.empty()) {
+                for (const auto &s : _stocks) {
+                    if (!s.is_etf && s.sector == final_tmpl->target_sector)
+                        target_ids.push_back(s.stock_id);
+                }
+            }
+        }
+    }
+
+    if (target_ids.empty()) return false;
+
+    // Compute magnitude and decay
+    float base_impact = _event_rng.randf_range(final_tmpl->impact_min, final_tmpl->impact_max);
+    int   decay_ticks = final_tmpl->decay_minutes * 4; // TICKS_PER_MINUTE = 4
+
+    // Inject price events into all target stocks
+    // IncomingEvent scope: 0=MACRO, 1=SECTOR, 2=INDIVIDUAL → inverse of EventTemplate scope
+    int inject_scope = 2 - final_scope;
+    for (const auto &sid : target_ids) {
+        auto it = _stock_index.find(sid);
+        if (it == _stock_index.end()) continue;
+        IncomingEvent ev;
+        ev.scope       = inject_scope;
+        ev.base_impact = base_impact;
+        ev.direction   = direction;
+        ev.event_type  = final_tmpl->event_type;
+        ev.decay_ticks = (final_tmpl->event_type == 1 && decay_ticks > 0) ? decay_ticks : 0;
+        ev.decay_curve = final_tmpl->decay_curve;
+        _stocks[it->second].incoming_events.push_back(ev);
+    }
+
+    // Register cooldown and mutex
+    _ee_cooldown[final_tmpl->template_id] = abs_tick;
+    if (!selected_stock_id.empty())
+        _ee_cooldown[final_tmpl->template_id + "+" + selected_stock_id] = abs_tick;
+    _ee_register_mutex(final_tmpl->mutex_group, selected_stock_id);
+
+    // Build ui_event dict for GDScript text resolution and display
+    Dictionary ui_event;
+    ui_event["template_id"]        = String(final_tmpl->template_id.c_str());
+    ui_event["scope"]              = final_scope;   // 0=INDIVIDUAL, 1=SECTOR, 2=MACRO
+    ui_event["impact_tier"]        = impact_tier;   // 0=SMALL…3=MEGA
+    ui_event["direction"]          = direction;
+    ui_event["tick"]               = abs_tick;
+    ui_event["selected_stock_id"]  = String(selected_stock_id.c_str());
+
+    Array tids;
+    for (const auto &sid : target_ids)
+        tids.push_back(String(sid.c_str()));
+    ui_event["target_stock_ids"]   = tids;
+
+    out_ui_events.push_back(ui_event);
+    return true;
+}
+
+// ── EventEngine: _ee_pick_scope / _ee_pick_impact ────────────────────────────
+
+int PriceKernel::_ee_pick_scope() noexcept {
+    float w_ind = EE_INDIVIDUAL_W * _ee_individual_weight_scale;
+    float w_sec = EE_SECTOR_W     * _ee_sector_weight_scale;
+    float w_mac = EE_MACRO_W      * _ee_macro_weight_scale;
+    float total = w_ind + w_sec + w_mac;
+    if (total <= 0.0f) return 2;
+    float r = _event_rng.randf() * total;
+    if (r < w_ind)          return 0; // INDIVIDUAL
+    if (r < w_ind + w_sec)  return 1; // SECTOR
+    return 2; // MACRO
+}
+
+int PriceKernel::_ee_pick_impact() noexcept {
+    float r = _event_rng.randf();
+    float cum = 0.0f;
+    for (int i = 0; i < 4; ++i) {
+        cum += EE_IMPACT_W[i];
+        if (r <= cum) return i;
+    }
+    return 0;
+}
+
+// ── EventEngine: _ee_pick_template ───────────────────────────────────────────
+// Weighted random pick from event_pool filtered by scope, impact, season tags,
+// cooldown, and fixed-key mutex (INDIVIDUAL mutex deferral to _ee_fire_event).
+
+const PriceKernel::EventTemplate* PriceKernel::_ee_pick_template(
+        int scope, int impact_tier, int abs_tick) {
+    std::vector<const EventTemplate*> cands;
+    std::vector<float>                weights;
+
+    for (const auto &tmpl : _event_pool) {
+        if (tmpl.scope       != scope)       continue;
+        if (tmpl.impact_tier != impact_tier) continue;
+        if (!_ee_season_tag_ok(tmpl))        continue;
+        if (!_ee_cooldown_ok(tmpl, abs_tick)) continue;
+        // Fixed-key mutex (no {stock_id}) — check here; per-stock mutex deferred
+        if (!tmpl.mutex_group.empty()
+                && tmpl.mutex_group.find("{stock_id}") == std::string::npos) {
+            if (_ee_mutex_blocked(tmpl.mutex_group, "")) continue;
+        }
+
+        float w = tmpl.weight_base;
+        if (!tmpl.target_sector.empty()) {
+            auto it = _ee_sector_bias.find(tmpl.target_sector);
+            if (it != _ee_sector_bias.end()) w *= it->second;
+        }
+        cands.push_back(&tmpl);
+        weights.push_back(w);
+    }
+
+    if (cands.empty()) return nullptr;
+
+    float total = 0.0f;
+    for (float ww : weights) total += ww;
+    if (total <= 0.0f) return cands[0];
+
+    float r = _event_rng.randf() * total, cum = 0.0f;
+    for (size_t i = 0; i < cands.size(); ++i) {
+        cum += weights[i];
+        if (r <= cum) return cands[i];
+    }
+    return cands.back();
+}
+
+// ── EventEngine: _ee_select_individual_stock ─────────────────────────────────
+// Weighted pick of one non-ETF stock matching template's event_tags.
+// Respects per-stock cooldown and mutex.
+
+std::string PriceKernel::_ee_select_individual_stock(
+        const EventTemplate &tmpl, int abs_tick) {
+    std::vector<const StockState*> cands;
+    std::vector<float>             weights;
+    int cd_ticks = EE_INDIVIDUAL_COOLDOWN_MIN * 4; // TICKS_PER_MINUTE = 4
+
+    for (const auto &s : _stocks) {
+        if (s.is_etf) continue;
+
+        // Tag filter: empty event_tags = any stock eligible
+        bool tag_ok = tmpl.event_tags.empty();
+        if (!tag_ok) {
+            for (const auto &tt : tmpl.event_tags) {
+                for (const auto &st : s.event_tags) {
+                    if (tt == st) { tag_ok = true; break; }
+                }
+                if (tag_ok) break;
+            }
+        }
+        if (!tag_ok) continue;
+
+        // Per-stock cooldown
+        auto cd_it = _ee_individual_cd.find(s.stock_id);
+        if (cd_it != _ee_individual_cd.end()
+                && abs_tick - cd_it->second < cd_ticks) continue;
+
+        // Per-stock mutex (templates with {stock_id} placeholder)
+        if (!tmpl.mutex_group.empty()
+                && _ee_mutex_blocked(tmpl.mutex_group, s.stock_id)) continue;
+
+        float w = s.sector_sensitivity * EE_VOL_W[s.vol_profile];
+        cands.push_back(&s);
+        weights.push_back(w);
+    }
+
+    if (cands.empty()) return "";
+
+    float total = 0.0f;
+    for (float ww : weights) total += ww;
+    if (total <= 0.0f) return cands[0]->stock_id;
+
+    float r = _event_rng.randf() * total, cum = 0.0f;
+    for (size_t i = 0; i < cands.size(); ++i) {
+        cum += weights[i];
+        if (r <= cum) return cands[i]->stock_id;
+    }
+    return cands.back()->stock_id;
+}
+
+// ── EventEngine: helpers ──────────────────────────────────────────────────────
+
+bool PriceKernel::_ee_season_tag_ok(const EventTemplate &tmpl) const noexcept {
+    if (tmpl.season_tags.empty()) return true; // no filter = always eligible
+    for (const auto &t : tmpl.season_tags)
+        for (const auto &s : _ee_season_tags)
+            if (t == s) return true;
+    return false;
+}
+
+bool PriceKernel::_ee_cooldown_ok(const EventTemplate &tmpl, int abs_tick) const {
+    if (tmpl.cooldown_minutes <= 0) return true;
+    int cd_ticks = tmpl.cooldown_minutes * 4;
+    auto it = _ee_cooldown.find(tmpl.template_id);
+    return it == _ee_cooldown.end() || abs_tick - it->second >= cd_ticks;
+}
+
+bool PriceKernel::_ee_mutex_blocked(const std::string &mx_group,
+                                     const std::string &stock_id) const {
+    std::string key = mx_group;
+    if (!stock_id.empty()) {
+        size_t pos = key.find("{stock_id}");
+        if (pos != std::string::npos) key.replace(pos, 10, stock_id);
+    }
+    return _ee_mutex.find(key) != _ee_mutex.end();
+}
+
+void PriceKernel::_ee_register_mutex(const std::string &mx_group,
+                                      const std::string &stock_id) {
+    if (mx_group.empty()) return;
+    std::string key = mx_group;
+    if (!stock_id.empty()) {
+        size_t pos = key.find("{stock_id}");
+        if (pos != std::string::npos) key.replace(pos, 10, stock_id);
+    }
+    _ee_mutex[key] = "1";
 }
 
 // ── GDExtension binding ───────────────────────────────────────────────────────
@@ -847,6 +1317,8 @@ void PriceKernel::_bind_methods() {
                          &PriceKernel::start_day);
     ClassDB::bind_method(D_METHOD("process_all_ticks", "tick_in_day"),
                          &PriceKernel::process_all_ticks);
+    ClassDB::bind_method(D_METHOD("get_macro_states"),
+                         &PriceKernel::get_macro_states);
     ClassDB::bind_method(D_METHOD("add_player_pressure", "stock_id", "delta"),
                          &PriceKernel::add_player_pressure);
     ClassDB::bind_method(D_METHOD("set_rumor", "stock_id", "delta_per_tick", "ticks_remaining"),

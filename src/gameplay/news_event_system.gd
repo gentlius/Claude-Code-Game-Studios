@@ -25,47 +25,9 @@ signal on_rumor_hint(entry: Dictionary)
 
 enum SystemState { UNINITIALIZED, READY, ACTIVE, DAY_END, SEASON_END }
 
-# ── Constants: Slot Configuration (GDD Rule 2-1) ──
-
-## Slot ranges in game-minutes (resolved to ticks at runtime via _build_slot_config).
-## max_min 390 = GameClock.MINUTES_PER_DAY (const cannot reference autoload).
-const SLOT_CONFIG_MINUTES: Array[Dictionary] = [
-	{"name": "opening", "min_min": 1, "max_min": 100, "probability": 0.70},
-	{"name": "midday_1", "min_min": 101, "max_min": 190, "probability": 0.55},
-	{"name": "midday_2", "min_min": 191, "max_min": 280, "probability": 0.55},
-	{"name": "closing", "min_min": 281, "max_min": 390, "probability": 0.60},
-]
-
-## Resolved at _ready(): minute ranges × TICKS_PER_MINUTE.
-var _slot_config: Array[Dictionary] = []
-
-const DAILY_HARD_CAP: int = 5
-
-## Scope weights (GDD Rule 2-2)
-const BASE_SCOPE_WEIGHTS: Dictionary = {
-	"INDIVIDUAL": 0.55,
-	"SECTOR": 0.35,
-	"MACRO": 0.10,
-}
-
-## Impact tier weights (GDD Rule 2-3)
-const IMPACT_TIER_WEIGHTS: Dictionary = {
-	"SMALL": 0.35,
-	"MEDIUM": 0.40,
-	"LARGE": 0.20,
-	"MEGA": 0.05,
-}
-
-## Volatility weight for INDIVIDUAL stock selection (GDD Rule 4-2)
-const VOL_WEIGHT: Dictionary = {
-	StockData.VolatilityProfile.LOW: 0.7,
-	StockData.VolatilityProfile.MEDIUM: 1.0,
-	StockData.VolatilityProfile.HIGH: 1.2,
-	StockData.VolatilityProfile.EXTREME: 1.5,
-}
-
-## Individual target cooldown: minimum minutes between events targeting the same stock.
-const INDIVIDUAL_TARGET_COOLDOWN_MIN: int = 22  ## ~22 game-minutes
+# ── Constants: Slot/Scope/Impact/VOL weights moved to C++ PriceKernel (Phase B) ──
+# EE_SLOTS, EE_INDIVIDUAL_W/SECTOR_W/MACRO_W, EE_IMPACT_W, EE_VOL_W,
+# EE_INDIVIDUAL_COOLDOWN_MIN, EE_DAILY_HARD_CAP — see price_kernel.h.
 
 ## Overnight event probabilities (GDD Rule 6-1)
 const OVERNIGHT_PROBS: Array[float] = [0.40, 0.45, 0.15]  # 0, 1, 2 events
@@ -122,9 +84,8 @@ var _event_pool: Array[Dictionary] = []       ## Loaded event templates
 var _season_theme: Dictionary = {}            ## Active season theme
 var _all_themes: Array[Dictionary] = []       ## All available themes
 
-var _daily_schedule: Array[Dictionary] = []   ## Pre-generated slots for today
-var _daily_event_count: int = 0               ## Events fired today
-var _daily_mega_fired: bool = false            ## MEGA already fired today
+## Intraday scheduling state is owned by C++ PriceKernel EventEngine (Phase B).
+## _daily_schedule / _daily_event_count / _daily_mega_fired removed.
 
 var _news_delay_queue: Array[Dictionary] = [] ## Pending news items awaiting display
 var _overnight_buffer: Array[Dictionary] = [] ## Events for next morning
@@ -138,14 +99,7 @@ var _loaded_news_bundle: Array[Dictionary] = []
 ## Uppercase (e.g. "KR", "US"). DLC markets call set_active_market() before season start.
 var _active_market_id: String = "KR"
 
-## Cooldown tracking: template_id (or template_id+stock_id) -> last_used_tick
-var _cooldown_tracker: Dictionary = {}
-## Recent INDIVIDUAL targets: stock_id -> last_event_tick
-var _recent_individual_targets: Dictionary = {}
-## Last slot scope for clustering prevention
-var _last_slot_scope: String = ""
-## Mutex group tracking: resolved_mutex_key -> template_id (GDD Rule 3-1)
-var _daily_mutex: Dictionary = {}
+## Cooldown / individual-cd / last-slot-scope / daily-mutex owned by C++ kernel (Phase B).
 
 ## Scheduled fake rumor ticks for the current trading day.
 ## Populated by _schedule_fake_rumors() on each market open.
@@ -161,7 +115,6 @@ var _season_stats: Dictionary = {
 # ── Lifecycle ──
 
 func _ready() -> void:
-	_build_slot_config()
 	GameClock.on_season_start.connect(_on_season_start)
 	# on_tick is NOT connected here — GameClock calls _on_tick directly in
 	# _process_tick() to enforce the GDD-mandated News → Price → Order order.
@@ -173,19 +126,8 @@ func _ready() -> void:
 	PriceEngine.on_vi_triggered.connect(_on_vi_triggered)
 	PriceEngine.on_vi_released.connect(_on_vi_released)
 	PriceEngine.on_circuit_breaker.connect(_on_circuit_breaker)
-
-
-## Converts SLOT_CONFIG_MINUTES to tick-based _slot_config using GameClock constants.
-func _build_slot_config() -> void:
-	_slot_config.clear()
-	var tpm: int = GameClock.TICKS_PER_MINUTE
-	for slot: Dictionary in SLOT_CONFIG_MINUTES:
-		_slot_config.append({
-			"name": slot["name"],
-			"tick_min": int(slot["min_min"]) * tpm,
-			"tick_max": int(slot["max_min"]) * tpm,
-			"probability": slot["probability"],
-		})
+	# Phase B: receive C++ EventEngine events for headline resolution + display
+	PriceEngine.on_kernel_news.connect(_on_kernel_news)
 
 
 ## Converts game-minutes to ticks.
@@ -256,7 +198,7 @@ func load_save_data(data: Dictionary) -> void:
 		else:
 			market_event = MarketEvent.instant_shock(base_impact, direction, scope, targets)
 		PriceEngine.push_event(market_event)
-	# Must be READY so _on_market_open() calls _generate_daily_schedule() instead of
+	# Must be READY so _on_market_open() completes initialization instead of
 	# returning early. Default UNINITIALIZED silently suppresses all intraday news.
 	_state = SystemState.READY
 
@@ -274,9 +216,7 @@ func get_and_clear_loaded_news() -> Array[Dictionary]:
 ## Resets all news state. Called by GameMain (new game) and tests (before_each).
 func reset() -> void:
 	_overnight_buffer.clear()
-	_daily_mutex.clear()
 	_news_delay_queue.clear()
-	_daily_event_count = 0
 	_loaded_news_bundle.clear()
 	_fake_rumor_ticks.clear()
 	_state = SystemState.UNINITIALIZED
@@ -288,14 +228,9 @@ func _on_season_start() -> void:
 	_load_themes()
 	_select_season_theme()
 	_reset_season_stats()
-	_cooldown_tracker.clear()
-	_recent_individual_targets.clear()
 	_news_delay_queue.clear()
 	_overnight_buffer.clear()
 	_fake_rumor_ticks.clear()
-	_daily_mega_fired = false
-	_daily_event_count = 0
-	_last_slot_scope = ""
 	_state = SystemState.READY
 
 
@@ -307,12 +242,8 @@ func _on_season_end() -> void:
 func _on_market_open() -> void:
 	if _state == SystemState.UNINITIALIZED:
 		return
-	_generate_daily_schedule()
-	_daily_event_count = 0
-	_daily_mega_fired = false
+	# Phase B: intraday slot schedule generated by C++ kernel in start_day().
 	_schedule_fake_rumors()
-	_last_slot_scope = ""
-	_daily_mutex.clear()
 	_state = SystemState.ACTIVE
 
 	# Check theme hint reveal
@@ -349,8 +280,7 @@ func process_tick(tick: int, _day: int, _week: int) -> void:
 	if _state != SystemState.ACTIVE:
 		return
 
-	# Check scheduled slots
-	_check_scheduled_slots(tick)
+	# Phase B: intraday slot events generated by C++ kernel, received via _on_kernel_news().
 
 	# Check fake rumor schedule (S3 채널 — GDD Rule 5-4)
 	_check_fake_rumors(tick)
@@ -539,198 +469,81 @@ func _select_season_theme() -> void:
 		return
 	_season_theme = _all_themes[_rng.randi() % _all_themes.size()]
 
-# ── Daily Schedule Generation (GDD Rule 2-1, States section) ──
+# ── Phase B: C++ EventEngine → GDScript display handler ──────────────────────
+# Slot schedule generation / event selection / price injection moved to C++.
+# GDScript receives ui_events[], resolves headlines, and applies news delay.
 
-func _generate_daily_schedule() -> void:
-	_daily_schedule.clear()
-	for slot: Dictionary in _slot_config:
-		if _rng.randf() > slot["probability"]:
-			continue
-		var tick: int = _rng.randi_range(slot["tick_min"], slot["tick_max"])
-		var scope: String = _pick_scope()
-		var impact: String = _pick_impact()
-		_daily_schedule.append({
-			"tick": tick,
-			"scope": scope,
-			"impact": impact,
-			"fired": false,
-		})
-	# Sort by tick
-	_daily_schedule.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["tick"] < b["tick"])
+## Scope and tier name tables for C++ integer → GDScript string conversion.
+const _SCOPE_NAMES: Array[String]  = ["INDIVIDUAL", "SECTOR", "MACRO"]
+const _TIER_NAMES:  Array[String]  = ["SMALL", "MEDIUM", "LARGE", "MEGA"]
 
 
-func _check_scheduled_slots(tick: int) -> void:
-	if _daily_event_count >= DAILY_HARD_CAP:
+## Receives kernel-generated ui_events from PriceEngine.on_kernel_news.
+## Each ui_event dict: template_id, scope (int), impact_tier (int), direction,
+## tick (abs), selected_stock_id, target_stock_ids.
+func _on_kernel_news(ui_events: Array) -> void:
+	if _state != SystemState.ACTIVE:
 		return
+	for ui_event: Dictionary in ui_events:
+		_queue_kernel_event(ui_event)
 
-	for slot: Dictionary in _daily_schedule:
-		if slot["fired"]:
-			continue
-		if tick >= slot["tick"]:
-			slot["fired"] = true
-			_fire_event_from_slot(slot["scope"], slot["impact"], tick)
-			_daily_event_count += 1
-			if _daily_event_count >= DAILY_HARD_CAP:
-				break
 
-	# Minimum guarantee: if at mid-day tick and 0 events, force one
-	if tick == GameClock.TICKS_PER_DAY / 2 and _daily_event_count == 0:
-		_fire_event_from_slot("MACRO", "SMALL", tick)
-		_daily_event_count += 1
+## Resolve a kernel ui_event to a display news entry and push to the delay queue.
+func _queue_kernel_event(ui_event: Dictionary) -> void:
+	var template_id: String = str(ui_event.get("template_id", ""))
+	var scope_idx:   int    = clampi(int(ui_event.get("scope", 2)), 0, 2)
+	var tier_idx:    int    = clampi(int(ui_event.get("impact_tier", 0)), 0, 3)
+	var direction:   int    = int(ui_event.get("direction", 1))
+	var abs_tick:    int    = int(ui_event.get("tick", 0))
+	var sel_id:      String = str(ui_event.get("selected_stock_id", ""))
+	var target_ids:  Array  = ui_event.get("target_stock_ids", [])
 
-# ── Event Firing ──
+	var scope_str: String = _SCOPE_NAMES[scope_idx]
+	var tier_str:  String = _TIER_NAMES[tier_idx]
+	var tick_in_day: int  = abs_tick % GameClock.TICKS_PER_DAY
 
-func _fire_event_from_slot(scope: String, impact: String, tick: int) -> void:
-	# MEGA cap: only 1 per day
-	if impact == "MEGA" and _daily_mega_fired:
-		impact = "LARGE"
-	if impact == "MEGA":
-		_daily_mega_fired = true
-
-	# Clustering prevention: same scope as last → 50% weight penalty, re-pick once
-	if scope == _last_slot_scope and _rng.randf() < CLUSTER_PENALTY_PROB:
-		scope = _pick_scope()
-
-	var template: Dictionary = _select_template(scope, impact)
+	# Look up template for text resolution
+	var template: Dictionary = {}
+	for t: Dictionary in _event_pool:
+		if t.get("template_id", "") == template_id:
+			template = t
+			break
 	if template.is_empty():
-		# Fallback: try SMALL
-		template = _select_template(scope, "SMALL")
-		if template.is_empty():
-			return  # No template available
+		return  # Unknown template — skip display
 
-	_last_slot_scope = scope
-
-	var direction: int = _resolve_direction(template)
-	var slot_data: Dictionary = {
-		"scope": scope, "impact": impact, "tick": tick,
-		"template": template, "direction": direction,
-	}
-
-	var target: Dictionary = _resolve_event_target(slot_data)
-	if target.is_empty():
-		return
-
-	var entry: Dictionary = _create_event_entry(slot_data, target)
-	_queue_event(entry)
-	_maybe_emit_rumor(entry, target["template"], direction)
-
-
-## Determine target stock IDs (and selected_stock for INDIVIDUAL scope).
-## Returns a dict with "scope", "target_stock_ids", "selected_stock"; empty dict on failure.
-func _resolve_event_target(slot_data: Dictionary) -> Dictionary:
-	var scope: String = slot_data["scope"]
-	var impact: String = slot_data["impact"]
-	var tick: int = slot_data["tick"]
-	var template: Dictionary = slot_data["template"]
-
-	var target_stock_ids: Array[String] = []
 	var selected_stock: StockData = null
+	if not sel_id.is_empty():
+		selected_stock = StockDatabase.get_stock(sel_id)
 
-	match scope:
-		"MACRO":
-			target_stock_ids = StockDatabase.get_all_stock_ids()
-		"SECTOR":
-			var sector: String = str(template.get("target_sector", ""))
-			if sector != "" and sector != "null":
-				target_stock_ids = StockDatabase.get_stock_ids_by_sector(sector)
-		"INDIVIDUAL":
-			selected_stock = _select_individual_stock(template, tick)
-			if selected_stock == null:
-				# Escalate to SECTOR
-				scope = "SECTOR"
-				template = _select_template("SECTOR", impact)
-				if template.is_empty():
-					return {}
-				var sector2: String = str(template.get("target_sector", ""))
-				if sector2 != "" and sector2 != "null":
-					target_stock_ids = StockDatabase.get_stock_ids_by_sector(sector2)
-			else:
-				target_stock_ids = [selected_stock.stock_id]
-				# Track recent individual targets
-				_recent_individual_targets[selected_stock.stock_id] = tick
+	var headline: String = _resolve_text(template, direction, "headline", selected_stock)
+	var body:     String = _resolve_text(template, direction, "body", selected_stock)
 
-	if target_stock_ids.is_empty():
-		return {}
-
-	return {
-		"scope": scope,
-		"template": template,
-		"target_stock_ids": target_stock_ids,
-		"selected_stock": selected_stock,
-	}
-
-
-## Build the MarketEvent, push it to PriceEngine, track cooldown/mutex, and
-## assemble the news_entry dict. Returns the completed news entry.
-func _create_event_entry(slot_data: Dictionary, target: Dictionary) -> Dictionary:
-	var tick: int = slot_data["tick"]
-	var direction: int = slot_data["direction"]
-	var impact: String = slot_data["impact"]
-	var scope: String = target["scope"]
-	var template: Dictionary = target["template"]
-	var target_stock_ids: Array[String] = target["target_stock_ids"]
-	var selected_stock: StockData = target["selected_stock"]
-
-	# Compute actual impact magnitude
-	var base_impact: float = _rng.randf_range(
-		template.get("impact_min", 0.01),
-		template.get("impact_max", 0.03)
-	)
-
-	# Build and push MarketEvent
-	var event_type_str: String = template.get("event_type", "INSTANT_SHOCK")
-	var decay_minutes: int = int(template.get("decay_minutes", 0))
-	var decay_ticks: int = _minutes_to_ticks(decay_minutes)
-	var decay_curve: MarketEvent.DecayCurve = MarketEvent.DecayCurve.LINEAR
-	if template.get("decay_curve", "LINEAR") == "EXPONENTIAL":
-		decay_curve = MarketEvent.DecayCurve.EXPONENTIAL
-
-	var market_event: MarketEvent
-	if event_type_str == "INSTANT_SHOCK" or decay_minutes == 0:
-		market_event = MarketEvent.instant_shock(
-			base_impact, direction,
-			_scope_str_to_enum(scope), target_stock_ids
-		)
-	else:
-		market_event = MarketEvent.gradual_shift(
-			base_impact, direction,
-			_scope_str_to_enum(scope), target_stock_ids,
-			decay_ticks, decay_curve
-		)
-	PriceEngine.push_event(market_event)
-
-	# Track cooldown and mutex
-	var cooldown_key: String = template["template_id"]
-	if scope == "INDIVIDUAL" and selected_stock != null:
-		cooldown_key = template["template_id"] + "+" + selected_stock.stock_id
-	_cooldown_tracker[cooldown_key] = tick + GameClock.get_current_day() * GameClock.TICKS_PER_DAY
-	_register_mutex(template, selected_stock)
-
-	# Build and return news entry dict
 	var delay_ticks: int = get_news_delay()
-	return {
-		"template_id": template["template_id"],
-		"scope": scope,
-		"impact_tier": template.get("impact_tier", impact),
-		"direction": direction,
-		"headline": _resolve_text(template, direction, "headline", selected_stock),
-		"body": _resolve_text(template, direction, "body", selected_stock),
-		"impact_hint": template.get("impact_hint", ""),
-		"target_stock_ids": target_stock_ids,
-		"created_tick": tick,
-		"display_tick": tick + delay_ticks,
-		"day": GameClock.get_current_day(),
+	var entry: Dictionary = {
+		"template_id":      template_id,
+		"scope":            scope_str,
+		"impact_tier":      tier_str,
+		"direction":        direction,
+		"headline":         headline,
+		"body":             body,
+		"impact_hint":      template.get("impact_hint", ""),
+		"target_stock_ids": target_ids,
+		"created_tick":     tick_in_day,
+		"display_tick":     tick_in_day + delay_ticks,
+		"day":              GameClock.get_current_day(),
 	}
-
-
-## Append entry to the delay queue, update season stats, and emit on_event_generated.
-func _queue_event(entry: Dictionary) -> void:
 	_news_delay_queue.append(entry)
 	_season_stats["total_events"] += 1
-	_season_stats["by_scope"][entry["scope"]] = _season_stats["by_scope"].get(entry["scope"], 0) + 1
-	var tier_key: String = entry["impact_tier"]
-	_season_stats["by_impact"][tier_key] = _season_stats["by_impact"].get(tier_key, 0) + 1
+	_season_stats["by_scope"][scope_str] = _season_stats["by_scope"].get(scope_str, 0) + 1
+	_season_stats["by_impact"][tier_str] = _season_stats["by_impact"].get(tier_str, 0) + 1
 	on_event_generated.emit(entry)
+	_maybe_emit_rumor(entry, template, direction)
+
+
+# ── Removed: _generate_daily_schedule / _check_scheduled_slots / _fire_event_from_slot ──
+# ── Removed: _pick_scope / _pick_impact / _select_template / _select_individual_stock ────
+# ── Removed: _resolve_event_target / _create_event_entry — all moved to C++ (Phase B) ────
+
 
 
 ## S3 루머 채널: 이벤트 발생 후 rumor_advance_ticks 전에 루머 힌트 발행 (GDD Rule 5-4, F6)
@@ -751,7 +564,7 @@ const RUMOR_ACCURACY: float = 0.55
 
 ## Schedules FAKE_RUMOR_PER_DAY fake rumor ticks for the current trading day.
 ## Called by _on_market_open(). Ticks are stored in _fake_rumor_ticks and
-## checked each tick in process_tick() → _check_scheduled_slots().
+## checked each tick in process_tick() → _check_fake_rumors().
 func _schedule_fake_rumors() -> void:
 	_fake_rumor_ticks.clear()
 	if not SkillTree.has_rumor_channel():
@@ -762,7 +575,7 @@ func _schedule_fake_rumors() -> void:
 
 
 ## Emits on_rumor_hint if S3 is unlocked and the event's impact tier qualifies.
-## Called at the end of _fire_event_from_slot() for each real intra-day event.
+## Called by _queue_kernel_event() for each real intra-day event from C++ kernel.
 ## GDD F6: rumor_tick = event_tick - _get_rumor_advance_ticks() (clamped to 0).
 func _emit_rumor_if_eligible(
 	news_entry: Dictionary, template: Dictionary, real_direction: int, event_tick: int
@@ -811,7 +624,7 @@ func _check_fake_rumors(tick: int) -> void:
 	for i: int in range(_fake_rumor_ticks.size() - 1, -1, -1):
 		if tick >= _fake_rumor_ticks[i]:
 			_fake_rumor_ticks.remove_at(i)
-			var scope: String = _pick_scope()
+			var scope: String = _SCOPE_NAMES[_rng.randi() % _SCOPE_NAMES.size()]
 			var scope_label: String = _SCOPE_DISPLAY.get(scope, scope)
 			var rumor_entry: Dictionary = {
 				"headline": "[루머] %s 관련 이상 징후 — 미확인 정보" % scope_label,
@@ -826,139 +639,6 @@ func _check_fake_rumors(tick: int) -> void:
 			}
 			on_rumor_hint.emit(rumor_entry)
 
-# ── Template Selection (GDD Rule 2-5) ──
-
-func _select_template(scope: String, impact: String) -> Dictionary:
-	var current_tick: int = GameClock.get_current_tick()
-	var abs_tick: int = current_tick + GameClock.get_current_day() * GameClock.TICKS_PER_DAY
-	var theme_tags: Array = _season_theme.get("active_season_tags", [])
-
-	var candidates: Array[Dictionary] = []
-	var weights: Array[float] = []
-
-	for t: Dictionary in _event_pool:
-		# Scope filter
-		if t["scope"] != scope:
-			continue
-		# Impact filter
-		if t.get("impact_tier", "") != impact:
-			continue
-		# Cooldown check
-		var cd_key: String = t["template_id"]
-		if _cooldown_tracker.has(cd_key):
-			var last_tick: int = _cooldown_tracker[cd_key]
-			if abs_tick - last_tick < _minutes_to_ticks(int(t.get("cooldown_minutes", 0))):
-				continue
-		# Season tag filter
-		var s_tags: Array = t.get("season_tags", [])
-		if not s_tags.is_empty():
-			var match_found: bool = false
-			for st: String in s_tags:
-				if theme_tags.has(st):
-					match_found = true
-					break
-			if not match_found:
-				continue
-
-		# Mutex group filter (GDD Rule 3-1)
-		var mutex: Variant = t.get("mutex_group")
-		if mutex != null and mutex is String and str(mutex) != "":
-			# For MACRO/SECTOR scope, no {stock_id} placeholder to resolve yet.
-			# For INDIVIDUAL, we check all possible resolved keys.
-			var mutex_str: String = str(mutex)
-			if not mutex_str.contains("{stock_id}"):
-				# Fixed mutex key (MACRO/SECTOR) — check directly
-				if _daily_mutex.has(mutex_str):
-					continue
-			# INDIVIDUAL with {stock_id}: defer check to _is_mutex_blocked_for_stock()
-
-		# Compute weight
-		var w: float = float(t.get("weight_base", 1.0))
-		# Apply sector bias from theme
-		var t_sector: String = str(t.get("target_sector", ""))
-		if t_sector != "" and _season_theme.size() > 0:
-			var bias: Dictionary = _season_theme.get("sector_bias", {})
-			w *= float(bias.get(t_sector, 1.0))
-
-		candidates.append(t)
-		weights.append(w)
-
-	if candidates.is_empty():
-		return {}
-
-	return _weighted_random_pick(candidates, weights)
-
-# ── Scope & Impact Selection ──
-
-func _pick_scope() -> String:
-	var adjusted: Dictionary = {}
-	for scope: String in BASE_SCOPE_WEIGHTS:
-		var scale_key: String = scope.to_lower() + "_weight_scale"
-		var scale: float = float(_season_theme.get(scale_key, 1.0))
-		adjusted[scope] = float(BASE_SCOPE_WEIGHTS[scope]) * scale
-
-	# Normalize
-	var total: float = 0.0
-	for v: float in adjusted.values():
-		total += v
-
-	var r: float = _rng.randf() * total
-	var cumulative: float = 0.0
-	for scope: String in adjusted:
-		cumulative += adjusted[scope]
-		if r <= cumulative:
-			return scope
-	return "INDIVIDUAL"
-
-
-func _pick_impact() -> String:
-	var r: float = _rng.randf()
-	var cumulative: float = 0.0
-	for impact: String in IMPACT_TIER_WEIGHTS:
-		cumulative += float(IMPACT_TIER_WEIGHTS[impact])
-		if r <= cumulative:
-			return impact
-	return "SMALL"
-
-# ── INDIVIDUAL Stock Selection (GDD Rule 4-2) ──
-
-func _select_individual_stock(template: Dictionary, tick: int) -> StockData:
-	var tags: Array = template.get("event_tags", [])
-	var abs_tick: int = tick + GameClock.get_current_day() * GameClock.TICKS_PER_DAY
-
-	# Find candidate stocks with matching tags
-	var candidates: Array[StockData] = []
-	var weights: Array[float] = []
-
-	for tag in tags:
-		for stock: StockData in StockDatabase.get_stocks_by_event_tag(tag):
-			# Skip if already in candidates
-			var already: bool = false
-			for c: StockData in candidates:
-				if c.stock_id == stock.stock_id:
-					already = true
-					break
-			if already:
-				continue
-
-			# Skip if recently targeted (cooldown protection)
-			if _recent_individual_targets.has(stock.stock_id):
-				var last_t: int = _recent_individual_targets[stock.stock_id]
-				if abs_tick - last_t < _minutes_to_ticks(INDIVIDUAL_TARGET_COOLDOWN_MIN):
-					continue
-
-			# Mutex check for INDIVIDUAL templates with {stock_id} placeholder
-			if _is_mutex_blocked_for_stock(template, stock.stock_id):
-				continue
-
-			var w: float = stock.sector_sensitivity * float(VOL_WEIGHT.get(stock.volatility_profile, 1.0))
-			candidates.append(stock)
-			weights.append(w)
-
-	if candidates.is_empty():
-		return null
-
-	return _weighted_random_pick(candidates, weights)
 
 # ── Text Resolution (GDD Rule 4-1) ──
 
@@ -1212,28 +892,6 @@ func _select_overnight_template(scope: String, impact: String, overnight_mutex: 
 	if candidates.is_empty():
 		return {}
 	return _weighted_random_pick(candidates, weights)
-
-# ── Mutex Group (GDD Rule 3-1) ──
-
-## Checks if a template is mutex-blocked for a specific stock.
-func _is_mutex_blocked_for_stock(template: Dictionary, stock_id: String) -> bool:
-	var mutex: Variant = template.get("mutex_group")
-	if mutex == null or not (mutex is String) or str(mutex) == "":
-		return false
-	var key: String = str(mutex).replace("{stock_id}", stock_id)
-	return _daily_mutex.has(key)
-
-
-## Registers a mutex key after an event fires.
-func _register_mutex(template: Dictionary, stock: StockData) -> void:
-	var mutex: Variant = template.get("mutex_group")
-	if mutex == null or not (mutex is String) or str(mutex) == "":
-		return
-	var key: String = str(mutex)
-	if stock != null:
-		key = key.replace("{stock_id}", stock.stock_id)
-	_daily_mutex[key] = template["template_id"]
-
 
 # ── Utilities ──
 

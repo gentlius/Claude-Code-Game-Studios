@@ -165,6 +165,53 @@ class PriceKernel : public RefCounted {
 
     bool _cfg_loaded = false;
 
+    // ── EventEngine: compile-time slot config ────────────────────────────────
+    // Mirrors NewsEventSystem.SLOT_CONFIG_MINUTES. Minutes × TICKS_PER_MINUTE(4).
+
+    struct SlotCfg { int tick_min; int tick_max; float probability; };
+    static constexpr SlotCfg EE_SLOTS[4] = {
+        {   4,  400, 0.70f },  // opening  (1–100 min × 4)
+        { 404,  760, 0.55f },  // midday_1 (101–190 min × 4)
+        { 764, 1120, 0.55f },  // midday_2 (191–280 min × 4)
+        {1124, 1560, 0.60f },  // closing  (281–390 min × 4)
+    };
+    static constexpr int   EE_DAILY_HARD_CAP        = 5;
+    static constexpr float EE_INDIVIDUAL_W           = 0.55f;
+    static constexpr float EE_SECTOR_W               = 0.35f;
+    static constexpr float EE_MACRO_W                = 0.10f;
+    static constexpr float EE_IMPACT_W[4]            = {0.35f, 0.40f, 0.20f, 0.05f}; // S/M/L/MEGA
+    static constexpr float EE_VOL_W[4]               = {0.7f, 1.0f, 1.2f, 1.5f};     // LOW..EXTREME
+    static constexpr int   EE_INDIVIDUAL_COOLDOWN_MIN = 22;
+    static constexpr float EE_CLUSTER_PENALTY         = 0.5f;
+
+    // ── EventEngine: template and slot structs ───────────────────────────────
+
+    struct EventTemplate {
+        std::string              template_id;
+        int                      scope;          // 0=INDIVIDUAL 1=SECTOR 2=MACRO
+        int                      impact_tier;    // 0=SMALL 1=MEDIUM 2=LARGE 3=MEGA
+        int                      event_type;     // 0=INSTANT_SHOCK 1=GRADUAL_SHIFT
+        int                      direction;      // +1 / -1 / 0=VARIABLE
+        float                    impact_min;
+        float                    impact_max;
+        int                      decay_minutes;
+        int                      decay_curve;    // 0=LINEAR 1=EXPONENTIAL
+        float                    weight_base;
+        int                      cooldown_minutes;
+        std::string              target_sector;
+        std::string              mutex_group;    // may contain {stock_id}
+        bool                     exclude_same_scope = false;
+        std::vector<std::string> season_tags;
+        std::vector<std::string> event_tags;    // for INDIVIDUAL targeting
+    };
+
+    struct DailySlot {
+        int  tick;
+        int  scope;    // 0=INDIVIDUAL 1=SECTOR 2=MACRO
+        int  impact;   // 0=SMALL 1=MEDIUM 2=LARGE 3=MEGA
+        bool fired = false;
+    };
+
     // ── Internal helpers ─────────────────────────────────────────────────────
 
     int _get_tick_size(int price) const noexcept;
@@ -173,6 +220,19 @@ class PriceKernel : public RefCounted {
     void _build_scaled_matrix(int vol_profile, double out_m[7][7],
                                const double (*base_tm)[7] = nullptr) const;
     void _apply_macro_bias(const double in_m[7][7], double out_m[7][7], int macro_state) const;
+
+    // ── EventEngine helpers ──────────────────────────────────────────────────
+    void _ee_generate_daily_schedule();
+    void _ee_check_slots(int tick_in_day, Array &out_ui_events);
+    bool _ee_fire_event(int scope, int impact_tier, int tick, Array &out_ui_events);
+    int  _ee_pick_scope()  noexcept;
+    int  _ee_pick_impact() noexcept;
+    const EventTemplate* _ee_pick_template(int scope, int impact_tier, int abs_tick);
+    std::string _ee_select_individual_stock(const EventTemplate &tmpl, int abs_tick);
+    bool _ee_season_tag_ok(const EventTemplate &tmpl) const noexcept;
+    bool _ee_cooldown_ok(const EventTemplate &tmpl, int abs_tick) const;
+    bool _ee_mutex_blocked(const std::string &mx_group, const std::string &stock_id) const;
+    void _ee_register_mutex(const std::string &mx_group, const std::string &stock_id);
 
     static void _bind_methods();
 
@@ -226,12 +286,34 @@ class PriceKernel : public RefCounted {
         }
     };
 
+    // ── EventEngine: runtime state ───────────────────────────────────────────
+
+    std::vector<EventTemplate>                    _event_pool;
+    DailySlot                                     _daily_slots[EE_DAILY_HARD_CAP + 1] = {};
+    int                                           _daily_slot_count  = 0;
+    int                                           _daily_event_count = 0;
+    bool                                          _daily_mega_fired  = false;
+    int                                           _last_slot_scope   = -1;  // -1=none
+    std::unordered_map<std::string, int>          _ee_cooldown;   // key → abs_tick
+    std::unordered_map<std::string, int>          _ee_individual_cd; // stock_id → abs_tick
+    std::unordered_map<std::string, std::string>  _ee_mutex;      // key → template_id
+    Pcg32                                         _event_rng;
+    int                                           _ee_day = 0;    // current day (abs)
+
+    // Season-level EventEngine state (set by start_season())
+    std::vector<std::string>                    _ee_season_tags;
+    std::unordered_map<std::string, float>      _ee_sector_bias;
+    float _ee_macro_weight_scale      = 1.0f;
+    float _ee_sector_weight_scale     = 1.0f;
+    float _ee_individual_weight_scale = 1.0f;
+
     struct StockState {
         // identity
         std::string stock_id;
         std::string sector;
         std::string archetype;
         bool        is_etf = false;
+        std::vector<std::string> event_tags;  // for INDIVIDUAL event targeting
         // price
         int    base_price     = 0;
         int    current_price  = 0;
@@ -293,6 +375,7 @@ public:
     void      start_day(int day_number);
 
     Dictionary process_all_ticks(int tick_in_day);
+    Dictionary get_macro_states() const;
     void       add_player_pressure(String stock_id, float delta);
     void       set_rumor(String stock_id, float delta_per_tick, int ticks_remaining);
     void       inject_event(Dictionary event_entry);

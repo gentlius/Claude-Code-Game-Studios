@@ -307,6 +307,61 @@ class PriceKernel : public RefCounted {
     float _ee_sector_weight_scale     = 1.0f;
     float _ee_individual_weight_scale = 1.0f;
 
+    // ── EtfEngine: structs ───────────────────────────────────────────────────
+
+    struct EtfEntry {
+        std::string etf_id;
+        std::string sector;
+        float current_price = 0.0f;
+        float open_price    = 0.0f;
+    };
+
+    struct SectorFlowState {
+        float flow          = 0.0f;
+        float prev_flow     = 0.0f;
+        int   cooldown      = 0;
+        std::vector<float> return_history;
+    };
+
+    // ── EtfEngine: config ────────────────────────────────────────────────────
+
+    float _etf_base_price = 50000.0f;
+    std::unordered_map<std::string, std::string>              _etf_to_sector;
+    std::unordered_map<std::string, std::string>              _sector_to_etf;
+    std::unordered_map<std::string, std::string>              _sector_archetype;
+    std::unordered_map<std::string, std::vector<std::string>> _archetype_to_sectors;
+    std::unordered_map<std::string, std::unordered_map<std::string, float>> _rivalry_weights;
+
+    float _etf_flow_sensitivity       = 0.5f;
+    float _etf_flow_decay             = 0.1f;
+    float _etf_rotation_threshold     = 0.03f;
+    int   _etf_rotation_cooldown_ticks= 5;
+    float _etf_inflow_impact_min      = 0.04f;
+    float _etf_inflow_impact_max      = 0.07f;
+    float _etf_outflow_impact_min     = 0.02f;
+    float _etf_outflow_impact_max     = 0.03f;
+    int   _etf_rotation_decay_ticks   = 8;
+    int   _etf_flow_lookback          = 5;
+
+    bool _etf_config_loaded = false;
+
+    // ── EtfEngine: runtime state ─────────────────────────────────────────────
+
+    std::vector<EtfEntry>                              _etfs;
+    std::unordered_map<std::string, size_t>            _etf_index;   // etf_id → _etfs idx
+    std::unordered_map<std::string, SectorFlowState>   _sector_flow_states;  // sector → flow
+
+    // ── EtfEngine: methods ───────────────────────────────────────────────────
+
+    void        _etf_process_tick(int tick_in_day, Array &out_ui_events);
+    float       _etf_calc_price(const std::string &sector) const noexcept;
+    void        _etf_update_flow(const std::string &sector, SectorFlowState &fs) noexcept;
+    void        _etf_check_rotation(const std::string &sector, SectorFlowState &fs,
+                                    int tick_in_day, Array &out_ui_events);
+    void        _etf_fire_rotation(const std::string &sector, int direction,
+                                   int tick_in_day, Array &out_ui_events);
+    std::string _etf_pick_rival_sector(const std::string &hot_sector) noexcept;
+
     struct StockState {
         // identity
         std::string stock_id;
@@ -314,6 +369,7 @@ class PriceKernel : public RefCounted {
         std::string archetype;
         bool        is_etf = false;
         std::vector<std::string> event_tags;  // for INDIVIDUAL event targeting
+        float listed_shares = 1000000.0f;     // for ETF market-cap weighting
         // price
         int    base_price     = 0;
         int    current_price  = 0;

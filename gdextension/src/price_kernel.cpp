@@ -449,6 +449,84 @@ void PriceKernel::set_config(Dictionary cfg) {
             _event_pool.push_back(std::move(et));
         }
     }
+
+    // ── EtfEngine: etf_config ────────────────────────────────────────────────
+    _etf_config_loaded = false;
+    _etfs.clear();
+    _etf_index.clear();
+    _sector_flow_states.clear();
+    _etf_to_sector.clear();
+    _sector_to_etf.clear();
+    _sector_archetype.clear();
+    _archetype_to_sectors.clear();
+    _rivalry_weights.clear();
+
+    if (cfg.has("etf_config")) {
+        Dictionary ec = cfg["etf_config"];
+
+        if (ec.has("basePriceWon"))
+            _etf_base_price = static_cast<float>(ec["basePriceWon"]);
+
+        if (ec.has("etfs")) {
+            Array etfs = ec["etfs"];
+            for (int i = 0; i < etfs.size(); ++i) {
+                Dictionary e = etfs[i];
+                EtfEntry entry;
+                entry.etf_id        = static_cast<String>(e["id"]).utf8().get_data();
+                entry.sector        = static_cast<String>(e["sector"]).utf8().get_data();
+                entry.current_price = _etf_base_price;
+                entry.open_price    = _etf_base_price;
+                _etf_index[entry.etf_id] = _etfs.size();
+                _etf_to_sector[entry.etf_id] = entry.sector;
+                _sector_to_etf[entry.sector] = entry.etf_id;
+                _etfs.push_back(std::move(entry));
+            }
+        }
+        if (ec.has("sectorArchetypes")) {
+            Dictionary sa = ec["sectorArchetypes"];
+            Array keys = sa.keys();
+            for (int i = 0; i < keys.size(); ++i) {
+                std::string sector    = static_cast<String>(keys[i]).utf8().get_data();
+                std::string archetype = static_cast<String>(sa[keys[i]]).utf8().get_data();
+                _sector_archetype[sector] = archetype;
+                _archetype_to_sectors[archetype].push_back(sector);
+            }
+        }
+        if (ec.has("rivalryWeights")) {
+            Dictionary rw = ec["rivalryWeights"];
+            Array arches = rw.keys();
+            for (int i = 0; i < arches.size(); ++i) {
+                std::string arch = static_cast<String>(arches[i]).utf8().get_data();
+                Dictionary row = rw[arches[i]];
+                Array rivals = row.keys();
+                for (int j = 0; j < rivals.size(); ++j) {
+                    std::string rival = static_cast<String>(rivals[j]).utf8().get_data();
+                    _rivalry_weights[arch][rival] = static_cast<float>(row[rivals[j]]);
+                }
+            }
+        }
+        if (ec.has("rotationParams")) {
+            Dictionary rp = ec["rotationParams"];
+            if (rp.has("flowSensitivity"))      _etf_flow_sensitivity       = static_cast<float>(rp["flowSensitivity"]);
+            if (rp.has("flowDecay"))            _etf_flow_decay             = static_cast<float>(rp["flowDecay"]);
+            if (rp.has("rotationThreshold"))    _etf_rotation_threshold     = static_cast<float>(rp["rotationThreshold"]);
+            if (rp.has("rotationCooldownTicks"))_etf_rotation_cooldown_ticks= static_cast<int>(rp["rotationCooldownTicks"]);
+            if (rp.has("inflowImpactMin"))      _etf_inflow_impact_min      = static_cast<float>(rp["inflowImpactMin"]);
+            if (rp.has("inflowImpactMax"))      _etf_inflow_impact_max      = static_cast<float>(rp["inflowImpactMax"]);
+            if (rp.has("outflowImpactMin"))     _etf_outflow_impact_min     = static_cast<float>(rp["outflowImpactMin"]);
+            if (rp.has("outflowImpactMax"))     _etf_outflow_impact_max     = static_cast<float>(rp["outflowImpactMax"]);
+            if (rp.has("rotationDecayTicks"))   _etf_rotation_decay_ticks   = static_cast<int>(rp["rotationDecayTicks"]);
+            if (rp.has("flowLookbackTicks"))    _etf_flow_lookback          = static_cast<int>(rp["flowLookbackTicks"]);
+        }
+
+        // Initialize sector flow states
+        for (auto &etf : _etfs) {
+            SectorFlowState fs;
+            _sector_flow_states[etf.sector] = std::move(fs);
+        }
+
+        _etf_config_loaded = true;
+    }
 }
 
 // ── init_stock ────────────────────────────────────────────────────────────────
@@ -482,6 +560,8 @@ void PriceKernel::init_stock(String stock_id, Dictionary stock_data) {
         s.sector_sensitivity = static_cast<float>(stock_data["sector_sensitivity"]);
     if (stock_data.has("is_etf"))
         s.is_etf = static_cast<bool>(stock_data["is_etf"]);
+    if (stock_data.has("listed_shares"))
+        s.listed_shares = static_cast<float>(stock_data["listed_shares"]);
     if (stock_data.has("macro_state"))
         s.macro_state = std::max(0, std::min(2, static_cast<int>(stock_data["macro_state"])));
     if (stock_data.has("event_tags")) {
@@ -570,6 +650,19 @@ void PriceKernel::start_season(int season_number, Dictionary season_theme) {
     _last_slot_scope   = -1;
     _ee_day            = 0;
 
+    // Reset per-season ETF state (flows/cooldowns reset each season; ETF prices carry forward)
+    if (_etf_config_loaded) {
+        for (auto &[sector, fs] : _sector_flow_states) {
+            fs.flow          = 0.0f;
+            fs.prev_flow     = 0.0f;
+            fs.cooldown      = 0;
+            fs.return_history.clear();
+        }
+        for (auto &etf : _etfs) {
+            etf.open_price = etf.current_price;  // snapshot as new season start price
+        }
+    }
+
     // Reset per-stock VI counters
     for (auto &s : _stocks) {
         s.vi_count_today = 0;
@@ -623,6 +716,17 @@ void PriceKernel::start_day(int day_number) {
         s.vi_cooldown        = 0;
         s.vi_count_today     = 0;
     }
+
+    // EtfEngine: snapshot open prices at start of day
+    if (_etf_config_loaded) {
+        for (auto &etf : _etfs) {
+            etf.open_price = etf.current_price;
+        }
+        // Decrement rotation cooldowns
+        for (auto &[sector, fs] : _sector_flow_states) {
+            if (fs.cooldown > 0) --fs.cooldown;
+        }
+    }
 }
 
 // ── get_macro_states ──────────────────────────────────────────────────────────
@@ -635,6 +739,163 @@ Dictionary PriceKernel::get_macro_states() const {
         out[String(s.stock_id.c_str())] = s.macro_state;
     }
     return out;
+}
+
+// ── EtfEngine ─────────────────────────────────────────────────────────────────
+// Called after the main stock price loop each tick. Computes ETF prices from
+// constituent market caps, updates sector flows, and fires rotation events.
+
+void PriceKernel::_etf_process_tick(int tick_in_day, Array &out_ui_events) {
+    // 1. Recompute all ETF prices from updated stock prices
+    for (auto &etf : _etfs) {
+        etf.current_price = _etf_calc_price(etf.sector);
+        // Sync back to StockState for consistent price queries
+        auto it = _stock_index.find(etf.etf_id);
+        if (it != _stock_index.end())
+            _stocks[it->second].current_price = static_cast<int>(etf.current_price);
+    }
+
+    // 2. Update sector flows and check rotation triggers
+    for (auto &[sector, fs] : _sector_flow_states) {
+        _etf_update_flow(sector, fs);
+        _etf_check_rotation(sector, fs, tick_in_day, out_ui_events);
+    }
+}
+
+// F1: sector market-cap weighted return → ETF price.
+// etf_price = ETF_BASE_PRICE × (1 + sector_return), clamped ≥ 1.
+float PriceKernel::_etf_calc_price(const std::string &sector) const noexcept {
+    float base_mcap = 0.0f;
+    float curr_mcap = 0.0f;
+    for (const auto &s : _stocks) {
+        if (s.sector == sector && !s.is_etf) {
+            base_mcap += static_cast<float>(s.base_price) * s.listed_shares;
+            curr_mcap += static_cast<float>(s.current_price) * s.listed_shares;
+        }
+    }
+    if (base_mcap <= 0.0f) return _etf_base_price;
+    float ret = curr_mcap / base_mcap - 1.0f;
+    return std::max(1.0f, _etf_base_price * (1.0f + ret));
+}
+
+// F3: update rolling momentum → sector_flow.
+void PriceKernel::_etf_update_flow(const std::string &sector,
+                                   SectorFlowState &fs) noexcept {
+    // Compute current return from ETF price
+    float current_return = 0.0f;
+    auto it = _sector_to_etf.find(sector);
+    if (it != _sector_to_etf.end()) {
+        auto eit = _etf_index.find(it->second);
+        if (eit != _etf_index.end())
+            current_return = _etfs[eit->second].current_price / _etf_base_price - 1.0f;
+    }
+
+    // Maintain rolling history (capped at _etf_flow_lookback)
+    fs.return_history.push_back(current_return);
+    while (static_cast<int>(fs.return_history.size()) > _etf_flow_lookback)
+        fs.return_history.erase(fs.return_history.begin());
+
+    // Compute momentum: current_return - avg of all-but-last history
+    float prev_avg = 0.0f;
+    if (fs.return_history.size() >= 2) {
+        float sum = 0.0f;
+        for (size_t i = 0; i + 1 < fs.return_history.size(); ++i)
+            sum += fs.return_history[i];
+        prev_avg = sum / static_cast<float>(fs.return_history.size() - 1);
+    }
+    float momentum = current_return - prev_avg;
+
+    fs.prev_flow = fs.flow;
+    fs.flow = std::clamp(
+        (fs.flow + momentum * _etf_flow_sensitivity) * (1.0f - _etf_flow_decay),
+        -1.0f, 1.0f
+    );
+}
+
+// F4: fire rotation event if |flow_delta| > threshold and cooldown == 0.
+void PriceKernel::_etf_check_rotation(const std::string &sector,
+                                      SectorFlowState &fs,
+                                      int tick_in_day,
+                                      Array &out_ui_events) {
+    if (fs.cooldown > 0) return;
+    float delta = fs.flow - fs.prev_flow;
+    if (std::abs(delta) <= _etf_rotation_threshold) return;
+
+    fs.cooldown = _etf_rotation_cooldown_ticks;
+
+    if (delta > 0.0f) {
+        _etf_fire_rotation(sector, 1, tick_in_day, out_ui_events);
+    } else {
+        _etf_fire_rotation(sector, -1, tick_in_day, out_ui_events);
+        std::string rival = _etf_pick_rival_sector(sector);
+        if (!rival.empty())
+            _etf_fire_rotation(rival, -1, tick_in_day, out_ui_events);
+    }
+}
+
+// Inject a GRADUAL_SHIFT event into all sector stocks; append ROTATION ui_event.
+void PriceKernel::_etf_fire_rotation(const std::string &sector, int direction,
+                                     int tick_in_day, Array &out_ui_events) {
+    float impact;
+    Pcg32 &rng = _event_rng;  // reuse EventEngine RNG for rotation impact
+    if (direction > 0)
+        impact = rng.randf_range(_etf_inflow_impact_min, _etf_inflow_impact_max);
+    else
+        impact = rng.randf_range(_etf_outflow_impact_min, _etf_outflow_impact_max);
+
+    // Inject gradual shift into each non-ETF stock in the sector
+    IncomingEvent ev;
+    ev.scope       = 1;  // SECTOR
+    ev.base_impact = impact;
+    ev.direction   = direction;
+    ev.event_type  = 1;  // GRADUAL_SHIFT
+    ev.decay_ticks = _etf_rotation_decay_ticks;
+    ev.decay_curve = 0;  // LINEAR
+
+    for (auto &s : _stocks) {
+        if (s.sector == sector && !s.is_etf)
+            s.incoming_events.push_back(ev);
+    }
+
+    // Build ui_event for GDScript (headline resolution, news display)
+    Dictionary ui_event;
+    ui_event["type"]      = String("ROTATION");
+    ui_event["sector"]    = String(sector.c_str());
+    ui_event["direction"] = direction;
+    ui_event["impact"]    = impact;
+    ui_event["tick"]      = tick_in_day;
+    out_ui_events.push_back(ui_event);
+}
+
+// Weighted random rival sector from a different archetype.
+std::string PriceKernel::_etf_pick_rival_sector(const std::string &hot_sector) noexcept {
+    auto arch_it = _sector_archetype.find(hot_sector);
+    if (arch_it == _sector_archetype.end()) return {};
+    const std::string &archetype = arch_it->second;
+
+    auto rw_it = _rivalry_weights.find(archetype);
+    if (rw_it == _rivalry_weights.end()) return {};
+
+    // Weighted pick of rival archetype
+    float total = 0.0f;
+    for (const auto &[arch, w] : rw_it->second) total += w;
+    float r = _event_rng.randf() * total;
+    float cum = 0.0f;
+    std::string rival_arch;
+    for (const auto &[arch, w] : rw_it->second) {
+        cum += w;
+        if (r <= cum) { rival_arch = arch; break; }
+    }
+    if (rival_arch.empty()) return {};
+
+    // Pick random sector within rival archetype, excluding hot_sector
+    auto sec_it = _archetype_to_sectors.find(rival_arch);
+    if (sec_it == _archetype_to_sectors.end()) return {};
+    std::vector<std::string> candidates;
+    for (const auto &s : sec_it->second)
+        if (s != hot_sector) candidates.push_back(s);
+    if (candidates.empty()) return {};
+    return candidates[_event_rng.randi() % static_cast<uint32_t>(candidates.size())];
 }
 
 // ── inject_event ──────────────────────────────────────────────────────────────
@@ -970,13 +1231,32 @@ Dictionary PriceKernel::process_all_ticks(int tick_in_day) {
         }
     }
 
+    // EtfEngine: compute ETF prices, update flows, fire rotation events (Phase C)
+    Dictionary etf_prices_out;
+    Dictionary sector_flows_out;
+    Dictionary rotation_cooldowns_out;
+    if (_etf_config_loaded) {
+        _etf_process_tick(tick_in_day, ui_events);
+        for (const auto &etf : _etfs) {
+            etf_prices_out[String(etf.etf_id.c_str())] = etf.current_price;
+            // Also push ETF price into the main prices dict so PriceEngine's loop picks it up
+            prices[String(etf.etf_id.c_str())] = static_cast<int>(etf.current_price);
+        }
+        for (const auto &[sector, fs] : _sector_flow_states) {
+            sector_flows_out[String(sector.c_str())]          = fs.flow;
+            rotation_cooldowns_out[String(sector.c_str())]   = fs.cooldown;
+        }
+    }
+
     Dictionary result;
-    result["prices"]     = prices;
-    result["volumes"]    = volumes;
-    result["vi_hits"]    = vi_hits;
-    result["ui_events"]  = ui_events;
-    result["a3_updates"] = Array();       // Phase D
-    result["etf_prices"] = Dictionary();  // Phase C
+    result["prices"]              = prices;
+    result["volumes"]             = volumes;
+    result["vi_hits"]             = vi_hits;
+    result["ui_events"]           = ui_events;
+    result["a3_updates"]          = Array();        // Phase D
+    result["etf_prices"]          = etf_prices_out;
+    result["sector_flows"]        = sector_flows_out;
+    result["rotation_cooldowns"]  = rotation_cooldowns_out;
     return result;
 }
 

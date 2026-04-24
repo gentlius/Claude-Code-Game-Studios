@@ -490,6 +490,10 @@ func _on_kernel_news(ui_events: Array) -> void:
 
 ## Resolve a kernel ui_event to a display news entry and push to the delay queue.
 func _queue_kernel_event(ui_event: Dictionary) -> void:
+	# Phase C: ROTATION events have a separate display path (no template lookup).
+	if ui_event.get("type", "EVENT") == "ROTATION":
+		_queue_rotation_headline(ui_event)
+		return
 	var template_id: String = str(ui_event.get("template_id", ""))
 	var scope_idx:   int    = clampi(int(ui_event.get("scope", 2)), 0, 2)
 	var tier_idx:    int    = clampi(int(ui_event.get("impact_tier", 0)), 0, 3)
@@ -538,6 +542,44 @@ func _queue_kernel_event(ui_event: Dictionary) -> void:
 	_season_stats["by_impact"][tier_str] = _season_stats["by_impact"].get(tier_str, 0) + 1
 	on_event_generated.emit(entry)
 	_maybe_emit_rumor(entry, template, direction)
+
+
+## Phase C: Build a display headline for a ROTATION ui_event from the C++ ETF engine.
+## Price impact is already applied by C++ (no MarketEvent created here).
+func _queue_rotation_headline(ui_event: Dictionary) -> void:
+	var sector:      String = str(ui_event.get("sector", ""))
+	var direction:   String = str(ui_event.get("direction", "inflow"))
+	var impact:      float  = float(ui_event.get("impact", 0.0))
+	var tick_in_day: int    = int(ui_event.get("tick", 0))
+	if sector.is_empty():
+		return
+	var headline_key: String = MarketProfile.get_rotation_headline(direction)
+	if headline_key.is_empty():
+		return
+	var dir_int: int = 1 if direction == "inflow" else -1
+	var delay_ticks: int = get_news_delay()
+	var stocks: Array[StockData] = StockDatabase.get_stocks_by_sector(sector)
+	var target_ids: Array = []
+	for s: StockData in stocks:
+		target_ids.append(s.stock_id)
+	var entry: Dictionary = {
+		"headline":         tr(headline_key).format({"sector": sector}),
+		"body":             "",
+		"impact_hint":      "positive" if dir_int > 0 else "negative",
+		"scope":            "SECTOR",
+		"impact_tier":      "MEDIUM",
+		"direction":        dir_int,
+		"sector":           sector,
+		"target_stock_ids": target_ids,
+		"created_tick":     tick_in_day,
+		"display_tick":     tick_in_day + delay_ticks,
+		"day":              GameClock.get_current_day(),
+		"is_kernel":        true,
+		"impact":           impact,
+	}
+	_news_delay_queue.append(entry)
+	_season_stats["total_events"] += 1
+	on_event_generated.emit(entry)
 
 
 # ── Removed: _generate_daily_schedule / _check_scheduled_slots / _fire_event_from_slot ──

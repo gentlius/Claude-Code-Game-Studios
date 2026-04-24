@@ -464,6 +464,14 @@ func _build_kernel_cfg() -> Dictionary:
 			)
 		ep_file.close()
 
+	# Phase C: EtfEngine — pass etf_config to C++ kernel (ADR-027).
+	var etf_file := FileAccess.open("res://assets/data/etf_config.json", FileAccess.READ)
+	if etf_file != null:
+		var etf_json := JSON.new()
+		if etf_json.parse(etf_file.get_as_text()) == OK:
+			cfg["etf_config"] = etf_json.data
+		etf_file.close()
+
 	return cfg
 
 
@@ -646,6 +654,7 @@ func initialize_for_load(save_data: Dictionary) -> void:
 			"is_etf":              false,
 			"macro_state":         int(s.get("macro_state", MacroState.FLAT)),
 			"event_tags":          stock.event_tags,
+			"listed_shares":       stock.listed_shares,
 		})
 	_kernel.start_season(int(save_data.get("season_count", 1)),
 		NewsEventSystem.get_season_theme())
@@ -997,15 +1006,13 @@ func push_event(event: MarketEvent) -> void:
 		})
 
 
-## Inject an ETF price directly into the price cache (sector-etf.md §3-2, ADR-021).
-## Called by EtfManager each tick after calculating the sector-weighted price.
-## Creates a minimal state entry on first call — ETF entries bypass Markov processing.
-## The minimal entry carries the same keys that _generate_daily_ohlcv() and
-## _reset_order_books() iterate over, so existing hot-path code handles ETFs naturally.
+## Register an ETF in the price cache (sector-etf.md §3-2, ADR-021, ADR-027 Phase C).
+## Called by EtfManager at season init and save load to create the _stock_states entry.
+## Per-tick ETF prices now come from C++ PriceKernel via process_all_ticks() etf_prices.
 ## AC-13: price is clamped to ≥ 1원.
 ##
 ## Example:
-##   PriceEngine.inject_price("ETF_반도체", 51224.0)
+##   PriceEngine.inject_price("ETF_반도체", 50000.0)  # season init
 func inject_price(etf_id: String, price: float) -> void:
 	var clamped: int = maxi(1, roundi(price))
 	if not _stock_states.has(etf_id):
@@ -1022,17 +1029,9 @@ func inject_price(etf_id: String, price: float) -> void:
 			"event_queue":       [],
 			"is_etf":            true,
 		}
-		# Register ETF with kernel so it appears in process_all_ticks() prices dict.
-		_kernel.init_stock(etf_id, {
-			"base_price":    clamped,
-			"current_price": clamped,
-			"prev_day_close": clamped,
-			"is_etf":        true,
-		})
-	var state: Dictionary = _stock_states[etf_id]
-	state["current_price"] = clamped
-	(state["tick_prices"] as Array[int]).append(clamped)
-	(state["tick_volumes"] as Array[float]).append(0.0)
+		# Phase C: ETFs are registered with the kernel via etf_config in set_config().
+		# No init_stock() call needed here.
+	_stock_states[etf_id]["current_price"] = clamped
 
 
 # ── Season Initialization ──
@@ -1119,6 +1118,7 @@ func init_first_season() -> void:
 			"is_etf":              false,
 			"macro_state":         int(s.get("macro_state", MacroState.FLAT)),
 			"event_tags":          stock.event_tags,
+			"listed_shares":       stock.listed_shares,
 		})
 	_kernel.start_season(1, NewsEventSystem.get_season_theme())
 	_kernel.start_day(0)
@@ -1170,6 +1170,7 @@ func sync_prices_from_prehistory() -> void:
 			"is_etf":             false,
 			"macro_state":        int(state.get("macro_state", MacroState.FLAT)),
 			"event_tags":         stock.event_tags,
+			"listed_shares":      stock.listed_shares,
 		})
 
 
@@ -1288,10 +1289,20 @@ func process_tick(tick_number: int, _day: int, _week: int) -> void:
 		var s: Dictionary = _stock_states[stock_id]
 		var new_price: int = int(_k_prices[stock_id])
 		s["current_price"] = new_price
-		# Append to tick buffers (ETFs are managed by inject_price — skip here).
-		if not s.get("is_etf", false):
-			(s["tick_prices"]  as Array[int]).append(new_price)
+		(s["tick_prices"] as Array[int]).append(new_price)
+		if s.get("is_etf", false):
+			(s["tick_volumes"] as Array[float]).append(0.0)
+		else:
 			(s["tick_volumes"] as Array[float]).append(float(_k_volumes.get(stock_id, 0.0)))
+
+	# Phase C: sync EtfManager with kernel ETF results.
+	var _k_etf_prices: Dictionary = _tick_result.get("etf_prices", {})
+	if not _k_etf_prices.is_empty():
+		EtfManager.sync_from_kernel(
+			_k_etf_prices,
+			_tick_result.get("sector_flows", {}),
+			_tick_result.get("rotation_cooldowns", {})
+		)
 
 	# Emit VI trigger signals from kernel results.
 	var _halt_ticks: int = _minutes_to_ticks(VI_HALT_MINUTES)

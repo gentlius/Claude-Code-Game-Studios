@@ -395,6 +395,7 @@ func test_etf_manager_api():
 	assert_true(EtfManager.has_method("is_etf"),              "is_etf 존재")
 	assert_true(EtfManager.has_method("get_all_etf_ids"),     "get_all_etf_ids 존재")
 	assert_true(EtfManager.has_method("process_tick"),        "process_tick 존재")
+	assert_true(EtfManager.has_method("sync_from_kernel"),    "sync_from_kernel 존재")  # Phase C
 	assert_true(EtfManager.has_method("get_save_data"),       "get_save_data 존재")
 	assert_true(EtfManager.has_method("load_save_data"),      "load_save_data 존재")
 	assert_true(EtfManager.has_method("reset"),               "reset 존재")

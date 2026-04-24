@@ -25,9 +25,10 @@ var history_seed: int = 0
 ## Current season's bars live in PriceEngine, not here.
 var _past_daily: Dictionary = {}
 
-## Lazy cache for _get_all_daily() results — keyed by stock_id.
-## Invalidated by reset() and _on_season_ended() (which appends real bars).
-var _daily_cache: Dictionary = {}
+## Lazy cache for stable bars only (pre-history + completed past seasons) — keyed by stock_id.
+## Current season bars are ALWAYS fetched fresh from PriceEngine (not cached here).
+## Invalidated by reset() and _on_season_ended() (which appends new past-season bars).
+var _stable_cache: Dictionary = {}
 
 # ── Lifecycle ──
 
@@ -40,7 +41,7 @@ func _ready() -> void:
 func reset() -> void:
 	history_seed = _new_seed()
 	_past_daily.clear()
-	_daily_cache.clear()
+	_stable_cache.clear()
 
 
 # ── Public API ──
@@ -84,7 +85,7 @@ func get_save_data() -> Dictionary:
 func load_save_data(data: Dictionary) -> void:
 	history_seed = data.get("history_seed", 0)
 	_past_daily.clear()
-	_daily_cache.clear()
+	_stable_cache.clear()
 	var saved: Dictionary = data.get("past_daily", {})
 	for stock_id: String in saved.keys():
 		var bars_raw: Variant = saved[stock_id]
@@ -110,28 +111,27 @@ func _on_season_ended(_final_rank: int, _is_free_market: bool, _season_return_pc
 			_past_daily[sid] = []
 		(_past_daily[sid] as Array).append_array(bars)
 	# Invalidate cache — _past_daily now contains new bars.
-	_daily_cache.clear()
+	_stable_cache.clear()
 
 
 # ── Private Helpers ──
 
 func _get_all_daily(stock_id: String) -> Array[Dictionary]:
-	if _daily_cache.has(stock_id):
-		return _daily_cache[stock_id] as Array[Dictionary]
-
 	var result: Array[Dictionary] = [] as Array[Dictionary]
-	# 1. Synthetic pre-history (deterministic, generated on demand).
-	if history_seed != 0:
-		result.append_array(_generate_pre_history(stock_id))
-	# 2. Real past seasons.
-	if _past_daily.has(stock_id):
-		var past: Array = _past_daily[stock_id]
-		for bar: Variant in past:
-			result.append(bar as Dictionary)
-	# 3. Current season from PriceEngine.
-	result.append_array(PriceEngine.get_ohlcv_history(stock_id))
 
-	_daily_cache[stock_id] = result
+	# Stable portion (pre-history + completed past seasons) is cached.
+	if not _stable_cache.has(stock_id):
+		var stable: Array[Dictionary] = []
+		if history_seed != 0:
+			stable.append_array(_generate_pre_history(stock_id))
+		if _past_daily.has(stock_id):
+			for bar: Variant in (_past_daily[stock_id] as Array):
+				stable.append(bar as Dictionary)
+		_stable_cache[stock_id] = stable
+
+	result.append_array(_stable_cache[stock_id] as Array[Dictionary])
+	# Current season always fetched fresh — changes each trading day.
+	result.append_array(PriceEngine.get_ohlcv_history(stock_id))
 	return result
 
 

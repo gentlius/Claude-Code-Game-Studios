@@ -596,6 +596,9 @@ func get_save_data() -> Dictionary:
 		"weekly_start_capital": _weekly_start_capital,
 		"weekly_trade_count": _weekly_trade_count,
 		"seasons_played": _seasons_played,
+		# H-06: persist comeback state so a mid-session save/load preserves eligibility.
+		"consecutive_free_market_seasons": _consecutive_free_market_seasons,
+		"is_comeback_season": _is_comeback_season,
 	}
 
 
@@ -607,6 +610,9 @@ func load_save_data(data: Dictionary) -> void:
 	_weekly_start_capital = data.get("weekly_start_capital", 0)
 	_weekly_trade_count = data.get("weekly_trade_count", 0)
 	_seasons_played = data.get("seasons_played", 0)  # 픽션 날짜 복원용 (EC: 구버전 세이브 → 0)
+	# H-06: restore comeback eligibility counters (default 0/false for pre-fix saves).
+	_consecutive_free_market_seasons = data.get("consecutive_free_market_seasons", 0)
+	_is_comeback_season = data.get("is_comeback_season", false)
 
 
 ## Resets all season state. Called by GameMain (new game) and tests (before_each).

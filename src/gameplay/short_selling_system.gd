@@ -191,9 +191,13 @@ func close_position(order: Dictionary) -> int:
 	var cover_cost: int = cover_price * pos["quantity"]
 	var pnl: int = (pos["open_price"] - cover_price) * pos["quantity"]
 
+	# M-12: return early if the cover-cost deduction fails — do NOT close the position.
+	# Without this guard the position was erased even when the deduction failed,
+	# effectively giving the player free cover and corrupting cash state.
 	if not CurrencySystem.sim_deduct(cover_cost):
-		push_error("ShortSellingSystem.close_position: sim_deduct failed for %s (cost=%d, balance=%d)" \
+		push_error("ShortSellingSystem.close_position: sim_deduct failed for %s (cost=%d, balance=%d) — position NOT closed" \
 			% [stock_id, cover_cost, CurrencySystem.get_sim_cash()])
+		return 0
 	CurrencySystem.sim_add(maxi(0, pos["margin_deposited"] + pnl))
 
 	_restore_borrow_pool(stock_id, pos["quantity"])

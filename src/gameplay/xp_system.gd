@@ -264,14 +264,20 @@ func _calculate_season_xp(final_rank: int, season_return_pct: float) -> Dictiona
 	}
 
 
-## GDD F1: daily_xp = floor(BASE_DAILY_XP × daily_return_multiplier)
-func _calculate_daily_xp(daily_return_pct: float) -> int:
-	var multiplier: float = 0.5  # default fallback
+## Returns the daily XP multiplier for the given alpha/return percentage.
+## M-15: Single source for the DAILY_RETURN_MULTIPLIERS lookup shared by
+## _calculate_daily_xp() and get_daily_xp_breakdown().
+func _get_daily_multiplier(alpha_pct: float) -> float:
 	for entry: Array in DAILY_RETURN_MULTIPLIERS:
-		if daily_return_pct >= entry[0]:
-			multiplier = entry[1]
-			break
-	return int(floor(BASE_DAILY_XP * multiplier))
+		if alpha_pct >= entry[0]:
+			return entry[1]
+	return 0.5  # default fallback (should be unreachable with -INF sentinel row)
+
+
+## GDD F1: daily_xp = floor(BASE_DAILY_XP × daily_return_multiplier)
+## M-15: delegates to _get_daily_multiplier() — no duplicated loop.
+func _calculate_daily_xp(daily_return_pct: float) -> int:
+	return int(floor(BASE_DAILY_XP * _get_daily_multiplier(daily_return_pct)))
 
 
 # ── Signal Handlers ──

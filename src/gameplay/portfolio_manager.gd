@@ -9,6 +9,12 @@ signal holding_added(stock_id: String, quantity: int, price: int)
 signal holding_removed(stock_id: String, quantity: int, price: int, realized_pnl: int)
 signal valuation_updated(total_assets: int, return_rate: float)
 
+# ── Constants ──
+
+## M-13: Cap in-memory transaction history to prevent unbounded growth during a session.
+## The save system already caps persistence at 20 entries; this caps runtime memory.
+const MAX_TRANSACTIONS: int = 1000
+
 # ── State ──
 
 var _holdings: Dictionary = {}         ## stock_id -> HoldingEntry dict
@@ -295,3 +301,6 @@ func _record_transaction(
 		"realized_pnl": realized_pnl if type == "SELL" else 0,
 	})
 	_next_tx_id += 1
+	# M-13: cap in-memory transaction list to prevent unbounded growth.
+	if _transactions.size() > MAX_TRANSACTIONS:
+		_transactions = _transactions.slice(_transactions.size() - MAX_TRANSACTIONS)

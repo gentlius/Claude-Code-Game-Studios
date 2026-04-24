@@ -15,16 +15,18 @@ signal on_skill_unlocked(skill_id: String)
 ##   prerequisites: Array[String]  (skill IDs)
 
 # ── Config (Tuning Knobs) ──
+# M-14: @export has no effect on Autoload singletons — removed to avoid confusion.
+# TODO: move these values to assets/data/skill_tree_config.json for designer tunability.
 
-@export var SKILL_COST: int = 1
-@export var NEWS_DELAY_T0_MIN: int = 5   ## 5 game-minutes delay (no skill) — reduced from 10 per UX audit (40틱→20틱)
-@export var NEWS_DELAY_T1_MIN: int = 2   ## 2 game-minutes delay (S1 unlocked) — reduced from 5 to preserve S1 upgrade value
-@export var RUMOR_BASE_ACCURACY: float = 0.7
-@export var RUMOR_LEAD_MINUTES: int = 15  ## 15 game-minutes rumor lead time
-@export var LEVERAGE_RATIO: float = 2.0
-@export var MAX_HOLDINGS_T0: int = 3
-@export var MAX_HOLDINGS_T1: int = 5
-@export var MAX_HOLDINGS_T2: int = 10
+var SKILL_COST: int = 1
+var NEWS_DELAY_T0_MIN: int = 5   ## 5 game-minutes delay (no skill) — reduced from 10 per UX audit (40틱→20틱)
+var NEWS_DELAY_T1_MIN: int = 2   ## 2 game-minutes delay (S1 unlocked) — reduced from 5 to preserve S1 upgrade value
+var RUMOR_BASE_ACCURACY: float = 0.7
+var RUMOR_LEAD_MINUTES: int = 15  ## 15 game-minutes rumor lead time
+var LEVERAGE_RATIO: float = 2.0
+var MAX_HOLDINGS_T0: int = 3
+var MAX_HOLDINGS_T1: int = 5
+var MAX_HOLDINGS_T2: int = 10
 
 # ── Skill Definitions ──
 

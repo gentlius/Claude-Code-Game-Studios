@@ -132,8 +132,6 @@ func _ready() -> void:
 	# SeasonManager dependency removed — GameClock is the sole timer source.
 	# GDD: lifestyle-spending.md §3-1
 	GameClock.on_market_close.connect(_on_market_close)
-	# Scholarship buff lifecycle: pending → active on season start → cleared after day 0.
-	GameClock.on_market_close.connect(_tick_scholarship_buff)
 	GameClock.on_season_start.connect(_on_season_start_scholarship)
 
 
@@ -489,6 +487,7 @@ func _grant_title(title_id: String) -> void:
 
 func _on_market_close() -> void:
 	process_market_close(GameClock.get_current_day(), GameClock.get_current_week())
+	_tick_scholarship_buff()  # explicit ordering: settlement first, then buff expiry
 
 
 ## Activates scholarship buff at the start of the next season (pending → active).

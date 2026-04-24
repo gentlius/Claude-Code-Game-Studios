@@ -273,6 +273,11 @@ var _markov: Object = null
 ## ADR-027 Phase A: C++ PriceKernel — stateful per-tick engine for all non-ETF stocks.
 var _kernel: Object = null
 
+## H-01: Dedicated kernel instance for run_historical_simulation().
+## Stored as an instance variable so it can be freed after simulation completes.
+## null when no historical simulation is in progress.
+var _hist_kernel: Object = null
+
 ## VI halt countdown tracked GDScript-side for on_vi_released and is_vi_halted() queries.
 ## Populated from vi_hits returned by _kernel.process_all_ticks(); decremented each tick.
 var _vi_halt_remaining: Dictionary = {}  ## stock_id → ticks remaining
@@ -748,17 +753,18 @@ func restore_report_state(state: Dictionary) -> void:
 func run_historical_simulation(n_seasons: int, days_per_season: int,
 		ticks_per_day: int, theme_sequence: Array,
 		seed: int) -> Dictionary:
-	var hist_kernel: Object = ClassDB.instantiate("PriceKernel")
-	if hist_kernel == null:
+	# H-01: use instance variable so _hist_kernel can be freed after completion.
+	_hist_kernel = ClassDB.instantiate("PriceKernel")
+	if _hist_kernel == null:
 		push_error("PriceEngine: PriceKernel 인스턴스 생성 실패 (historical sim)")
 		return {}
-	hist_kernel.set_config(_build_kernel_cfg())
+	_hist_kernel.set_config(_build_kernel_cfg())
 	for stock_id: String in _stock_states:
 		var s: Dictionary = _stock_states[stock_id]
 		var stock: StockData = StockDatabase.get_stock(stock_id)
 		if stock == null:
 			continue
-		hist_kernel.init_stock(stock_id, {
+		_hist_kernel.init_stock(stock_id, {
 			"base_price":         s.get("base_price",         stock.base_price),
 			"current_price":      s.get("current_price",      stock.base_price),
 			"prev_day_close":     s.get("prev_day_close",     stock.base_price),
@@ -774,14 +780,21 @@ func run_historical_simulation(n_seasons: int, days_per_season: int,
 			"pbr":                stock.pbr,
 			"event_tags":         stock.event_tags,
 		})
-	return hist_kernel.run_historical_simulation(
+	var result: Dictionary = _hist_kernel.run_historical_simulation(
 		n_seasons, days_per_season, ticks_per_day, theme_sequence, seed)
+	# H-01: free the kernel immediately after simulation to avoid memory leak.
+	_hist_kernel.free()
+	_hist_kernel = null
+	return result
 
 
 ## Returns historical simulation progress: 0 (not started) → 1000 (done).
 ## Thread-safe; poll from a timer during background simulation.
+## H-02: reads from _hist_kernel (the simulation kernel), not _kernel (the live kernel).
 func get_simulation_progress() -> int:
-	return _kernel.get_simulation_progress()
+	if _hist_kernel == null:
+		return 0
+	return _hist_kernel.get_simulation_progress()
 
 
 ## Resets all price engine state for unit tests. Call in before_each.

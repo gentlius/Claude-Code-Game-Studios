@@ -330,11 +330,11 @@ func _forced_liquidation(pos: Dictionary) -> void:
 			on_loan_shark_ending_triggered.emit(pos["stock_id"], net_proceeds)
 			return  # 게임오버 처리는 GameMain/MainScreen이 담당
 
-	var surviving: Array[Dictionary] = []
-	for p: Dictionary in _positions:
-		if p != pos:
-			surviving.append(p)
-	_positions = surviving
+	# Remove by unique key (stock_id + multiplier) rather than dict value equality.
+	# Dict value comparison would silently remove a second position with identical values.
+	_positions = _positions.filter(func(p: Dictionary) -> bool:
+		return p["stock_id"] != pos["stock_id"] or p["multiplier"] != pos["multiplier"]
+	)
 	on_leverage_forced_liquidation.emit(pos["stock_id"], pos["multiplier"], net_proceeds)
 	on_leverage_position_closed.emit(pos["stock_id"], pos["multiplier"], net_proceeds)
 

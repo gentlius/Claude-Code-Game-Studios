@@ -420,40 +420,27 @@ func submit_limit_order(
 
 
 ## Cancel a pending order by order_id.
+## M-10: Uses _order_id_to_queue cache for O(1) queue lookup instead of iterating all queues.
 func cancel_order(order_id: int) -> bool:
-	# Check limit orders
-	for i: int in range(_pending_limit_orders.size() - 1, -1, -1):
-		var order: Dictionary = _pending_limit_orders[i]
+	# Use cache to identify which queue holds this order.
+	var target_queue: Variant = _order_id_to_queue.get(order_id, null)
+	if target_queue == null:
+		return false
+
+	var queue: Array[Dictionary] = target_queue as Array[Dictionary]
+	for i: int in range(queue.size() - 1, -1, -1):
+		var order: Dictionary = queue[i]
 		if order["order_id"] == order_id:
 			_refund_order(order)
 			order["status"] = "CANCELLED"
-			_pending_limit_orders.remove_at(i)
+			queue.remove_at(i)
+			_order_id_to_queue.erase(order_id)
 			_history_append(order)
 			on_order_cancelled.emit(order)
 			return true
 
-	# Check pre-market queue
-	for i: int in range(_pre_market_queue.size() - 1, -1, -1):
-		var order: Dictionary = _pre_market_queue[i]
-		if order["order_id"] == order_id:
-			_refund_order(order)
-			order["status"] = "CANCELLED"
-			_pre_market_queue.remove_at(i)
-			_history_append(order)
-			on_order_cancelled.emit(order)
-			return true
-
-	# Check market queue (paused orders)
-	for i: int in range(_market_order_queue.size() - 1, -1, -1):
-		var order: Dictionary = _market_order_queue[i]
-		if order["order_id"] == order_id:
-			_refund_order(order)
-			order["status"] = "CANCELLED"
-			_market_order_queue.remove_at(i)
-			_history_append(order)
-			on_order_cancelled.emit(order)
-			return true
-
+	# Cache pointed at the right queue but order was already removed (e.g. expired).
+	_order_id_to_queue.erase(order_id)
 	return false
 
 
@@ -668,6 +655,8 @@ func _fill_market_order(order: Dictionary) -> void:
 		remainder["reserved_cash"] = 0  # already deducted in original order
 		remainder["status"] = "PENDING"
 		_market_order_queue.append(remainder)
+		# M-11: register the remainder order in the cache so cancel_order() can find it.
+		_order_id_to_queue[remainder["order_id"]] = _market_order_queue
 
 
 ## BUY 체결 회계 처리. 잔액 부족 시 REJECTED 처리 후 false 반환.
@@ -753,6 +742,8 @@ func _fill_limit_order(order: Dictionary, _current_price: int) -> void:
 		remainder["reserved_cash"] = 0  # already deducted
 		remainder["status"] = "PENDING"
 		_pending_limit_orders.append(remainder)
+		# M-11: register the remainder order in the cache so cancel_order() can find it.
+		_order_id_to_queue[remainder["order_id"]] = _pending_limit_orders
 
 # ── Expiry ──
 

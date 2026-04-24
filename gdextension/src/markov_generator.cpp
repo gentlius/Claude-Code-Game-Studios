@@ -21,40 +21,7 @@
 
 namespace godot {
 
-// ── PCG32 ────────────────────────────────────────────────────────────────────
-// Standard PCG32 (permuted congruential generator).
-// Deterministic but NOT identical to Godot's RandomNumberGenerator —
-// Phase 1→3 cache invalidation (CACHE_VERSION bump) handles the transition.
-
-struct Pcg32 {
-    uint64_t state = 0;
-    uint64_t inc   = 1;
-
-    void seed(uint64_t s) noexcept {
-        state = 0;
-        inc   = (s << 1u) | 1u;  // must be odd
-        next();
-        state += s;
-        next();
-    }
-
-    uint32_t next() noexcept {
-        uint64_t old = state;
-        state = old * 6364136223846793005ULL + inc;
-        uint32_t xorshifted = static_cast<uint32_t>(((old >> 18u) ^ old) >> 27u);
-        uint32_t rot        = static_cast<uint32_t>(old >> 59u);
-        return (xorshifted >> rot) | (xorshifted << ((~rot + 1u) & 31u));
-    }
-
-    // [0.0, 1.0)  — 24-bit float precision (matches Godot randf() mantissa width)
-    float randf() noexcept {
-        return static_cast<float>(next() >> 8u) * (1.0f / 16777216.0f);
-    }
-
-    float randf_range(float lo, float hi) noexcept {
-        return lo + (hi - lo) * randf();
-    }
-};
+// Pcg32 — defined in markov_defaults.h (included via markov_generator.h).
 
 // ── Box-Muller ───────────────────────────────────────────────────────────────
 // Returns the cosine component of a Box-Muller pair (matching GDScript usage).
@@ -257,7 +224,6 @@ void MarkovGenerator::set_config(Dictionary cfg) {
         if (count > 0) _tick_table_size = count;
     }
 
-    _cfg_loaded = true;
 }
 
 // ── _build_scaled_matrix ─────────────────────────────────────────────────────

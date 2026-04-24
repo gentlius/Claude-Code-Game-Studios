@@ -10,6 +10,8 @@
 #include <string>
 #include <unordered_map>
 
+#include "markov_defaults.h"
+
 namespace godot {
 
 // ── MarkovGenerator ─────────────────────────────────────────────────────────
@@ -26,36 +28,8 @@ class MarkovGenerator : public RefCounted {
     GDCLASS(MarkovGenerator, RefCounted)
 
     // ── Compiled-in defaults (mirrors GDScript const / @export defaults) ──
+    // Defined in markov_defaults.h (shared with PriceKernel) at namespace godot scope.
     // Used when set_config() has not been called or JSON is missing a field.
-
-    static constexpr double DEFAULT_SP[7][5] = {
-        //  bias        mag_min     mag_max     noise_std   min_dur(min)
-        { +0.00030,  +0.000075, +0.00050,  0.0004,  5.0 }, // STRONG_UP
-        { +0.000125, +0.000025, +0.00025,  0.0003,  8.0 }, // UPTREND
-        {  0.0,      -0.000125, +0.000125, 0.0002, 10.0 }, // SIDEWAYS
-        { -0.000125, -0.00025,  -0.000025, 0.0003,  8.0 }, // DOWNTREND
-        { -0.00030,  -0.00050,  -0.000075, 0.0004,  5.0 }, // STRONG_DOWN
-        { +0.00075,  +0.00025,  +0.00125,  0.00075, 1.0 }, // BREAKOUT_UP
-        { -0.00075,  -0.00125,  -0.00025,  0.00075, 1.0 }, // BREAKOUT_DOWN
-    };
-
-    static constexpr double DEFAULT_TM[7][7] = {
-        { 0.980, 0.010, 0.003, 0.001, 0.000, 0.005, 0.001 }, // STRONG_UP
-        { 0.005, 0.985, 0.005, 0.001, 0.000, 0.003, 0.001 }, // UPTREND
-        { 0.003, 0.008, 0.975, 0.008, 0.003, 0.002, 0.001 }, // SIDEWAYS
-        { 0.000, 0.001, 0.005, 0.985, 0.005, 0.001, 0.003 }, // DOWNTREND
-        { 0.000, 0.001, 0.003, 0.010, 0.980, 0.001, 0.005 }, // STRONG_DOWN
-        { 0.075, 0.250, 0.125, 0.040, 0.000, 0.500, 0.010 }, // BREAKOUT_UP
-        { 0.000, 0.040, 0.125, 0.250, 0.075, 0.010, 0.500 }, // BREAKOUT_DOWN
-    };
-
-    // VOL_SELF_SCALE and VOL_BREAKOUT_SCALE (LOW..EXTREME)
-    static constexpr double DEFAULT_VSS[4]  = { 1.15, 1.00, 0.90, 0.75 };
-    static constexpr double DEFAULT_VBS[4]  = { 0.30, 1.00, 2.00, 4.00 };
-    static constexpr double DEFAULT_VPS[4]  = { 0.60, 1.00, 1.30, 1.80 };
-    static constexpr double DEFAULT_BVR_MIN[4] = { 100.0, 200.0,  400.0,  800.0 };
-    static constexpr double DEFAULT_BVR_MAX[4] = { 300.0, 600.0, 1200.0, 3000.0 };
-    static constexpr double DEFAULT_SVM[7]  = { 1.3, 1.1, 0.7, 1.1, 1.3, 2.0, 2.0 };
 
     // Drift / clamp constants (matches GDScript @export defaults; not in JSON yet)
     static constexpr double K_DRIFT               = 0.001;
@@ -76,7 +50,6 @@ class MarkovGenerator : public RefCounted {
     double _bvr_min[4]= {};
     double _bvr_max[4]= {};
     double _svm[7]    = {};
-    bool   _cfg_loaded = false;
 
     // ── Per-archetype matrices (ADR-025) ──
     // Keyed by archetype string (e.g. "GROWTH"). Loaded from archetypeMatrices in config.
@@ -87,21 +60,8 @@ class MarkovGenerator : public RefCounted {
     // Day-granularity 3-state Markov: 0=TREND_UP, 1=FLAT, 2=TREND_DOWN.
     // MacroState biases M1 micro-state transition matrix so weekly/monthly charts trend.
     // Self-prob 0.96 → avg duration 25d per trend (sufficient to dominate a 20-day month).
-    static constexpr double DEFAULT_MACRO_TM[3][3] = {
-        { 0.96, 0.03, 0.01 },  // TREND_UP
-        { 0.02, 0.96, 0.02 },  // FLAT
-        { 0.01, 0.03, 0.96 },  // TREND_DOWN
-    };
-    // volMultiplier[macro_state][0=min, 1=max] — drawn once per day
-    static constexpr double DEFAULT_MACRO_VM[3][2] = {
-        { 1.15, 1.45 },  // TREND_UP: elevated volume
-        { 0.75, 1.05 },  // FLAT: subdued volume
-        { 1.05, 1.35 },  // TREND_DOWN: elevated (panic) volume
-    };
-    static constexpr double DEFAULT_MACRO_BIAS = 3.0;
-    // driftScale[macro_state]: k_drift multiplier per MacroState.
-    // 0.2 during TREND_UP/DOWN allows ~11% equilibrium deviation (vs 0.875% at 1.0).
-    static constexpr double DEFAULT_MACRO_DS[3] = { 0.2, 1.0, 0.2 };
+    // DEFAULT_MACRO_TM, DEFAULT_MACRO_VM, DEFAULT_MACRO_BIAS, DEFAULT_MACRO_DS —
+    // defined in markov_defaults.h at namespace godot scope.
 
     double _macro_tm[3][3]         = {};
     double _macro_vm[3][2]         = {};    // vol multiplier [state][min/max]
@@ -117,21 +77,7 @@ class MarkovGenerator : public RefCounted {
     void _apply_macro_bias(const double in_m[7][7], double out_m[7][7], int macro_state) const;
 
     // ── Tick-size table (ADR-002, DLC extensibility) ──
-    // Data-driven: loaded from MarketProfile JSON via set_config("tickTable").
-    // Each entry: {threshold (exclusive upper bound), tick_size}.
-    // Replaces hardcoded krx_tick_size() — DLC markets pass their own table.
-    static constexpr int MAX_TICK_ENTRIES = 16;
-    struct TickEntry { int threshold; int tick_size; };
-    // KRX defaults — used when set_config() has not been called or tickTable is absent.
-    static constexpr TickEntry DEFAULT_TICK_TABLE[7] = {
-        {    1000,    1 },
-        {    5000,    5 },
-        {   10000,   10 },
-        {   50000,   50 },
-        {  100000,  100 },
-        {  500000,  500 },
-        { 2147483647, 1000 },  // INT_MAX — catch-all
-    };
+    // TickEntry, MAX_TICK_ENTRIES, DEFAULT_TICK_TABLE — defined in markov_defaults.h.
     TickEntry _tick_table[MAX_TICK_ENTRIES];
     int       _tick_table_size = 0;
 

@@ -19,6 +19,10 @@
 
 namespace godot {
 
+// ── Internal tuning constants ─────────────────────────────────────────────────
+static constexpr float  BOX_MULLER_GUARD    = 1e-7f;   // min u1 to avoid log(0) in Box-Muller
+static constexpr double MAX_SELF_TRANS_PROB = 0.98;    // cap on self-transition after vol scaling
+
 // ── Helpers (anonymous namespace — not linked to MarkovGenerator) ─────────────
 
 namespace {
@@ -111,7 +115,7 @@ void PriceKernel::_build_scaled_matrix(int vp, double out_m[7][7],
         double row[7];
         for (int j = 0; j < 7; ++j) row[j] = src[i][j];
 
-        double adj_self = std::min(row[i] * self_scale, 0.98);
+        double adj_self = std::min(row[i] * self_scale, MAX_SELF_TRANS_PROB);
 
         int bi_list[2];
         int bi_count = 0;
@@ -372,8 +376,6 @@ void PriceKernel::set_config(Dictionary cfg) {
     _loadi("ticksPerDay",             _ticks_per_day);
     _loadi("m1CacheBars",             _m1_cache_bars);
     _loadi("d1CacheBars",             _d1_cache_bars);
-
-    _cfg_loaded = true;
 
     // ── EventEngine: event_pool ──────────────────────────────────────────────
     _event_pool.clear();
@@ -816,7 +818,7 @@ void PriceKernel::_etf_update_flow(const std::string &sector,
     // Maintain rolling history (capped at _etf_flow_lookback)
     fs.return_history.push_back(current_return);
     while (static_cast<int>(fs.return_history.size()) > _etf_flow_lookback)
-        fs.return_history.erase(fs.return_history.begin());
+        fs.return_history.pop_front();  // O(1) on deque (was O(N) vector erase)
 
     // Compute momentum: current_return - avg of all-but-last history
     float prev_avg = 0.0f;
@@ -852,7 +854,7 @@ void PriceKernel::_etf_check_rotation(const std::string &sector,
         _etf_fire_rotation(sector, -1, tick_in_day, out_ui_events);
         std::string rival = _etf_pick_rival_sector(sector);
         if (!rival.empty())
-            _etf_fire_rotation(rival, -1, tick_in_day, out_ui_events);
+            _etf_fire_rotation(rival, 1, tick_in_day, out_ui_events);  // +1: capital inflow into rival sector
     }
 }
 
@@ -1060,7 +1062,7 @@ float PriceKernel::_pattern_delta(StockState &s) noexcept {
     float mag   = s.rng.randf_range(
         static_cast<float>(_sp[state][1]),
         static_cast<float>(_sp[state][2]));
-    double u1   = static_cast<double>(std::max(s.rng.randf(), 1e-7f));
+    double u1   = static_cast<double>(std::max(s.rng.randf(), BOX_MULLER_GUARD));
     double u2   = static_cast<double>(s.rng.randf());
     float noise = static_cast<float>(
         box_muller_cos(u1, u2) * _sp[state][3]);
@@ -1749,10 +1751,11 @@ std::vector<std::string> PriceKernel::_re_select_newsworthy(int /*season*/) {
             if (!already)
                 cands.push_back({s.stock_id, 0.0f});
         }
-        // Shuffle extras (simple Fisher-Yates on the tail)
-        int tail_start = static_cast<int>(cands.size()) - (static_cast<int>(cands.size()) - count);
+        // Shuffle extras via Fisher-Yates (multiply-shift to eliminate modulo bias)
         for (int i = static_cast<int>(cands.size()) - 1; i > count; --i) {
-            uint32_t j = _re_rng.next() % static_cast<uint32_t>(i + 1 - count) + count;
+            uint32_t range = static_cast<uint32_t>(i + 1 - count);
+            uint32_t j = static_cast<uint32_t>(
+                (static_cast<uint64_t>(_re_rng.next()) * range) >> 32) + count;
             std::swap(cands[i], cands[j]);
         }
         count = std::min(_re_cfg.news_stock_min, static_cast<int>(cands.size()));

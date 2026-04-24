@@ -13,9 +13,12 @@
 #include <atomic>
 #include <algorithm>
 #include <cstdint>
+#include <deque>
 #include <string>
 #include <vector>
 #include <unordered_map>
+
+#include "markov_defaults.h"
 
 namespace godot {
 
@@ -34,35 +37,9 @@ class PriceKernel : public RefCounted {
     GDCLASS(PriceKernel, RefCounted)
 
     // ── Compiled-in defaults ─────────────────────────────────────────────────
-    // Mirrors MarkovGenerator's defaults for shared parameters.
-
-    static constexpr double DEFAULT_SP[7][5] = {
-        //  bias        mag_min     mag_max     noise_std   min_dur(min)
-        { +0.00030,  +0.000075, +0.00050,  0.0004,  5.0 }, // STRONG_UP
-        { +0.000125, +0.000025, +0.00025,  0.0003,  8.0 }, // UPTREND
-        {  0.0,      -0.000125, +0.000125, 0.0002, 10.0 }, // SIDEWAYS
-        { -0.000125, -0.00025,  -0.000025, 0.0003,  8.0 }, // DOWNTREND
-        { -0.00030,  -0.00050,  -0.000075, 0.0004,  5.0 }, // STRONG_DOWN
-        { +0.00075,  +0.00025,  +0.00125,  0.00075, 1.0 }, // BREAKOUT_UP
-        { -0.00075,  -0.00125,  -0.00025,  0.00075, 1.0 }, // BREAKOUT_DOWN
-    };
-
-    static constexpr double DEFAULT_TM[7][7] = {
-        { 0.980, 0.010, 0.003, 0.001, 0.000, 0.005, 0.001 }, // STRONG_UP
-        { 0.005, 0.985, 0.005, 0.001, 0.000, 0.003, 0.001 }, // UPTREND
-        { 0.003, 0.008, 0.975, 0.008, 0.003, 0.002, 0.001 }, // SIDEWAYS
-        { 0.000, 0.001, 0.005, 0.985, 0.005, 0.001, 0.003 }, // DOWNTREND
-        { 0.000, 0.001, 0.003, 0.010, 0.980, 0.001, 0.005 }, // STRONG_DOWN
-        { 0.075, 0.250, 0.125, 0.040, 0.000, 0.500, 0.010 }, // BREAKOUT_UP
-        { 0.000, 0.040, 0.125, 0.250, 0.075, 0.010, 0.500 }, // BREAKOUT_DOWN
-    };
-
-    static constexpr double DEFAULT_VSS[4]     = { 1.15, 1.00, 0.90, 0.75 };
-    static constexpr double DEFAULT_VBS[4]     = { 0.30, 1.00, 2.00, 4.00 };
-    static constexpr double DEFAULT_VPS[4]     = { 0.60, 1.00, 1.30, 1.80 };
-    static constexpr double DEFAULT_BVR_MIN[4] = { 100.0, 200.0,  400.0,  800.0 };
-    static constexpr double DEFAULT_BVR_MAX[4] = { 300.0, 600.0, 1200.0, 3000.0 };
-    static constexpr double DEFAULT_SVM[7]     = { 1.3, 1.1, 0.7, 1.1, 1.3, 2.0, 2.0 };
+    // Shared Markov parameters (DEFAULT_SP, DEFAULT_TM, DEFAULT_VSS, DEFAULT_VBS,
+    // DEFAULT_VPS, DEFAULT_BVR_MIN, DEFAULT_BVR_MAX, DEFAULT_SVM) are defined in
+    // markov_defaults.h at namespace godot scope — no class-level redefinition.
 
     // PriceKernel-specific defaults
     static constexpr float  DEFAULT_VOL_AMPLIFIER[4] = { 0.60f, 1.00f, 1.40f, 2.00f };
@@ -88,18 +65,8 @@ class PriceKernel : public RefCounted {
     static constexpr int    DEFAULT_VI_COOLDOWN_TICKS = 20;
     static constexpr int    DEFAULT_TICKS_PER_DAY     = 1560;
 
-    static constexpr double DEFAULT_MACRO_TM[3][3] = {
-        { 0.96, 0.03, 0.01 },  // TREND_UP
-        { 0.02, 0.96, 0.02 },  // FLAT
-        { 0.01, 0.03, 0.96 },  // TREND_DOWN
-    };
-    static constexpr double DEFAULT_MACRO_VM[3][2] = {
-        { 1.15, 1.45 },  // TREND_UP
-        { 0.75, 1.05 },  // FLAT
-        { 1.05, 1.35 },  // TREND_DOWN
-    };
-    static constexpr double DEFAULT_MACRO_BIAS = 3.0;
-    static constexpr double DEFAULT_MACRO_DS[3] = { 0.2, 1.0, 0.2 };
+    // DEFAULT_MACRO_TM, DEFAULT_MACRO_VM, DEFAULT_MACRO_BIAS, DEFAULT_MACRO_DS —
+    // defined in markov_defaults.h at namespace godot scope.
 
     static constexpr int MAX_TICK_ENTRIES = 16;
 
@@ -153,21 +120,9 @@ class PriceKernel : public RefCounted {
     std::unordered_map<std::string, ArchMatrix>      _archetype_matrices;
     std::unordered_map<std::string, MacroArchMatrix> _macro_arch_matrices;
 
-    // Tick-size table
-    struct TickEntry { int threshold; int tick_size; };
-    static constexpr TickEntry DEFAULT_TICK_TABLE[7] = {
-        {    1000,    1 },
-        {    5000,    5 },
-        {   10000,   10 },
-        {   50000,   50 },
-        {  100000,  100 },
-        {  500000,  500 },
-        { 2147483647, 1000 },
-    };
+    // Tick-size table — TickEntry, MAX_TICK_ENTRIES, DEFAULT_TICK_TABLE in markov_defaults.h.
     TickEntry _tick_table[MAX_TICK_ENTRIES] = {};
     int       _tick_table_size = 0;
-
-    bool _cfg_loaded = false;
 
     // ── EventEngine: compile-time slot config ────────────────────────────────
     // Mirrors NewsEventSystem.SLOT_CONFIG_MINUTES. Minutes × TICKS_PER_MINUTE(4).
@@ -259,36 +214,7 @@ class PriceKernel : public RefCounted {
         int   decay_curve;
     };
 
-    // PCG32 — copy of struct from markov_generator.cpp's anonymous namespace.
-    // Duplicated here (anonymous namespace) to avoid cross-TU linkage dependency.
-    struct Pcg32 {
-        uint64_t state = 0;
-        uint64_t inc   = 1;
-
-        void seed(uint64_t s) noexcept {
-            state = 0;
-            inc   = (s << 1u) | 1u;
-            next();
-            state += s;
-            next();
-        }
-
-        uint32_t next() noexcept {
-            uint64_t old = state;
-            state = old * 6364136223846793005ULL + inc;
-            uint32_t xs  = static_cast<uint32_t>(((old >> 18u) ^ old) >> 27u);
-            uint32_t rot = static_cast<uint32_t>(old >> 59u);
-            return (xs >> rot) | (xs << ((~rot + 1u) & 31u));
-        }
-
-        float randf() noexcept {
-            return static_cast<float>(next() >> 8u) * (1.0f / 16777216.0f);
-        }
-
-        float randf_range(float lo, float hi) noexcept {
-            return lo + (hi - lo) * randf();
-        }
-    };
+    // Pcg32 — defined in markov_defaults.h at namespace godot scope.
 
     struct StockState {
         // identity
@@ -366,7 +292,7 @@ class PriceKernel : public RefCounted {
         float flow          = 0.0f;
         float prev_flow     = 0.0f;
         int   cooldown      = 0;
-        std::vector<float> return_history;
+        std::deque<float> return_history;  // deque: O(1) pop_front (was vector with O(N) erase)
     };
 
     // ── EtfEngine: config ────────────────────────────────────────────────────

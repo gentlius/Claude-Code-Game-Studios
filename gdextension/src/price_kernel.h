@@ -285,6 +285,48 @@ class PriceKernel : public RefCounted {
         }
     };
 
+    struct StockState {
+        // identity
+        std::string stock_id;
+        std::string sector;
+        std::string archetype;
+        bool        is_etf = false;
+        std::vector<std::string> event_tags;  // for INDIVIDUAL event targeting
+        float listed_shares = 1000000.0f;     // for ETF market-cap weighting
+        // price
+        int    base_price     = 0;
+        int    current_price  = 0;
+        int    prev_day_close = 0;
+        // markov micro-state
+        int    markov_state   = 2;   // start SIDEWAYS
+        int    state_duration = 0;   // ticks in current state
+        // macro state
+        int    macro_state    = 1;   // start FLAT
+        double macro_vol_mult = 1.0;
+        double day_matrix[7][7] = {};  // macro-biased matrix, rebuilt in start_day
+        // sensitivity
+        int   vol_profile          = 1;   // 0=LOW..3=EXTREME
+        float macro_sensitivity    = 1.0f;
+        float sector_sensitivity   = 1.0f;
+        // events
+        std::vector<IncomingEvent> incoming_events;
+        std::vector<GradualEvent>  gradual_events;
+        // player / rumor
+        float  player_pressure        = 0.0f;
+        float  rumor_delta_per_tick   = 0.0f;
+        int    rumor_ticks_remaining  = 0;
+        // VI
+        int    vi_halt_remaining = 0;
+        int    vi_cooldown       = 0;
+        int    vi_count_today    = 0;
+        // Fundamentals — ReportEngine 소유 (ADR-027 Phase D)
+        float  roe = 0.08f;   // fraction (0.08 = 8%)
+        float  per = 12.0f;
+        float  pbr = 1.0f;
+        // per-stock RNG
+        Pcg32  rng;
+    };
+
     // ── EventEngine: runtime state ───────────────────────────────────────────
 
     std::vector<EventTemplate>                    _event_pool;
@@ -451,48 +493,6 @@ class PriceKernel : public RefCounted {
     void        _etf_fire_rotation(const std::string &sector, int direction,
                                    int tick_in_day, Array &out_ui_events);
     std::string _etf_pick_rival_sector(const std::string &hot_sector) noexcept;
-
-    struct StockState {
-        // identity
-        std::string stock_id;
-        std::string sector;
-        std::string archetype;
-        bool        is_etf = false;
-        std::vector<std::string> event_tags;  // for INDIVIDUAL event targeting
-        float listed_shares = 1000000.0f;     // for ETF market-cap weighting
-        // price
-        int    base_price     = 0;
-        int    current_price  = 0;
-        int    prev_day_close = 0;
-        // markov micro-state
-        int    markov_state   = 2;   // start SIDEWAYS
-        int    state_duration = 0;   // ticks in current state
-        // macro state
-        int    macro_state    = 1;   // start FLAT
-        double macro_vol_mult = 1.0;
-        double day_matrix[7][7] = {};  // macro-biased matrix, rebuilt in start_day
-        // sensitivity
-        int   vol_profile          = 1;   // 0=LOW..3=EXTREME
-        float macro_sensitivity    = 1.0f;
-        float sector_sensitivity   = 1.0f;
-        // events
-        std::vector<IncomingEvent> incoming_events;
-        std::vector<GradualEvent>  gradual_events;
-        // player / rumor
-        float  player_pressure        = 0.0f;
-        float  rumor_delta_per_tick   = 0.0f;
-        int    rumor_ticks_remaining  = 0;
-        // VI
-        int    vi_halt_remaining = 0;
-        int    vi_cooldown       = 0;
-        int    vi_count_today    = 0;
-        // Fundamentals — ReportEngine 소유 (ADR-027 Phase D)
-        float  roe = 0.08f;   // fraction (0.08 = 8%)
-        float  per = 12.0f;
-        float  pbr = 1.0f;
-        // per-stock RNG
-        Pcg32  rng;
-    };
 
     // All registered stocks, in insertion order (for consistent iteration).
     std::vector<StockState>                    _stocks;

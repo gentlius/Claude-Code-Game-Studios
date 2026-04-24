@@ -916,7 +916,7 @@ std::string PriceKernel::_etf_pick_rival_sector(const std::string &hot_sector) n
     for (const auto &s : sec_it->second)
         if (s != hot_sector) candidates.push_back(s);
     if (candidates.empty()) return {};
-    return candidates[_event_rng.randi() % static_cast<uint32_t>(candidates.size())];
+    return candidates[_event_rng.next() % static_cast<uint32_t>(candidates.size())];
 }
 
 // ── inject_event ──────────────────────────────────────────────────────────────

@@ -119,6 +119,14 @@ var _draw_macd_points: PackedVector2Array = PackedVector2Array()
 var _draw_sig_points: PackedVector2Array = PackedVector2Array()
 var _draw_ma_points: PackedVector2Array = PackedVector2Array()
 
+## M-18: visible candle slice computed once per _draw() and shared across all sub-functions.
+## Eliminates 4× _get_visible_candles() allocations per frame.
+var _draw_visible_candles: Array[Dictionary] = []
+
+## M-19: precomputed MA values per period, indexed [ma_idx][candle_idx].
+## Rebuilt O(N) in _rebuild_ma_cache(); incrementally updated O(period) in _update_ma_cache_last().
+var _ma_cache: Array = []
+
 # ── Crosshair ──
 
 var _crosshair_pos: Vector2 = Vector2(-1, -1)
@@ -634,6 +642,44 @@ func _update_last_candle() -> void:
 	_update_last_indicator()
 
 
+## M-19: Full rebuild of MA value cache using O(N) sliding window sum.
+## Called from _rebuild_indicator_caches() after any full candle rebuild.
+func _rebuild_ma_cache() -> void:
+	_ma_cache.clear()
+	var n: int = _candles.size()
+	for period: int in MA_PERIODS:
+		var values: Array[float] = []
+		values.resize(n)
+		values.fill(0.0)
+		var window_sum: float = 0.0
+		for i: int in range(n):
+			window_sum += float(_candles[i]["close"])
+			if i >= period:
+				window_sum -= float(_candles[i - period]["close"])
+			if i >= period - 1:
+				values[i] = window_sum / float(period)
+		_ma_cache.append(values)
+
+
+## M-19: Incremental MA cache update — recomputes only the last entry. O(period) per call.
+## Called from _update_last_indicator() when the partial candle changes.
+func _update_ma_cache_last() -> void:
+	var n: int = _candles.size()
+	if n == 0 or _ma_cache.size() != MA_PERIODS.size():
+		_rebuild_ma_cache()
+		return
+	for ma_idx: int in range(MA_PERIODS.size()):
+		var period: int = MA_PERIODS[ma_idx]
+		var values: Array[float] = _ma_cache[ma_idx]
+		if values.size() < n:
+			values.resize(n)
+		if n >= period:
+			var sum: float = 0.0
+			for j: int in range(period):
+				sum += float(_candles[n - 1 - j]["close"])
+			values[n - 1] = sum / float(period)
+
+
 ## Full rebuild of RSI and MACD caches from _candles. Stores running state for
 ## incremental updates. Called after _aggregate_candles() (stock switch / day boundary).
 func _rebuild_indicator_caches() -> void:
@@ -642,6 +688,7 @@ func _rebuild_indicator_caches() -> void:
 	_macd_line_cache.resize(n)
 	_signal_line_cache.resize(n)
 	_indicator_seeded = false
+	_rebuild_ma_cache()
 
 	if n == 0:
 		return
@@ -759,6 +806,8 @@ func _update_last_indicator() -> void:
 		var sig_k: float = 2.0 / float(MACD_SIGNAL + 1)
 		_signal_line_cache[last] = _macd_line_cache[last] * sig_k + _sig_ema_state * (1.0 - sig_k)
 
+	_update_ma_cache_last()
+
 
 func _aggregate_range(start: int, end: int) -> Dictionary:
 	var open_price: int = _tick_prices[start]
@@ -836,6 +885,7 @@ func _draw() -> void:
 		return
 
 	_compute_layout()
+	_draw_visible_candles = _get_visible_candles()
 	_compute_price_range()
 	_draw_background()
 	_draw_grid()
@@ -905,7 +955,7 @@ func _compute_layout() -> void:
 
 
 func _compute_price_range() -> void:
-	var visible: Array[Dictionary] = _get_visible_candles()
+	var visible: Array[Dictionary] = _draw_visible_candles
 	if visible.size() == 0:
 		_price_min = 0.0
 		_price_max = 100.0
@@ -1018,7 +1068,7 @@ func _compute_nice_step() -> int:
 
 
 func _draw_candles() -> void:
-	var visible: Array[Dictionary] = _get_visible_candles()
+	var visible: Array[Dictionary] = _draw_visible_candles
 	if visible.size() == 0:
 		return
 
@@ -1079,7 +1129,7 @@ func _draw_candles() -> void:
 
 
 func _draw_moving_averages() -> void:
-	var visible: Array[Dictionary] = _get_visible_candles()
+	var visible: Array[Dictionary] = _draw_visible_candles
 	if visible.size() < 2:
 		return
 
@@ -1099,18 +1149,19 @@ func _draw_moving_averages() -> void:
 
 		# Reuse pre-allocated buffer (S5-03: zero-alloc draw path)
 		_draw_ma_points.clear()
-		for i: int in range(visible.size()):
-			var global_i: int = vis_start_idx + i
-			# Need at least `period` candles ending at global_i
-			if global_i < period - 1:
-				continue
-			var ma_sum: float = 0.0
-			for j: int in range(period):
-				ma_sum += float(_candles[global_i - j]["close"])
-			var ma_val: float = ma_sum / float(period)
-			var x: float = _chart_rect.position.x + (float(i) + 0.5) * candle_width
-			var y: float = _price_to_y(ma_val)
-			_draw_ma_points.append(Vector2(x, y))
+		# Read precomputed values from _ma_cache (O(visible) instead of O(period×visible))
+		if ma_idx < _ma_cache.size():
+			var cached: Array[float] = _ma_cache[ma_idx]
+			for i: int in range(visible.size()):
+				var global_i: int = vis_start_idx + i
+				if global_i >= cached.size():
+					continue
+				var ma_val: float = cached[global_i]
+				if ma_val == 0.0:
+					continue
+				var x: float = _chart_rect.position.x + (float(i) + 0.5) * candle_width
+				var y: float = _price_to_y(ma_val)
+				_draw_ma_points.append(Vector2(x, y))
 
 		if _draw_ma_points.size() >= 2:
 			draw_polyline(_draw_ma_points, color, 1.5, true)
@@ -1130,7 +1181,7 @@ func _draw_moving_averages() -> void:
 
 
 func _draw_volume_bars() -> void:
-	var visible: Array[Dictionary] = _get_visible_candles()
+	var visible: Array[Dictionary] = _draw_visible_candles
 	if visible.size() == 0:
 		return
 

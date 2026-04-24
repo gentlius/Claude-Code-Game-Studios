@@ -20,8 +20,10 @@
 namespace godot {
 
 // ── Internal tuning constants ─────────────────────────────────────────────────
-static constexpr float  BOX_MULLER_GUARD    = 1e-7f;   // min u1 to avoid log(0) in Box-Muller
-static constexpr double MAX_SELF_TRANS_PROB = 0.98;    // cap on self-transition after vol scaling
+static constexpr float  BOX_MULLER_GUARD      = 1e-7f;  // min u1 to avoid log(0) in Box-Muller
+static constexpr double MAX_SELF_TRANS_PROB   = 0.98;   // cap on self-transition after vol scaling
+static constexpr float  RIPPLE_IMPACT_MIN     = 0.01f;  // floor: sector ripple always has some effect
+static constexpr float  RIPPLE_IMPACT_MAX     = 0.20f;  // ceiling: ripple capped at 20% impact
 
 // ── Helpers (anonymous namespace — not linked to MarkovGenerator) ─────────────
 
@@ -1931,7 +1933,7 @@ void PriceKernel::_re_apply_a3_update(StockState &s, float new_roe, Array &out_a
 void PriceKernel::_re_fire_sector_ripple(const std::string &sector,
                                           float shock_mag, int direction) {
     float ripple = shock_mag * _re_cfg.sector_ripple_ratio + _re_cfg.sector_ripple_impact;
-    ripple = std::clamp(ripple, 0.01f, 0.20f);
+    ripple = std::clamp(ripple, RIPPLE_IMPACT_MIN, RIPPLE_IMPACT_MAX);
 
     IncomingEvent ie;
     ie.scope       = 1;     // SECTOR

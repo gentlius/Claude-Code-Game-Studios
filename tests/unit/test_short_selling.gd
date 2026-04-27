@@ -35,6 +35,8 @@ func _set_mock_price(stock_id: String, price: int) -> void:
 			"bid": [{"price": price, "qty": 10000}],
 		},
 	}
+	## Borrow pool required for SELL_SHORT validation (_borrow_pool not init'd in unit tests).
+	ShortSellingSystem._borrow_pool[stock_id] = {"current": 1000, "max": 1000}
 
 
 func _unlock_tr3() -> void:

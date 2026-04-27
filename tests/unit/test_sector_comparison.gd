@@ -17,8 +17,8 @@ func before_each() -> void:
 
 func after_each() -> void:
 	EtfManager.reset()
-	SkillTree._unlocked_skills["A4"] = false
-	SkillTree._unlocked_skills["P3"] = false
+	SkillTree._unlocked_skills.erase("A4")
+	SkillTree._unlocked_skills.erase("P3")
 
 
 # ── Helper: create a fresh SectorComparisonView in the test tree ──
@@ -33,7 +33,7 @@ func _make_view() -> SectorComparisonView:
 
 func test_tab_locked_without_a4() -> void:
 	# Arrange: A4 NOT unlocked
-	SkillTree._unlocked_skills["A4"] = false
+	SkillTree._unlocked_skills.erase("A4")
 
 	# Act
 	var view: SectorComparisonView = _make_view()
@@ -103,8 +103,8 @@ func test_toggle_sort_today_return() -> void:
 	view._set_sort_mode(SectorComparisonView.SortMode.TODAY)
 
 	# Assert: now 2차전지 should be first (today = +5%)
-	var first_today: Label = (view._rows_container.get_child(0) as HBoxContainer).get_child(1).get_child(0) as Label
-	assert_eq(first_today.text, "2차전지", "TODAY 모드에서 2차전지가 1위여야 한다")
+	# Note: queue_free() is deferred so we check _sorted_etf_ids instead of get_child()
+	assert_eq(view._sorted_etf_ids[0], "ETF_2차전지", "TODAY 모드에서 2차전지가 1위여야 한다")
 	assert_eq(view._sort_mode, SectorComparisonView.SortMode.TODAY,
 		"정렬 모드가 TODAY로 전환돼야 한다")
 
@@ -146,7 +146,7 @@ func test_drilldown_closes_on_second_click() -> void:
 
 func test_etf_price_hidden_without_p3() -> void:
 	# Arrange: P3 NOT unlocked
-	SkillTree._unlocked_skills["P3"] = false
+	SkillTree._unlocked_skills.erase("P3")
 
 	# Act
 	var view: SectorComparisonView = _make_view()

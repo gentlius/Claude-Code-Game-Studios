@@ -79,7 +79,7 @@ func test_stock_database_get_stocks_by_sector_returns_array() -> void:
 	if sectors.is_empty():
 		pass_test("섹터 없음 — 헤드리스 환경 스킵")
 		return
-	var sector_name: String = str(sectors[0]["sector"])
+	var sector_name: String = str(sectors[0]["name"])
 	var stocks: Array[StockData] = StockDatabase.get_stocks_by_sector(sector_name)
 	assert_true(stocks.size() > 0, "섹터별 종목 조회 — 1개 이상")
 
@@ -92,7 +92,7 @@ func test_stock_database_get_all_sectors_returns_dicts() -> void:
 	if sectors.is_empty():
 		pass_test("섹터 없음 — 헤드리스 환경 스킵")
 		return
-	assert_true(sectors[0].has("sector"), "섹터 dict에 'sector' 키 존재")
+	assert_true(sectors[0].has("name"), "섹터 dict에 'name' 키 존재")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -175,8 +175,8 @@ func test_portfolio_manager_reset_clears_holdings() -> void:
 
 func test_portfolio_manager_get_portfolio_summary_has_keys() -> void:
 	var summary: Dictionary = PortfolioManager.get_portfolio_summary()
-	assert_true(summary.has("holdings_count"), "holdings_count 키 존재")
-	assert_true(summary.has("total_value"),    "total_value 키 존재")
+	assert_true(summary.has("holding_count"), "holding_count 키 존재")
+	assert_true(summary.has("total_assets"),  "total_assets 키 존재")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -206,8 +206,9 @@ func test_news_event_system_has_reset() -> void:
 
 
 func test_news_event_system_fire_stock_news_emits_signal() -> void:
-	# reset() sets _state to READY so fire_stock_news doesn't early-exit
 	NewsEventSystem.reset()
+	# reset() leaves _state = UNINITIALIZED; set to READY so fire_stock_news doesn't early-exit
+	NewsEventSystem._state = NewsEventSystem.SystemState.READY
 	var received: Array = []
 	var conn: Callable = func(entry: Dictionary) -> void:
 		received.append(entry)

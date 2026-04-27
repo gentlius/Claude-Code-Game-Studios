@@ -166,6 +166,8 @@ func test_currency_auto_deposit_silver_3m() -> void:
 	## 실버 기준금액(3,000,000) 자동입금 시 sim_cash 정확히 반영
 	CurrencySystem.reset()
 	var silver_threshold: int = 3_000_000  # SeasonManager.TIER_THRESHOLD[1]
+	## reset() sets cash_assets = INITIAL_CASH_ASSETS (1M). Add 2M more so deposit is not capped.
+	CurrencySystem.cash_add(2_000_000)
 	CurrencySystem.auto_deposit_to_sim(silver_threshold)
 	assert_eq(CurrencySystem.get_sim_cash(), silver_threshold, "실버 3M 입금 정확")
 	CurrencySystem.reset()

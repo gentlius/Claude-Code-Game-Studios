@@ -367,11 +367,13 @@ func test_vi_not_halted_initially() -> void:
 
 
 func test_vi_halted_after_state_injection() -> void:
-	# Directly inject VI state to test the query
+	# is_vi_halted() checks _vi_halt_remaining, not _vi_states["halt_remaining"]
 	PriceEngine._vi_states["KSF"] = {"halt_remaining": 5, "count_today": 1}
+	PriceEngine._vi_halt_remaining["KSF"] = 5
 	assert_true(PriceEngine.is_vi_halted("KSF"), "Should be halted with remaining > 0")
 	# Cleanup
 	PriceEngine._vi_states.erase("KSF")
+	PriceEngine._vi_halt_remaining.erase("KSF")
 
 
 func test_vi_not_halted_when_remaining_zero() -> void:

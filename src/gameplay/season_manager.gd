@@ -529,7 +529,7 @@ func _assign_tier(total_assets: int) -> int:
 	for t: int in range(TIER_COUNT - 1, -1, -1):
 		if total_assets >= TIER_THRESHOLD[t]:
 			return t
-	return TIER_BRONZE  # fallback (should be unreachable if total_assets >= FREE_MARKET_THRESHOLD)
+	return TIER_FREE_MARKET  # below all thresholds → free market tier
 
 
 ## Estimate player's rank within the current tier (GDD §4-3).

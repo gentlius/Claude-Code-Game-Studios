@@ -74,13 +74,14 @@ func test_clear_seen_flag_no_error_when_flag_absent() -> void:
 # ── 상수 검증 ──
 
 func test_card_texts_count_is_five() -> void:
-	assert_eq(IntroSequence.CARD_TEXTS.size(), 5,
+	assert_eq(IntroSequence._build_card_texts().size(), 5,
 		"카드는 정확히 5장이어야 함")
 
 
 func test_card_texts_none_empty() -> void:
-	for i: int in range(IntroSequence.CARD_TEXTS.size()):
-		assert_ne(IntroSequence.CARD_TEXTS[i], "",
+	var texts: Array[String] = IntroSequence._build_card_texts()
+	for i: int in range(texts.size()):
+		assert_ne(texts[i], "",
 			"카드 %d 텍스트가 비어있음" % i)
 
 

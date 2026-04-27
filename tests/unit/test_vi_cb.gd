@@ -34,6 +34,8 @@ func before_each() -> void:
 	# Ensure test stock exists in both state dictionaries
 	PriceEngine._stock_states[TEST_STOCK_ID] = _make_stock_state()
 	PriceEngine._vi_states[TEST_STOCK_ID] = _make_vi_state()
+	# Ensure _vi_halt_remaining is clean (is_vi_halted reads this dict)
+	PriceEngine._vi_halt_remaining.erase(TEST_STOCK_ID)
 	# Reset circuit breaker
 	PriceEngine._cb_stage = 0
 	PriceEngine._cb_halt_remaining = 0
@@ -80,6 +82,8 @@ func test_vi_halted_returns_false_when_no_halt() -> void:
 
 func test_vi_halted_returns_true_when_halt_remaining() -> void:
 	PriceEngine._vi_states[TEST_STOCK_ID] = _make_vi_state(5, 1)
+	# is_vi_halted() checks _vi_halt_remaining, not _vi_states
+	PriceEngine._vi_halt_remaining[TEST_STOCK_ID] = 5
 	assert_true(PriceEngine.is_vi_halted(TEST_STOCK_ID), "halt_remaining > 0 → halted")
 
 
@@ -310,6 +314,8 @@ func test_cb_resets_after_day_end() -> void:
 func test_vi_halt_decrements_each_tick() -> void:
 	# Arrange — stock halted for 3 ticks, engine in RUNNING state
 	PriceEngine._vi_states[TEST_STOCK_ID] = _make_vi_state(3, 1)
+	# process_tick decrements _vi_halt_remaining, not _vi_states["halt_remaining"]
+	PriceEngine._vi_halt_remaining[TEST_STOCK_ID] = 3
 	var original_engine_state: PriceEngine.EngineState = PriceEngine._engine_state
 	PriceEngine._engine_state = PriceEngine.EngineState.RUNNING
 	PriceEngine._cb_halt_remaining = 0
@@ -317,9 +323,9 @@ func test_vi_halt_decrements_each_tick() -> void:
 	# Act — call _on_tick once (tick_number > 0 to skip VI check on tick 0)
 	PriceEngine.process_tick(1, 1, 1)
 
-	# Assert — halt_remaining decremented by 1
-	var vi: Dictionary = PriceEngine._vi_states[TEST_STOCK_ID]
-	assert_eq(vi["halt_remaining"], 2, "Halt should decrement by 1 per tick")
+	# Assert — _vi_halt_remaining decremented by 1
+	assert_eq(PriceEngine._vi_halt_remaining.get(TEST_STOCK_ID, 0), 2,
+		"Halt should decrement by 1 per tick")
 
 	# Cleanup
 	PriceEngine._engine_state = original_engine_state

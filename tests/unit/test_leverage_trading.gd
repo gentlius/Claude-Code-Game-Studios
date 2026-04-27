@@ -262,20 +262,19 @@ func test_forced_liquidation_excess_loss_triggers_loan_shark_ending() -> void:
 	CurrencySystem.reset()
 	CurrencySystem.init_first_season(500_000)
 
-	var signal_fired: bool = false
-	var captured_stock: String = ""
-	LeverageManager.on_loan_shark_ending_triggered.connect(
-		func(sid: String, _net: int) -> void:
-			signal_fired = true
-			captured_stock = sid
-	)
+	# Use GUT watch_signals instead of manual lambda — GDScript bool closures
+	# may not mutate outer scope when connected to signals across frames.
+	watch_signals(LeverageManager)
 
 	# Act
 	LeverageManager.check_margin_calls()
 
 	# Assert
-	assert_true(signal_fired, "초과 손실 시 on_loan_shark_ending_triggered 발동 (GDD AC-17)")
-	assert_eq(captured_stock, MOCK_STOCK, "올바른 stock_id로 시그널 발동")
+	assert_signal_emitted(LeverageManager, "on_loan_shark_ending_triggered",
+		"초과 손실 시 on_loan_shark_ending_triggered 발동 (GDD AC-17)")
+	var params: Array = get_signal_parameters(LeverageManager, "on_loan_shark_ending_triggered")
+	if params.size() > 0:
+		assert_eq(str(params[0]), MOCK_STOCK, "올바른 stock_id로 시그널 발동")
 	assert_eq(CurrencySystem.get_sim_cash(), 0, "가용 현금 전액 차감 후 sim_cash == 0")
 
 

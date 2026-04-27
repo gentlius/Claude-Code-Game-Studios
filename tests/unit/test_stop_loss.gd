@@ -60,6 +60,7 @@ func _unlock_tr1_tr2() -> void:
 # ── Setup / Teardown ──
 
 func before_each() -> void:
+	ShortSellingSystem.reset()
 	PortfolioManager.reset()
 	OrderEngine.reset()
 	StopTakeSystem.reset()
@@ -82,7 +83,7 @@ func test_ui_disabled_when_tr2_not_unlocked() -> void:
 	_add_mock_holding(MOCK_STOCK_ID, 100)
 	var ok: bool = StopTakeSystem.set_condition(MOCK_STOCK_ID, 9000, 12000, 100)
 	assert_false(ok, "TR2 미해금 시 set_condition은 false를 반환해야 한다")
-	assert_null(StopTakeSystem.get_setting(MOCK_STOCK_ID), "설정이 저장되지 않아야 한다")
+	assert_true(StopTakeSystem.get_setting(MOCK_STOCK_ID).is_empty(), "설정이 저장되지 않아야 한다")
 
 
 # ── AC-02: TR2 해금 후 설정 가능 ──
@@ -145,7 +146,7 @@ func test_setting_removed_after_trigger() -> void:
 	_set_mock_price(MOCK_STOCK_ID, 8500)
 
 	StopTakeSystem.check_and_trigger(GameClock.MarketState.MARKET_OPEN)
-	assert_null(StopTakeSystem.get_setting(MOCK_STOCK_ID), "발동 후 설정이 삭제되어야 한다")
+	assert_true(StopTakeSystem.get_setting(MOCK_STOCK_ID).is_empty(), "발동 후 설정이 삭제되어야 한다")
 
 
 # ── AC-06: 조건 미충족 틱에서 발동 없음 ──
@@ -246,7 +247,7 @@ func test_setting_cleared_on_manual_full_sell() -> void:
 	## 전량 매도 시뮬레이션: holding_removed signal with holding gone
 	PortfolioManager._holdings.erase(MOCK_STOCK_ID)
 	PortfolioManager.holding_removed.emit(MOCK_STOCK_ID, 100, 10000, 0)
-	assert_null(StopTakeSystem.get_setting(MOCK_STOCK_ID), "전량 매도 후 설정이 삭제되어야 한다")
+	assert_true(StopTakeSystem.get_setting(MOCK_STOCK_ID).is_empty(), "전량 매도 후 설정이 삭제되어야 한다")
 
 
 # ── AC-13: 세이브/로드 후 설정 복원 ──
@@ -258,7 +259,7 @@ func test_setting_persists_after_save_load() -> void:
 
 	var saved: Array = StopTakeSystem.get_save_data()
 	StopTakeSystem.reset()
-	assert_null(StopTakeSystem.get_setting(MOCK_STOCK_ID), "리셋 후 설정 없어야 한다")
+	assert_true(StopTakeSystem.get_setting(MOCK_STOCK_ID).is_empty(), "리셋 후 설정 없어야 한다")
 
 	StopTakeSystem.load_save_data(saved)
 	var restored: Variant = StopTakeSystem.get_setting(MOCK_STOCK_ID)
@@ -277,7 +278,7 @@ func test_setting_cleared_on_season_start() -> void:
 	assert_not_null(StopTakeSystem.get_setting(MOCK_STOCK_ID))
 
 	GameClock.on_season_start.emit()
-	assert_null(StopTakeSystem.get_setting(MOCK_STOCK_ID), "시즌 시작 후 설정 초기화되어야 한다")
+	assert_true(StopTakeSystem.get_setting(MOCK_STOCK_ID).is_empty(), "시즌 시작 후 설정 초기화되어야 한다")
 
 
 # ── AC-15: TR2 미해금 상태 로드 시 설정 삭제 ──
@@ -291,7 +292,7 @@ func test_setting_cleared_if_skill_not_unlocked_on_load() -> void:
 	## TR2 해금 취소 후 로드
 	SkillTree._unlocked_skills.erase("TR2")
 	StopTakeSystem.load_save_data(saved)
-	assert_null(StopTakeSystem.get_setting(MOCK_STOCK_ID), "TR2 미해금 로드 시 설정 삭제되어야 한다")
+	assert_true(StopTakeSystem.get_setting(MOCK_STOCK_ID).is_empty(), "TR2 미해금 로드 시 설정 삭제되어야 한다")
 
 
 # ── 숏 포지션 손절/익절 테스트 ──
@@ -411,4 +412,4 @@ func test_short_setting_cleared_on_position_close() -> void:
 	## 숏 포지션 수동 청산 시뮬레이션
 	ShortSellingSystem._positions.erase(MOCK_STOCK_ID)
 	ShortSellingSystem.on_short_position_closed.emit(MOCK_STOCK_ID, 50000)
-	assert_null(StopTakeSystem.get_setting(MOCK_STOCK_ID), "숏 청산 후 설정이 삭제되어야 한다")
+	assert_true(StopTakeSystem.get_setting(MOCK_STOCK_ID).is_empty(), "숏 청산 후 설정이 삭제되어야 한다")

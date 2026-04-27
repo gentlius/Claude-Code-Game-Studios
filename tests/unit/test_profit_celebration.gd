@@ -154,7 +154,4 @@ func test_tuning_constants_in_range() -> void:
 # ── Format helper ──
 
 func test_fmt_int_comma() -> void:
-	assert_eq(_pc._fmt_int_comma(1234567), "1,234,567")
-	assert_eq(_pc._fmt_int_comma(1000),    "1,000")
-	assert_eq(_pc._fmt_int_comma(0),       "0")
-	assert_eq(_pc._fmt_int_comma(-5000),   "-5,000")
+	pending("_fmt_int_comma removed — formatting delegated to FormatUtils.number()")

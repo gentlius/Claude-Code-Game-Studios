@@ -57,33 +57,9 @@
 ## Architecture Decisions Log
 
 <!-- Quick reference linking to full ADRs in docs/architecture/ -->
-- [ADR-001](../../docs/architecture/001-system-communication-pattern.md) — 시그널 + 직접 호출 하이브리드 통신 패턴
-- [ADR-002](../../docs/architecture/002-tick-size-krx-table.md) — KRX 기반 호가 단위 테이블 (static 함수 단일 소스)
-- [ADR-003](../../docs/architecture/003-energy-volume-correlation.md) — 에너지-거래량 상관관계 (tick energy 모델)
-- [ADR-004](../../docs/architecture/004-ai-competitor-statistical-simulation.md) — AI 경쟁자 통계적 수익률 시뮬레이션 (실매매 없음)
-- [ADR-005](../../docs/architecture/005-season-manager-xp-ownership.md) — SeasonManager가 시즌 XP 지급 전권 소유
-- [ADR-006](../../docs/architecture/006-tab-scene-ownership.md) — MainScreen이 F1/F2/F3 탭 및 일시정지 단일 진입점
-- [ADR-007](../../docs/architecture/007-global-rank-statistical-fairness.md) — 글로벌 순위 return_pct 단일 정렬 + AI 파라미터 단조성 보장
-- [ADR-008](../../docs/architecture/008-leaderboard-sort-cache.md) — 리더보드 정렬·캐시 전략
-- [ADR-009](../../docs/architecture/009-multi-slot-save-architecture.md) — 인덱스+슬롯 분리 멀티슬롯 세이브 구조
-- [ADR-010](../../docs/architecture/010-game-entry-flow-ownership.md) — GameMain이 모든 최상위 화면 전환 소유
-- [ADR-011](../../docs/architecture/011-saving-overlay-canvas-layer.md) — SavingOverlay CanvasLayer(layer=10) 입력 차단 구현
-- [ADR-012](../../docs/architecture/012-gameclock-pause-reference-counting.md) — GameClock pause_request/release() 참조 카운팅 일시정지
-- [ADR-013](../../docs/architecture/013-trading-screen-component-split.md) — TradingScreen 5-컴포넌트 Facade 분리 (TD-04)
-- [ADR-014](../../docs/architecture/014-mainscreen-tab-scene-lifecycle.md) — MainScreen 탭 씬 visibility 토글 상주 방식
-- [ADR-015](../../docs/architecture/015-save-trigger-timing.md) — SaveSystem 저장 트리거 타이밍 (시즌/일별/초기 저장 순서)
-- [ADR-016](../../docs/architecture/016-qa-10day-scenario-findings.md) — QA 자동화 10일 시나리오 버그 기록
-- [ADR-017](../../docs/architecture/017-news-feed-cycling-state-machine.md) — 뉴스 카드 관련종목 순회 클로저 캡처 상태머신
-- [ADR-018](../../docs/architecture/018-anti-price-scout-rng-entropy.md) — 가격 정찰 익스플로잇 차단: PriceEngine 세션 RNG 엔트로피 격리
-- [ADR-019](../../docs/architecture/019-player-market-impact.md) — 플레이어 주문 시장 충격: 체결량 → tick_volumes 피드백 + 가격 압력 누적(_player_pressure)
-- [ADR-020](../../docs/architecture/020-settings-persistence-split.md) — 설정 저장 분할: AudioManager cfg + SettingsScreen game_settings.cfg 각자 소유
-- [ADR-021](../../docs/architecture/021-market-profile-data-driven.md) — MarketProfile JSON으로 시장별 규칙 전체 분리 (섹터/ETF/아키타입/로테이션/헤드라인 키/캘린더 포함, DLC 확장성)
-- [ADR-022](../../docs/architecture/022-event-source-pipeline.md) — EventSource → NewsEventSystem → PriceEngine 단방향 파이프라인 (PriceEngine 직접 조작 금지)
-- [ADR-023](../../docs/architecture/023-price-generation-single-ownership.md) — 가격 생성 규칙 단일 소유: PriceEngine.generate_synthetic_d1()로 프리히스토리 D1 통합, M1 캐시 슬롯별 분리
-- [ADR-024](../../docs/architecture/024-price-engine-gdextension.md) — PriceEngine GDExtension 마이그레이션: M1-first 배치 생성(D1→M1 확장 폐기), 2-tier 캐시(M1 7800bars+D1 5200bars), C++ MarkovGenerator(Phase 3)
-- [ADR-025](../../docs/architecture/025-stock-archetype-markov-matrices.md) — 종목 아키타입 Markov 행렬: 6종 아키타입별 비대칭 전환 행렬 + seasonDrift, per-stock 행렬 선택(C++ archetype_key 파라미터)
-- [ADR-026](../../docs/architecture/026-macro-trend-layer.md) — 매크로 추세 레이어: 일봉 3-state Markov (driftScale + self-prob 0.96 + seasonBias→macro_tm 리다이렉트, CACHE_VERSION=6)
-- [ADR-027](../../docs/architecture/027-price-kernel-unification.md) — Price Kernel 통합: 4개 GDScript 가격 시스템 → 단일 C++ PriceKernel (MarkovEngine·EventEngine·EtfEngine·ReportEngine), 히스토리 동일 커널 시뮬
+<!-- Add entries here as architectural decisions are made in this project. -->
+<!-- Format: - [ADR-NNN](../../docs/architecture/NNN-slug.md) — 한 줄 설명 -->
+- [None yet — add as decisions are made]
 
 ## Engine Specialists
 

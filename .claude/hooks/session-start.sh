@@ -4,6 +4,37 @@
 #
 # Input schema (SessionStart): No stdin input
 
+# --- Studio memory bootstrap ---
+# On first run in a new project, copy .claude/memory-template/ into Claude's
+# per-project memory directory so studio-wide feedback memories are available.
+TEMPLATE_DIR=".claude/memory-template"
+if [ -d "$TEMPLATE_DIR" ]; then
+    # Compute Claude's memory path: lowercase drive letter, replace : and / each with -
+    # e.g. D:\Github\ProjectSM -> d--Github-ProjectSM  (Windows Git Bash)
+    WINPATH=$(pwd -W 2>/dev/null || pwd)
+    FIRST=$(echo "$WINPATH" | cut -c1 | tr 'A-Z' 'a-z')
+    REST=$(echo "$WINPATH" | cut -c2-)
+    ENCODED="${FIRST}${REST}"
+    ENCODED=$(echo "$ENCODED" | sed 's|:|-|g' | sed 's|[/\\]|-|g')
+    MEMORY_DIR="$HOME/.claude/projects/$ENCODED/memory"
+    mkdir -p "$MEMORY_DIR"
+
+    COPIED=0
+    for f in "$TEMPLATE_DIR"/*.md; do
+        [ -e "$f" ] || continue
+        fname=$(basename "$f")
+        if [ ! -f "$MEMORY_DIR/$fname" ]; then
+            cp "$f" "$MEMORY_DIR/$fname"
+            COPIED=$((COPIED + 1))
+        fi
+    done
+
+    if [ "$COPIED" -gt 0 ]; then
+        echo "Studio memory bootstrapped: ${COPIED} file(s) copied to $MEMORY_DIR"
+        echo ""
+    fi
+fi
+
 echo "=== Claude Code Game Studios — Session Context ==="
 
 # Current branch

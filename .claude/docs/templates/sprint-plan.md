@@ -1,4 +1,4 @@
-# Sprint [N] -- [Start Date] to [End Date]
+# Sprint [N] — [Start Date] to [End Date]
 
 ## Sprint Goal
 
@@ -12,14 +12,9 @@
 
 ## Capacity
 
-| Resource | Available Days | Allocated | Buffer (20%) | Remaining |
-|----------|---------------|-----------|-------------|-----------|
-| Programming | | | | |
-| Design | | | | |
-| Art | | | | |
-| Audio | | | | |
-| QA | | | | |
-| **Total** | | | | |
+- **Total days**: [X]
+- **Buffer (20%)**: [Y days reserved for unplanned work]
+- **Available**: [Z days]
 
 ## Tasks
 
@@ -59,7 +54,12 @@
 
 ## Definition of Done
 
-- [ ] All Must Have tasks completed and passing acceptance criteria
+- [ ] All Must Have tasks completed
+- [ ] All tasks pass acceptance criteria
+- [ ] QA plan exists (`production/qa/qa-plan-sprint-[N].md`)
+- [ ] All Logic/Integration stories have passing unit/integration tests
+- [ ] Smoke check passed (`/smoke-check sprint`)
+- [ ] QA sign-off report: APPROVED or APPROVED WITH CONDITIONS (`/team-qa sprint`)
 - [ ] No S1 or S2 bugs in delivered features
 - [ ] Code reviewed and merged to develop (Code Review Checklist "GDD 동기화" 4항목 + "ADR 동기화" 4항목 통과)
 - [ ] **이 스프린트에서 구현된 모든 시스템의 GDD Status = Approved** (미완이면 In Review + 미완 항목 명시)
@@ -68,10 +68,3 @@
 - [ ] Asset naming and format standards met
 - [ ] `--export-release` 빌드 성공 + SCRIPT ERROR 없음. QA Lead 서명.
 
-## Daily Status Tracking
-
-| Day | Tasks Completed | Tasks In Progress | Blockers | Notes |
-|-----|----------------|------------------|----------|-------|
-| Day 1 | | | | |
-| Day 2 | | | | |
-| Day 3 | | | | |

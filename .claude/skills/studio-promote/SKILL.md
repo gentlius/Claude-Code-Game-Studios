@@ -30,11 +30,24 @@ agent: producer
 
 ### 0.1 현재 repo 판별
 
-`CLAUDE.md` 첫 비공백 라인을 읽는다.
+`.claude/docs/technical-preferences.md`의 Engine 필드를 읽는다. 이 필드는
+업스트림 템플릿에서 `[TO BE CONFIGURED — run /setup-engine]` placeholder로 시작하며,
+프로젝트에서 `/setup-engine` 실행 시 실제 엔진명(예: `Godot 4.6.2`)으로 채워진다.
 
-- `Claude Code Game Studios -- Game Studio Agent Architecture` 매칭 → **이 repo가 스튜디오 템플릿 자체**
-  → 사용자에게 보고: "이 repo는 스튜디오 템플릿입니다. `/studio-promote`는 프로젝트 repo에서 실행해야 합니다." → 종료
-- 그 외 → 프로젝트로 간주, 진행
+Grep 패턴:
+```
+Grep pattern="^- \*\*Engine\*\*:" path=".claude/docs/technical-preferences.md"
+```
+
+- 매칭된 값이 `[TO BE CONFIGURED` 또는 `[CHOOSE:` 또는 `[SPECIFY`로 시작 → **이 repo는 스튜디오 템플릿**
+  → 사용자에게 보고: "이 repo는 스튜디오 템플릿입니다 (Engine 미설정 상태). `/studio-promote`는
+  `/setup-engine`이 실행된 프로젝트 repo에서 실행해야 합니다." → 종료
+- 매칭된 값이 실제 엔진명으로 채워짐 → **프로젝트로 간주**, 진행
+- 파일이 없거나 Engine 필드 라인이 없음 → 사용자에게 확인 질문 후 진행/종료 결정
+
+> **변경 기록**: 이전에는 `CLAUDE.md` 첫 줄로 판별했으나, 템플릿과 프로젝트 모두 동일한
+> 헤더를 유지하므로 신뢰할 수 없었다. Engine 필드 상태는 `/setup-engine`이 실행됐는지의
+> 단일 권위 신호이므로 더 정확하다.
 
 ### 0.2 비교 기준(upstream) 결정
 

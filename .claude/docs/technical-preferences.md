@@ -5,10 +5,10 @@
 
 ## Engine & Language
 
-- **Engine**: Godot 4.6
-- **Language**: GDScript (primary), C++ via GDExtension (performance-critical)
-- **Rendering**: Vulkan (Forward+) — 웹 export 시 Compatibility (OpenGL 3)
-- **Physics**: Jolt (4.6 기본)
+- **Engine**: [TO BE CONFIGURED — run /setup-engine]
+- **Language**: [TO BE CONFIGURED]
+- **Rendering**: [TO BE CONFIGURED]
+- **Physics**: [TO BE CONFIGURED]
 
 ## Input & Platform
 
@@ -24,25 +24,25 @@
 
 ## Naming Conventions
 
-- **Classes**: PascalCase (e.g., `GameClock`, `PriceEngine`)
-- **Variables/Functions**: snake_case (e.g., `move_speed`, `get_current_price()`)
-- **Signals**: snake_case past tense (e.g., `tick_processed`, `market_state_changed`)
-- **Files**: snake_case matching class (e.g., `game_clock.gd`)
-- **Scenes/Prefabs**: PascalCase matching root node (e.g., `GameClock.tscn`)
-- **Constants**: UPPER_SNAKE_CASE (e.g., `MAX_HOLDINGS`, `TICKS_PER_DAY`)
+- **Classes**: [TO BE CONFIGURED]
+- **Variables**: [TO BE CONFIGURED]
+- **Signals/Events**: [TO BE CONFIGURED]
+- **Files**: [TO BE CONFIGURED]
+- **Scenes/Prefabs**: [TO BE CONFIGURED]
+- **Constants**: [TO BE CONFIGURED]
 
 ## Performance Budgets
 
-- **Target Framerate**: 60fps
-- **Frame Budget**: 16.6ms
-- **Draw Calls**: [TO BE CONFIGURED] (UI 중심이므로 상대적 여유)
-- **Memory Ceiling**: 512MB (웹 빌드 고려)
+- **Target Framerate**: [TO BE CONFIGURED]
+- **Frame Budget**: [TO BE CONFIGURED]
+- **Draw Calls**: [TO BE CONFIGURED]
+- **Memory Ceiling**: [TO BE CONFIGURED]
 
 ## Testing
 
-- **Framework**: GUT (Godot Unit Test)
-- **Minimum Coverage**: Balance formulas 100%, gameplay systems 80%
-- **Required Tests**: Balance formulas, gameplay systems
+- **Framework**: [TO BE CONFIGURED]
+- **Minimum Coverage**: [TO BE CONFIGURED]
+- **Required Tests**: Balance formulas, gameplay systems, networking (if applicable)
 
 ## Forbidden Patterns
 
@@ -57,9 +57,7 @@
 ## Architecture Decisions Log
 
 <!-- Quick reference linking to full ADRs in docs/architecture/ -->
-<!-- Add entries here as architectural decisions are made in this project. -->
-<!-- Format: - [ADR-NNN](../../docs/architecture/NNN-slug.md) — 한 줄 설명 -->
-- [None yet — add as decisions are made]
+- [No ADRs yet — use /architecture-decision to create one]
 
 ## Engine Specialists
 
@@ -67,12 +65,12 @@
 <!-- Read by /code-review, /architecture-decision, /architecture-review, and team skills -->
 <!-- to know which specialist to spawn for engine-specific validation. -->
 
-- **Primary**: godot-specialist
-- **Language/Code Specialist**: godot-gdscript-specialist
-- **Shader Specialist**: godot-shader-specialist
-- **UI Specialist**: godot-specialist (UI/Control nodes)
-- **Additional Specialists**: godot-gdextension-specialist (C++/GDExtension)
-- **Routing Notes**: GDScript files → gdscript-specialist; .cpp/.h in gdextension/ → gdextension-specialist; .gdshader → shader-specialist; all others → godot-specialist
+- **Primary**: [TO BE CONFIGURED — run /setup-engine]
+- **Language/Code Specialist**: [TO BE CONFIGURED]
+- **Shader Specialist**: [TO BE CONFIGURED]
+- **UI Specialist**: [TO BE CONFIGURED]
+- **Additional Specialists**: [TO BE CONFIGURED]
+- **Routing Notes**: [TO BE CONFIGURED]
 
 ### File Extension Routing
 
@@ -81,9 +79,9 @@
 
 | File Extension / Type | Specialist to Spawn |
 |-----------------------|---------------------|
-| Game code (`.gd`) | godot-gdscript-specialist |
-| Shader / material files (`.gdshader`) | godot-shader-specialist |
-| UI / screen files (`.tscn` with Control root) | godot-specialist |
-| Scene / prefab / level files (`.tscn`, `.tres`) | godot-specialist |
-| Native extension / plugin files (`.cpp`, `.h`, `SConstruct`) | godot-gdextension-specialist |
-| General architecture review | godot-specialist |
+| Game code (primary language) | [TO BE CONFIGURED] |
+| Shader / material files | [TO BE CONFIGURED] |
+| UI / screen files | [TO BE CONFIGURED] |
+| Scene / prefab / level files | [TO BE CONFIGURED] |
+| Native extension / plugin files | [TO BE CONFIGURED] |
+| General architecture review | Primary |

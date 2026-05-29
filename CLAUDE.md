@@ -5,14 +5,15 @@ Each agent owns a specific domain, enforcing separation of concerns and quality.
 
 ## Technology Stack
 
-- **Engine**: Godot 4.6
-- **Language**: GDScript (primary), C++ via GDExtension (performance-critical)
+- **Engine**: [CHOOSE: Godot 4 / Unity / Unreal Engine 5]
+- **Language**: [CHOOSE: GDScript / C# / C++ / Blueprint]
 - **Version Control**: Git with trunk-based development
-- **Build System**: SCons (engine), Godot Export Templates
-- **Asset Pipeline**: Godot Import System + custom resource pipeline
+- **Build System**: [SPECIFY after choosing engine]
+- **Asset Pipeline**: [SPECIFY after choosing engine]
 
 > **Note**: Engine-specialist agents exist for Godot, Unity, and Unreal with
-> dedicated sub-specialists. Use the set matching your engine.
+> dedicated sub-specialists. Run `/setup-engine` to pin the engine and unblock
+> the matching specialist set.
 
 ## Project Structure
 
@@ -20,7 +21,9 @@ Each agent owns a specific domain, enforcing separation of concerns and quality.
 
 ## Engine Version Reference
 
-@docs/engine-reference/godot/VERSION.md
+<!-- `/setup-engine` activates this @include with the chosen engine's VERSION.md.
+     Available: docs/engine-reference/{godot,unity,unreal}/VERSION.md -->
+<!-- @docs/engine-reference/godot/VERSION.md -->
 
 ## Technical Preferences
 

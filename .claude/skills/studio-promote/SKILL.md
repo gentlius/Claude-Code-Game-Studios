@@ -242,8 +242,19 @@ PROMOTE 처리 중 G3에서 기존 규칙을 대체(supersede)하는 경우, 동
 
 ## Phase 5: Generate Proposal
 
-`docs/studio-promotion-proposal-YYYY-MM-DD.md` 생성. 파일이 같은 날 이미 존재하면
-`-2`, `-3` 접미사.
+### 5.1 승인 게이트 (Write 전 필수)
+
+제안서를 작성하기 전에 다음을 사용자에게 제시하고 명시적 승인을 받는다:
+
+1. 작성할 파일 경로 (`docs/studio-promotion-proposal-YYYY-MM-DD.md`, 같은 날 존재 시 `-2`/`-3` 접미사)
+2. 제안서 구조 요약 (총 후보 N건 — PROMOTE x / DEFER y / REJECT z, Summary Table 헤더만)
+3. 질문 형식: **"위 내용으로 제안서를 `<path>`에 작성합니다. 승인하시겠습니까?"**
+
+사용자가 거부하면 작업을 중단하고 콘솔에 요약만 출력 후 종료. 수정 요청이 있으면 요청 반영 후 동일 게이트 재요청.
+
+### 5.2 제안서 작성
+
+승인을 받은 후에만 Write 도구로 파일 생성. 파일이 같은 날 이미 존재하면 `-2`, `-3` 접미사.
 
 ### 제안서 구조
 
@@ -329,7 +340,23 @@ PROMOTE 처리 중 G3에서 기존 규칙을 대체(supersede)하는 경우, 동
 
 실패 시 사용자에게 어떤 검증이 왜 실패했는지 보고.
 
-### 6.2 PR 브랜치 생성 및 파일 적용
+### 6.2 적용 계획 승인 게이트 (브랜치/커밋/푸시 전 필수)
+
+사전 검증(6.1)을 통과한 직후, 실제 git 조작을 시작하기 전에 다음을 사용자에게 제시한다:
+
+1. 생성할 브랜치명: `promotion/<source-project-slug>-YYYY-MM-DD`
+2. 적용할 PROMOTE 항목 전체 목록 (ID + 파일 경로 + target_path)
+3. 디렉토리 신규 생성 여부 (target_path별)
+4. 커밋 메시지 초안 전문 (아래 6.2.1 참조)
+5. 푸시 대상: `origin/<branch>` + PR 본문 초안 (6.3)
+6. 질문 형식: **"위 계획대로 스튜디오 템플릿 repo에 PR을 생성합니다. 진행하시겠습니까?"**
+
+거부 시 즉시 중단(Phase 5 제안서는 남김). 항목별 부분 적용 요청이 있으면
+선택 항목만 반영한 새 계획으로 다시 게이트.
+
+### 6.2.1 PR 브랜치 생성 및 파일 적용
+
+승인을 받은 후에만 실행:
 
 ```bash
 cd <path>
@@ -385,9 +412,18 @@ EOF
 )"
 ```
 
-### 6.4 Ledger 갱신 제안
+### 6.4 Ledger 갱신 (승인 게이트 포함)
 
-`<path>/.claude/studio-memory/promotion-ledger.yaml`에 다음 entry 추가를 PR diff에 포함:
+`<path>/.claude/studio-memory/promotion-ledger.yaml`에 추가할 entry를 사용자에게
+보여주고 명시적 승인을 받은 후에만 PR diff에 포함한다:
+
+1. ledger 파일 존재 여부 (신규 생성인지, 추가인지 명시)
+2. 추가할 entry 전체 YAML 텍스트 (아래 형식)
+3. 질문 형식: **"위 entry를 ledger에 추가합니다. 승인하시겠습니까?"**
+
+거부 시 ledger 부분은 건너뛰고 PR은 그대로 진행 (ledger는 사용자가 수동 갱신).
+
+추가할 entry 형식:
 
 ```yaml
 - item: <name>

@@ -1,3 +1,5 @@
+Forked from Donchitos/Claude-Code-Game-Studios, evolved into a self-growing studio template
+
 <p align="center">
   <h1 align="center">Claude Code Game Studios</h1>
   <p align="center">

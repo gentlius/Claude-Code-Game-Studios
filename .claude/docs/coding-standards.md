@@ -9,6 +9,8 @@
   | 프로덕션 (`production/*.md`) | `production/milestones/beta.md` 또는 해당 스프린트 파일 |
   | 디자인 보조 (`design/*.md`) | `design/gdd/systems-index.md` §Non-GDD Design Documents |
   | 에셋 가이드 (`assets/**/*.md`) | 해당 파일 헤더에 참조 문서 명시 |
+  | 스튜디오 거버넌스 (`.claude/docs/studio-*.md`) | `CLAUDE.md`에서 `@.claude/docs/...` 직접 참조 |
+  | 승격 제안서 (`docs/studio-promotion-proposal-*.md`) | 머지 후 템플릿 `CHANGELOG.md`에 기록, ledger 갱신 |
   참조 루틴이 없는 문서(어떤 인덱스에도 없고, 어떤 활성 문서도 링크하지 않는 문서)는 폐기한다.
 
 - All game code must include doc comments on public APIs

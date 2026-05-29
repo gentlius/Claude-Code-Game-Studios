@@ -87,6 +87,14 @@ Not every decision requires user input. Use this table to determine who decides:
 
 @.claude/docs/coding-standards.md
 
+## Studio Template Promotion
+
+각 프로젝트에서 얻은 skill·규칙·메모리·agent 수정 중 스튜디오 템플릿으로
+역전파할 가치가 있는 자산은 `/studio-promote`로 평가하고 승격한다.
+판단 기준(G1~G6 게이트, anti-promotion signal, 프로세스)은 아래 문서가 단일 권위다.
+
+@.claude/docs/studio-promotion-criteria.md
+
 ## Context Management
 
 @.claude/docs/context-management.md

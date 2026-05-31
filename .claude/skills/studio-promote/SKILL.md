@@ -146,7 +146,7 @@ G1~G6 평가에서 제외한다.
 | Signal ID | 검사 방법 |
 |-----------|-----------|
 | AS-1 IP/캐릭터/내러티브 | `design/gdd/*.md`에서 추출한 고유명사 사전 + 후보 content 매칭 |
-| AS-2 개인 선호 | 정규식 `\((joywoni\|<git user.name>)\)`, `(personal preference)` |
+| AS-2 개인 선호 | 정규식 `\((gentlius\|<git user.name>)\)`, `(personal preference)` |
 | AS-3 엔진 버전 픽스 | 정규식 `(Godot\|Unity\|Unreal)\s*\d+\.\d+\.\d+` + 주변 50자에 "fix\|workaround\|bug\|회피" |
 | AS-4 일회성 워크어라운드 | 정규식 `Issue\s*#\d+`, `temporary`, `임시 가드` |
 | AS-5 type:user 메모리 | frontmatter `type: user` (Phase 1.1에서 이미 제외했지만 재검증) |

@@ -94,7 +94,7 @@ DEFER, FAIL 1개라도 있으면 REJECT.
 | Signal | 예시 |
 |--------|------|
 | 특정 IP·캐릭터·내러티브 이름 | "Sera의 대사 스타일", "Project Lumen의 경제" |
-| 특정 개발자 개인 선호 | "Tone: dry humor preferred (joywoni)" |
+| 특정 개발자 개인 선호 | "Tone: dry humor preferred (gentlius)" |
 | 특정 엔진 버전 픽스 | "Godot 4.6.2 한정 버그 회피" |
 | 단일 버그용 일회성 워크어라운드 | "Issue #142 임시 가드" |
 | `type: user` Auto-memory 전체 | 사용자 개인 프로파일 |

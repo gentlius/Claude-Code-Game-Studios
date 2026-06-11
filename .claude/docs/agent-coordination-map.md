@@ -48,6 +48,12 @@
       godot-csharp-specialist      -- C#: .NET patterns, [Signal] delegates, async, type-safe node access
       godot-shader-specialist      -- Shaders: Godot shading language, visual shaders, VFX
       godot-gdextension-specialist -- Native: C++/Rust bindings, GDExtension, build systems
+
+    html5-specialist   -- HTML5 / Web lead: browser APIs, platform architecture, web distribution
+      pixijs-specialist            -- PixiJS 8: scene graph, Assets, Filters, Ticker; also owns TypeScript quality
+      web-build-specialist         -- Build: Vite, bundle budgets, code splitting, asset pipeline, PWA, CI
+      webgl-shader-specialist      -- Shaders: GLSL filters, WebGL2/WebGPU dual-target, mobile GPU constraints
+      playwright-e2e-specialist    -- Tests: browser e2e, mobile emulation, viewport/touch sim, screenshot regression
 ```
 
 ### Legend

@@ -60,6 +60,7 @@ domain lead) should delegate to specialists.
 | `unreal-specialist` | Unreal Engine 5 | Sonnet | Blueprint vs C++, GAS overview, UE subsystems, Unreal optimization |
 | `unity-specialist` | Unity | Sonnet | MonoBehaviour vs DOTS, Addressables, URP/HDRP, Unity optimization |
 | `godot-specialist` | Godot 4 | Sonnet | GDScript patterns, node/scene architecture, signals, Godot optimization |
+| `html5-specialist` | HTML5 / Web (PixiJS) | Sonnet | Browser APIs, platform architecture (PWA / SPA / Capacitor), web game distribution, overall web architecture |
 
 ### Unreal Engine Sub-Specialists
 
@@ -87,3 +88,12 @@ domain lead) should delegate to specialists.
 | `godot-csharp-specialist` | C# / .NET | Sonnet | .NET patterns, [Signal] delegates, async, nullable types, type-safe node access |
 | `godot-shader-specialist` | Shaders/Rendering | Sonnet | Godot shading language, visual shaders, particles, post-processing |
 | `godot-gdextension-specialist` | GDExtension | Sonnet | C++/Rust bindings, native performance, custom nodes, build systems |
+
+### HTML5 / Web Sub-Specialists
+
+| Agent | Subsystem | Model | When to Use |
+| ---- | ---- | ---- | ---- |
+| `pixijs-specialist` | PixiJS 8 Framework | Sonnet | Scene graph, Assets, Filters, Ticker, ParticleContainer, Federated events; also owns TypeScript code quality |
+| `web-build-specialist` | Vite / Build / PWA | Sonnet | Vite config, bundle budgets, code splitting, asset pipeline, PWA, CI integration |
+| `webgl-shader-specialist` | Custom WebGL Shaders | Sonnet | GLSL filters, WebGL2/WebGPU dual-target shaders, mobile GPU constraints |
+| `playwright-e2e-specialist` | Browser E2E Tests | Sonnet | Playwright tests, mobile device emulation, viewport/touch simulation, screenshot regression |

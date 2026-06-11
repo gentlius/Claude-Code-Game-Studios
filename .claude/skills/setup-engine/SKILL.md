@@ -37,7 +37,7 @@ If no engine is specified, run an interactive engine selection process:
 
 **Question 1 — Prior experience** (ask this first, always, via `AskUserQuestion`):
 - Prompt: "Have you worked in any of these engines before?"
-- Options: `Godot` / `Unity` / `Unreal Engine 5` / `Multiple — I'll explain` / `None of them`
+- Options: `Godot` / `Unity` / `Unreal Engine 5` / `HTML5 (Web / PixiJS)` / `Multiple — I'll explain` / `None of them`
 - If they pick a specific engine → recommend that engine. Prior experience outweighs all other factors. Confirm with them and skip the matrix.
 - If "None" or "Multiple" → continue to the questions below.
 
@@ -47,11 +47,11 @@ If no engine is specified, run an interactive engine selection process:
 - Prompt: "What platforms are you targeting for this game?"
 - Options: `PC (Steam / Epic)` / `Mobile (iOS / Android)` / `Console` / `Web / Browser` / `Multiple platforms`
 - Platform rules that feed directly into the recommendation:
-  - Mobile → Unity strongly preferred; Unreal is a poor fit; Godot is viable for simple mobile
-  - Console → Unity or Unreal; Godot console support requires third-party publishers or significant extra work
-  - Web → Godot exports cleanly to web; Unity WebGL is functional; Unreal has poor web support
-  - PC only → all engines viable; other factors decide
-  - Multiple → Unity is the most portable across PC/mobile/console
+  - Mobile → Unity strongly preferred for native; **HTML5/PixiJS strongly preferred for mobile-web** (instant-play casual games); Godot is viable for simple mobile native; Unreal is a poor fit
+  - Console → Unity or Unreal; Godot console support requires third-party publishers or significant extra work; HTML5 not applicable
+  - Web / Browser → **HTML5/PixiJS is purpose-built for this** (mobile web, instant-play, itch.io, PWA); Godot exports cleanly to web (better for 3D web); Unity WebGL is functional but heavy; Unreal has poor web support
+  - PC only → Godot / Unity / Unreal viable; HTML5 viable for browser-distributed indie
+  - Multiple → Unity is the most portable across PC/mobile/console; HTML5/PixiJS for web-first + Capacitor wrap for stores
 
 1. **What kind of game?** (2D, 3D, or both?)
 2. **Primary input method?** (keyboard/mouse, gamepad, touch, or mixed?)
@@ -83,17 +83,27 @@ Do NOT use a simple scoring matrix that eliminates engines. Instead, reason thro
 - Licensing reality: 5% royalty only applies AFTER $1M gross revenue per title. For a first game or any game that doesn't reach $1M, it costs nothing. This threshold is high enough that most indie developers will never pay it.
 - Best fit: AAA-quality 3D; large open-world games; photorealistic visuals; developers with C++ experience or willing to use Blueprint; games targeting high-end PC/console where visual fidelity is a core selling point
 
+**HTML5 (PixiJS + Vite + TypeScript)**
+- Genuine strengths: Instant-play (no install, just a URL); purpose-built for mobile web; tiny bundle sizes possible (<2 MB total); fastest path to itch.io / .io browser games / playable ads / web-first casual; PWA support for installable apps; PixiJS 8 has WebGPU + WebGL2 backends; TypeScript ecosystem is mature and well-typed; testing via Playwright is excellent
+- Real limitations: 2D only (Pixi); JavaScript ecosystem churn (libraries deprecate fast); browser API quirks (especially iOS Safari); audio is hard (mobile audio unlock requirement); no built-in console support — wrap with Capacitor for app stores; bundle size is a discipline (default React/Vue projects balloon fast); not suited for large 3D or AAA-class visuals
+- Licensing reality: Truly free. PixiJS MIT, Vite MIT, TypeScript Apache 2.0. Optional libs (GSAP commercial, Spine commercial editor) have their own terms but are not required.
+- Best fit: Mobile web games (Pang/Bejeweled-class, idle, hypercasual); browser-distributed indie (itch.io); playable ads; rapid prototyping for any 2D concept; PWA-installable games; games with a "share a URL" social loop
+
 **Genre-specific guidance** (factor this into the recommendation):
-- 2D any style → Godot strongly preferred
+- 2D any style (native distribution) → Godot strongly preferred
+- 2D web-first / mobile-web / instant-play casual → **HTML5/PixiJS strongly preferred**
 - 3D stylized / atmospheric / contained world → Godot viable, Unity solid alternative
 - 3D open world (large, seamless) → Unity or Unreal; Godot is not production-proven for this
 - 3D photorealistic / AAA-quality → Unreal
-- Mobile-first → Unity strongly preferred
+- Mobile-first (native app store) → Unity strongly preferred
+- Mobile-first (web / no install) → HTML5/PixiJS strongly preferred
 - Console-first → Unity or Unreal; Godot console support requires extra work
 - Horror / narrative / walking sim → any engine; match to art style and team experience
 - Action RPG / Soulslike → Unity or Unreal for 3D; community support and assets matter here
-- Platformer 2D → Godot
-- Strategy / top-down / RTS → Godot or Unity depending on 2D vs 3D
+- Platformer 2D → Godot (native) or HTML5/PixiJS (web)
+- Strategy / top-down / RTS → Godot or Unity depending on 2D vs 3D; HTML5 viable for web-first
+- Hypercasual / Bejeweled / .io games / playable ads → HTML5/PixiJS strongly preferred
+- Idle / clicker (web) → HTML5/PixiJS strongly preferred
 
 **Recommendation format:**
 1. Show a comparison table with the user's specific factors as rows
@@ -127,9 +137,9 @@ Once the engine is chosen:
 
 ## 4. Update CLAUDE.md Technology Stack
 
-### Language Selection (Godot only)
+### Language Selection (Godot and HTML5)
 
-If Godot was chosen, ask the user which language to use **before** showing the proposed Technology Stack:
+**Godot**: If Godot was chosen, ask the user which language to use **before** showing the proposed Technology Stack:
 
 > "Godot supports two primary languages:
 >
@@ -140,6 +150,17 @@ If Godot was chosen, ask the user which language to use **before** showing the p
 > Which will this project primarily use?"
 
 Record the choice. It determines the CLAUDE.md template, naming conventions, specialist routing, and which agent is spawned for code files throughout the project.
+
+**HTML5**: If HTML5 was chosen, ask the user which language to use:
+
+> "HTML5 game projects use one of two languages:
+>
+>   **A) TypeScript** (strongly recommended) — Type-safe, PixiJS 8 is TypeScript-first, refactor-safe at scale. Standard for modern web game projects.
+>   **B) Vanilla JavaScript** — No build-time type checking. Acceptable for tiny one-off prototypes and game jams. Loses safety as the project grows.
+>
+> Which will this project primarily use?"
+
+For nearly all projects: pick TypeScript. The Vanilla JS path exists for completeness but should be flagged as a tradeoff. Record the choice — it determines the CLAUDE.md template, file extensions (`.ts` vs `.js`), and `pixijs-specialist` review focus.
 
 ---
 
@@ -167,6 +188,8 @@ Update the Technology Stack section, replacing the `[CHOOSE]` placeholders with 
 - **Build System**: Unreal Build Tool (UBT)
 - **Asset Pipeline**: Unreal Content Pipeline
 ```
+
+**For HTML5** — use the template matching the language chosen. See **Appendix B** at the bottom of this skill for TypeScript and Vanilla JS variants.
 
 ---
 
@@ -196,6 +219,8 @@ engine-appropriate defaults. Read the existing template first, then fill in:
 - Functions: PascalCase (e.g., `TakeDamage()`)
 - Booleans: `b` prefix (e.g., `bIsAlive`)
 - Files: Match class without prefix (e.g., `PlayerController.h`)
+
+**For HTML5** — see **Appendix B** for TypeScript and Vanilla JS variants.
 
 ### Input & Platform Section
 
@@ -292,9 +317,13 @@ Also populate the `## Engine Specialists` section in `technical-preferences.md` 
 | General architecture review | unreal-specialist |
 ```
 
+**For HTML5** — see **Appendix B** for the routing table.
+
 ### Collaborative Step
 Present the filled-in preferences to the user. For Godot, include the chosen language and note where the full naming conventions and routing tables live:
 > "Here are the default technical preferences for [engine] ([language if Godot]). The naming conventions and specialist routing are in Appendix A of this skill — I'll apply the [GDScript/C#/Both] variant. Want to customize any of these, or shall I save the defaults?"
+
+For HTML5, do the same referencing Appendix B and the chosen language (TypeScript / Vanilla JS).
 
 For all other engines, present the defaults directly without referencing the appendix.
 
@@ -311,6 +340,8 @@ Check whether the engine version is likely beyond the LLM's training data.
 - Godot: training data likely covers up to ~4.3
 - Unity: training data likely covers up to ~2023.x / early 6000.x
 - Unreal: training data likely covers up to ~5.3 / early 5.4
+- HTML5 / PixiJS: training data likely covers PixiJS up to ~7.x (v8 was released Feb 2024 but ecosystem stabilized late 2024+); Vite up to ~5.x (v6/v7/v8 are all post-cutoff); Playwright up to ~1.40
+- **HTML5 is ALWAYS classified at least MEDIUM RISK** due to PixiJS v8 API redesign — write the full reference doc set (see Section 7)
 
 Compare the user's chosen version against these baselines:
 
@@ -323,6 +354,12 @@ Inform the user which category they're in and why.
 ---
 
 ## 7. Populate Engine Reference Docs
+
+**Special case — HTML5**: HTML5 projects always skip directly to the BEYOND-training-data
+path below, regardless of pinned PixiJS version. The PixiJS v8 redesign is too
+disruptive to risk LOW-RISK shortcuts. A pre-populated reference doc set already
+ships with the template at `docs/engine-reference/html5/` — verify it's present
+rather than re-creating from scratch.
 
 ### If WITHIN training data (LOW RISK):
 
@@ -714,3 +751,160 @@ Use GDScript conventions for `.gd` files and C# conventions for `.cs` files. Mix
 | Native extension / plugin files (.gdextension, C++) | godot-gdextension-specialist |
 | General architecture review | godot-specialist |
 ```
+
+---
+
+## Appendix B — HTML5 / Web Configuration
+
+All HTML5-specific variants for language-dependent configuration. Referenced from Sections 4 and 5 — only relevant when HTML5 is the chosen engine. Use the subsection matching the language chosen in Section 4.
+
+> **Note on engine family naming**: For HTML5 projects, the `Engine` field reads "HTML5 (PixiJS [version])" rather than a single product name. The "engine" here is the combined runtime: browser + PixiJS framework + build tooling. Engine-reference docs live at `docs/engine-reference/html5/`.
+
+---
+
+### B1. CLAUDE.md Technology Stack Templates
+
+**TypeScript (recommended):**
+```markdown
+- **Engine**: HTML5 / PixiJS [version] (e.g., 8.16.0)
+- **Language**: TypeScript [version] (e.g., 5.x)
+- **Build System**: Vite [version] (e.g., 7.3 LTS or 8.0)
+- **Test Framework**: Vitest (unit) + Playwright [version] (e2e / browser)
+- **Asset Pipeline**: TexturePacker (spritesheets) + custom Vite asset handling + KTX2/Basis (texture compression, optional)
+- **Target Runtime**: Modern evergreen browsers, iOS Safari 16+, Android Chrome 110+
+- **Deployment**: itch.io / GitHub Pages / Cloudflare Pages / Capacitor-wrapped native (optional)
+```
+
+**Vanilla JavaScript:**
+```markdown
+- **Engine**: HTML5 / PixiJS [version]
+- **Language**: JavaScript (ES2022+, no TypeScript)
+- **Build System**: Vite [version]
+- **Test Framework**: Vitest (unit) + Playwright (e2e / browser)
+- **Asset Pipeline**: TexturePacker + custom Vite asset handling
+- **Target Runtime**: Modern evergreen browsers, iOS Safari 16+, Android Chrome 110+
+- **Deployment**: itch.io / GitHub Pages / Cloudflare Pages
+```
+
+> **Guardrail**: For TypeScript projects, the Language field must say "TypeScript" — not "TypeScript and JavaScript". A TypeScript project can have a few `.js` files at the edges (configs, scripts), but the language identity is TypeScript. Mixed-language is the Vanilla JS template's territory and should not bleed into TS projects.
+
+---
+
+### B2. Naming Conventions
+
+**TypeScript:**
+- Classes: PascalCase (e.g., `PlayerController`)
+- Variables/functions: camelCase (e.g., `moveSpeed`, `getCurrentScore()`)
+- Constants (module-level): UPPER_SNAKE_CASE (e.g., `MAX_HEALTH`, `DEFAULT_SPEED`)
+- Interfaces / Types: PascalCase, no `I` prefix (e.g., `PlayerState`, not `IPlayerState`)
+- Generics: single capital letter (`T`, `K`, `V`) or PascalCase (`TItem`)
+- Enums: PascalCase for enum + PascalCase for values (e.g., `GameState.MainMenu`)
+- Files: kebab-case for modules (e.g., `player-controller.ts`); PascalCase for classes-as-files (e.g., `PlayerController.ts`) — pick one convention per project
+- Component / scene files: PascalCase (e.g., `MainMenuScene.ts`)
+- Test files: `*.test.ts` (Vitest) or `*.spec.ts` (Playwright)
+
+**Vanilla JavaScript:**
+Same as TypeScript except no type-only naming (no Interfaces / Generics rules). Use JSDoc comments for type hints if desired.
+
+> **Pick one file naming convention upfront**: kebab-case is more idiomatic in modern Node/Vite ecosystems; PascalCase is more idiomatic in Java/C# backgrounds. Both work — consistency matters more than choice.
+
+---
+
+### B3. Engine Specialists Routing
+
+**TypeScript:**
+```markdown
+## Engine Specialists
+- **Primary**: html5-specialist
+- **Framework Specialist**: pixijs-specialist (PixiJS 8.x — scene graph, Assets, Filters, Ticker, ParticleContainer, Federated events; also owns TypeScript code quality for PixiJS-adjacent code)
+- **Shader Specialist**: webgl-shader-specialist (custom GLSL filters, WebGL2/WebGPU dual-target shaders)
+- **Build Specialist**: web-build-specialist (Vite, bundle optimization, asset pipeline, PWA, CI/CD)
+- **E2E Test Specialist**: playwright-e2e-specialist (browser e2e, mobile device emulation, viewport/touch simulation, screenshot regression)
+- **Routing Notes**: Invoke primary for browser API decisions (Workers, Storage, fetch), platform architecture (PWA vs SPA vs Capacitor wrap), and overall web game architecture. Invoke PixiJS specialist for any `.ts` file working with the PixiJS API — also for general TypeScript code quality in the game codebase (TypeScript and PixiJS are inseparable in v8). Invoke shader specialist for custom GLSL / WGSL authoring. Invoke build specialist for `vite.config.ts`, bundling, asset optimization. Invoke E2E specialist for `tests/e2e/*.spec.ts`. Unit tests (Vitest) default to the gameplay programmer or PixiJS specialist depending on what's being tested.
+
+### File Extension Routing
+
+| File Extension / Type | Specialist to Spawn |
+|-----------------------|---------------------|
+| Game code (.ts, .tsx files using PixiJS) | pixijs-specialist |
+| Platform / browser API code (.ts files, no Pixi) | html5-specialist |
+| Custom shader files (.glsl, .wgsl, .vert, .frag, .vs, .fs) | webgl-shader-specialist |
+| Build config (vite.config.ts, tsconfig.json, package.json scripts) | web-build-specialist |
+| E2E test files (tests/e2e/**/*.spec.ts) | playwright-e2e-specialist |
+| Unit test files (tests/unit/**/*.test.ts) | pixijs-specialist or gameplay-programmer |
+| HTML entry (index.html) | html5-specialist |
+| PWA manifest (public/manifest.json) | web-build-specialist |
+| CI / workflow files (.github/workflows/*.yml) | web-build-specialist |
+| Stylesheets (.css — minimal in canvas-based games) | html5-specialist |
+| General architecture review | html5-specialist |
+```
+
+**Vanilla JavaScript:**
+```markdown
+## Engine Specialists
+- **Primary**: html5-specialist
+- **Framework Specialist**: pixijs-specialist (PixiJS 8.x — also handles JS code quality; flag opportunities to introduce TypeScript at module boundaries)
+- **Shader Specialist**: webgl-shader-specialist (custom GLSL filters)
+- **Build Specialist**: web-build-specialist (Vite, bundle optimization, asset pipeline)
+- **E2E Test Specialist**: playwright-e2e-specialist (browser e2e)
+- **Routing Notes**: Same routing as TypeScript variant, with `.js` instead of `.ts`. Without static typing, the PixiJS specialist must work harder on runtime contracts and JSDoc — recommend incremental TypeScript adoption when the project crosses ~5000 lines.
+
+### File Extension Routing
+
+| File Extension / Type | Specialist to Spawn |
+|-----------------------|---------------------|
+| Game code (.js, .mjs files using PixiJS) | pixijs-specialist |
+| Platform / browser API code (.js files, no Pixi) | html5-specialist |
+| Custom shader files (.glsl, .wgsl, .vert, .frag, .vs, .fs) | webgl-shader-specialist |
+| Build config (vite.config.js, package.json scripts) | web-build-specialist |
+| E2E test files (tests/e2e/**/*.spec.js) | playwright-e2e-specialist |
+| Unit test files (tests/unit/**/*.test.js) | pixijs-specialist or gameplay-programmer |
+| HTML entry (index.html) | html5-specialist |
+| PWA manifest (public/manifest.json) | web-build-specialist |
+| General architecture review | html5-specialist |
+```
+
+---
+
+### B4. Performance Budgets (HTML5 Defaults)
+
+When the user opts into default budgets in Section 5, use these for HTML5:
+
+```markdown
+## Performance Budgets
+- **Target Framerate**: 60fps (mobile baseline: iPhone X / Galaxy S10 class)
+- **Acceptable Degraded**: 30fps locked
+- **Frame Budget**: 16.6ms at 60fps; 33.3ms at 30fps
+- **Initial Bundle (JS + CSS, gzipped)**: <500 KB
+- **First Playable Assets**: <500 KB additional
+- **Total Time-to-Playable (4G)**: <3 seconds
+- **Memory Ceiling**: 256 MB (mobile web; aggressive)
+- **Draw Calls**: <100 per frame (PixiJS auto-batches — atlas everything)
+- **Texture Memory**: <128 MB (use KTX2 compression for projects >5 MB art)
+```
+
+These come from `docs/engine-reference/html5/modules/build.md` and `current-best-practices.md`. Adjust based on target devices.
+
+---
+
+### B5. Forbidden Patterns (HTML5 Defaults)
+
+For HTML5 projects, suggest these forbidden patterns out of the box (with user confirmation):
+
+```markdown
+## Forbidden Patterns
+- `any` type in TypeScript (except at validated external boundaries with comment)
+- `Texture.from(url)` without prior `await Assets.load(url)` — silently returns blank
+- `new Application({ ... })` (v7 constructor pattern) — v8 requires `await app.init({ ... })`
+- `interactive: true` (v7 pattern) — v8 uses `eventMode: 'static' | 'dynamic'`
+- `.beginFill().drawRect().endFill()` (v7 Graphics) — v8 uses `.rect().fill()`
+- jQuery / lodash in new code — modern JS covers utility needs
+- `setTimeout` for game timing — use `Ticker` with `deltaMS`
+- Inlining binary assets in JS bundle (use Vite's asset URLs, not base64)
+- Synchronous XHR / blocking the main thread
+- DOM manipulation inside game loop (batch via Pixi `Container` instead)
+```
+
+---
+
+End of Appendix B.
